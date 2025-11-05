@@ -1,0 +1,33 @@
+name: VaultStorage
+version: '1.0.0'
+main: net.democracycraft.vault.VaultStoragePlugin
+api-version: '1.21'
+load: STARTUP
+authors: [ Alepando ]
+depend: [ Bolt ]
+
+commands:
+  vault:
+    description: Vault storage tools
+    usage: /vault [menu]
+    permission: vault.user
+
+permissions:
+  vault.user:
+    description: Allows using basic vault commands
+    default: op
+  vault.admin:
+    description: Admin override for vault commands
+    default: op
+  vault.action.view:
+    description: Allows viewing vaults in a virtual inventory
+    default: true
+  vault.action.edit:
+    description: Allows editing vault contents in a virtual inventory
+    default: op
+  vault.action.copy:
+    description: Allows copying items from a vault to the player inventory
+    default: op
+  vault.action.place:
+    description: Allows placing back the original block and restoring its contents
+    default: op
