@@ -1,9 +1,7 @@
-package net.democracycraft.vault.internal.util;
+package net.democracycraft.vault.internal.util.item;
 
 import org.bukkit.inventory.ItemStack;
 import org.jetbrains.annotations.NotNull;
-
-import java.io.*;
 
 /**
  * Utility methods to serialize and deserialize ItemStacks to and from byte arrays.

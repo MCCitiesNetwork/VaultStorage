@@ -2,9 +2,8 @@ name: VaultStorage
 version: '1.0.0'
 main: net.democracycraft.vault.VaultStoragePlugin
 api-version: '1.21'
-load: STARTUP
 authors: [ Alepando ]
-depend: [ Bolt ]
+depend: [ Bolt , WorldGuard, WorldEdit ]
 
 commands:
   vault:

@@ -11,6 +11,8 @@ import java.util.UUID;
 
 public interface Vault extends DTOConvertible<VaultDto> {
 
+    UUID getUniqueIdentifier();
+
     UUID ownerUniqueIdentifier();
 
     UUID uniqueIdentifier();

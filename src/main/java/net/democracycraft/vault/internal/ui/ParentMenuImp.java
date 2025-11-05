@@ -4,8 +4,8 @@ import io.papermc.paper.dialog.Dialog;
 import net.democracycraft.vault.api.ui.AutoDialog;
 import net.democracycraft.vault.api.ui.ChildMenu;
 import net.democracycraft.vault.api.ui.ParentMenu;
+import net.democracycraft.vault.internal.util.minimessage.MiniMessageUtil;
 import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.entity.Player;
 
 import java.util.ArrayList;
@@ -56,10 +56,9 @@ public abstract class ParentMenuImp implements ParentMenu {
     public void addChildMenus(List<ChildMenu> childMenus) { children.addAll(childMenus); }
 
     /**
-     * Parse MiniMessage-formatted text into a Component.
+     * Parse MiniMessage-formatted text into a Component, falling back to plain text.
      */
     protected Component miniMessage(String mm) {
-        return MiniMessage.miniMessage().deserialize(mm == null ? "" : mm);
+        return MiniMessageUtil.parseOrPlain(mm == null ? "" : mm);
     }
 }
-

@@ -1,0 +1,11 @@
+# Default configuration for VaultStorage
+# This file is copied to the plugin data folder on first run.
+
+mysql:
+  host: "localhost"
+  port: 3306
+  database: "vault_storage"
+  user: "root"
+  password: ""
+  useSSL: false
+

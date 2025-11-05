@@ -1,7 +1,7 @@
 package net.democracycraft.vault.internal.data;
 
 import net.democracycraft.vault.api.data.ItemDto;
-import net.democracycraft.vault.internal.util.ItemSerialization;
+import net.democracycraft.vault.internal.util.item.ItemSerialization;
 import org.bukkit.inventory.ItemStack;
 
 import java.util.Arrays;

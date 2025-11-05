@@ -78,8 +78,8 @@ public class BoltServiceImp implements BoltService {
      * Returns all blocks protected by the specified player within the given bounding box and world.
      *
      * Coordinate note: chunk coordinates differ from block coordinates. To map a block at (x, z) to its chunk,
-     * use floor division by 16 (i.e., chunkX = floorDiv(x, 16), chunkZ = floorDiv(z, 16)). This is equivalent to
-     * an arithmetic right shift by 4 (x >> 4), but Math.floorDiv is clearer and correct for negatives.
+     * use floor division by 16 (i.e., chunkX = floorDiv(x, 16), chunkZ = floorDiv(z, 16)). Chunk-local coordinates
+     * are then xLocal = x - (chunkX << 4) and zLocal = z - (chunkZ << 4), in the range 0..15.
      *
      * @param playerUUID  the owner's UUID (not null)
      * @param boundingBox the search area (not null)
@@ -124,11 +124,41 @@ public class BoltServiceImp implements BoltService {
             int chunkX = Math.floorDiv(x, 16);
             int chunkZ = Math.floorDiv(z, 16);
             Chunk containerChunk = world.getChunkAt(chunkX, chunkZ);
-
-            Block b = containerChunk.getBlock(x, y, z);
+            if (!containerChunk.isLoaded()) containerChunk.load();
+            int localX = x - (chunkX << 4);
+            int localZ = z - (chunkZ << 4);
+            Block b = containerChunk.getBlock(localX, y, localZ);
             protectedBlocks.add(b);
         }
 
+        return protectedBlocks;
+    }
+
+    /**
+     * Returns all protected blocks within the given bounding box and world, regardless of owner.
+     */
+    @Override
+    public @NotNull List<Block> getProtectedBlocksIn(@NotNull BoundingBox boundingBox, @NotNull World world) {
+        Objects.requireNonNull(boundingBox, "boundingBox");
+        Objects.requireNonNull(world, "world");
+        Collection<Protection> protections = api.findProtections(world, boundingBox);
+        if (protections == null || protections.isEmpty()) return List.of();
+
+        List<Block> protectedBlocks = new ArrayList<>(protections.size());
+        for (Protection p : protections) {
+            if (!(p instanceof BlockProtection bp)) continue;
+            int x = bp.getX();
+            int y = bp.getY();
+            int z = bp.getZ();
+            if (y < world.getMinHeight() || y >= world.getMaxHeight()) continue;
+            int chunkX = Math.floorDiv(x, 16);
+            int chunkZ = Math.floorDiv(z, 16);
+            Chunk c = world.getChunkAt(chunkX, chunkZ);
+            if (!c.isLoaded()) c.load();
+            int localX = x - (chunkX << 4);
+            int localZ = z - (chunkZ << 4);
+            protectedBlocks.add(c.getBlock(localX, y, localZ));
+        }
         return protectedBlocks;
     }
 }

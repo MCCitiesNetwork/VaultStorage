@@ -1,4 +1,4 @@
-package net.democracycraft.vault.internal.util;
+package net.democracycraft.vault.internal.util.listener;
 
 import net.democracycraft.vault.VaultStoragePlugin;
 import org.bukkit.event.HandlerList;

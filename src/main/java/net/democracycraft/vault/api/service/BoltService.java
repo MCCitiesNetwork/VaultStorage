@@ -15,4 +15,10 @@ public interface BoltService {
 
     List<Block> getProtectedBlocks(UUID playerUUID, BoundingBox boundingBox, World world);
 
+    /**
+     * Returns all protected blocks within the given bounding box in a world, regardless of owner.
+     *
+     */
+    List<Block> getProtectedBlocksIn(BoundingBox boundingBox, World world);
+
 }

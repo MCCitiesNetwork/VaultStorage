@@ -17,17 +17,39 @@ import java.util.UUID;
 
 /**
  * Simple, in-memory Vault implementation.
+ *
+ * Adds container orientation support via the serialized BlockData string captured at time of vaulting.
  */
-public record VaultImp(UUID ownerUniqueIdentifier, UUID uniqueIdentifier, List<ItemStack> contents,
-                       Material blockMaterial, Location blockLocation, Instant vaultedAt) implements Vault {
+public record VaultImp(
+        UUID ownerUniqueIdentifier,
+        UUID uniqueIdentifier,
+        List<ItemStack> contents,
+        Material blockMaterial,
+        Location blockLocation,
+        Instant vaultedAt,
+        String blockDataString
+) implements Vault {
+
+    /**
+     * Constructs a Vault keeping a defensive copy of mutable fields and defaulting timestamps when null.
+     *
+     * @param ownerUniqueIdentifier owner UUID
+     * @param uniqueIdentifier vault UUID
+     * @param contents captured items (defensive-copied, null treated as empty)
+     * @param blockMaterial original block material
+     * @param blockLocation original block location (defensive-copied)
+     * @param vaultedAt when the block was vaulted (defaults to now)
+     * @param blockDataString serialized BlockData string representing orientation/state (nullable)
+     */
     public VaultImp(UUID ownerUniqueIdentifier, UUID uniqueIdentifier, List<ItemStack> contents,
-                    Material blockMaterial, Location blockLocation, Instant vaultedAt) {
+                    Material blockMaterial, Location blockLocation, Instant vaultedAt, String blockDataString) {
         this.ownerUniqueIdentifier = ownerUniqueIdentifier;
         this.uniqueIdentifier = uniqueIdentifier;
         this.contents = contents == null ? List.of() : new ArrayList<>(contents);
         this.blockMaterial = blockMaterial;
         this.blockLocation = blockLocation == null ? null : blockLocation.clone();
         this.vaultedAt = vaultedAt == null ? Instant.now() : vaultedAt;
+        this.blockDataString = blockDataString;
     }
 
     @Override
@@ -41,5 +63,10 @@ public record VaultImp(UUID ownerUniqueIdentifier, UUID uniqueIdentifier, List<I
                 blockMaterial == null ? null : blockMaterial.name(),
                 LocationDtoImp.fromLocation(blockLocation),
                 vaultedAt == null ? Instant.now().toEpochMilli() : vaultedAt.toEpochMilli());
+    }
+
+    @Override
+    public UUID getUniqueIdentifier() {
+        return uniqueIdentifier;
     }
 }

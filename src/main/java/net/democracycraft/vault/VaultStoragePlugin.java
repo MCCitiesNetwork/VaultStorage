@@ -1,34 +1,111 @@
 package net.democracycraft.vault;
 
+import net.democracycraft.vault.api.dao.VaultDAO;
+import net.democracycraft.vault.api.service.BoltService;
+import net.democracycraft.vault.api.service.VaultService;
+import net.democracycraft.vault.api.service.WorldGuardService;
 import net.democracycraft.vault.internal.command.VaultCommand;
+import net.democracycraft.vault.internal.database.DatabaseSchema;
+import net.democracycraft.vault.internal.database.MySQLManager;
+import net.democracycraft.vault.internal.database.dao.VaultDAOImpl;
+import net.democracycraft.vault.internal.database.entity.WorldEntity;
+import net.democracycraft.vault.internal.service.BoltServiceImp;
+import net.democracycraft.vault.internal.service.VaultServiceImpl;
 import net.democracycraft.vault.internal.session.VaultSessionManager;
-import net.democracycraft.vault.internal.store.VaultMemoryStore;
+import net.democracycraft.vault.internal.util.config.ConfigInitializer;
+import net.democracycraft.vault.internal.service.VaultCaptureService;
+import net.democracycraft.vault.internal.service.VaultPlacementService;
+import net.democracycraft.vault.internal.service.VaultInventoryService;
+import net.democracycraft.vault.internal.service.WorldGuardServiceImp;
+import net.democracycraft.vault.internal.ui.VaultActionMenu;
+import net.democracycraft.vault.internal.ui.VaultCaptureMenu;
+import net.democracycraft.vault.internal.ui.VaultListMenu;
+import org.bukkit.Bukkit;
+import org.bukkit.World;
+import org.bukkit.plugin.ServicePriority;
 import org.bukkit.plugin.java.JavaPlugin;
 
+/**
+ * Main plugin entry point responsible for bootstrapping configuration, database, and services.
+ */
 public final class VaultStoragePlugin extends JavaPlugin {
 
     private static VaultStoragePlugin instance;
     private final VaultSessionManager sessionManager = new VaultSessionManager();
-    private final VaultMemoryStore vaultStore = new VaultMemoryStore();
+
+    // Domain services
+    private VaultCaptureService captureService;
+    private VaultPlacementService placementService;
+    private VaultInventoryService inventoryService;
+
+    // Integration services
+    private VaultService vaultService;
+    private WorldGuardService worldGuardService;
+    private BoltService boltService;
+
+    // Database wiring
+    private MySQLManager mysql;
+    private DatabaseSchema schema;
+    private VaultDAO vaultDAO;
 
     public static VaultStoragePlugin getInstance() {
         return instance;
     }
 
-    public VaultSessionManager getSessionManager() {
-        return sessionManager;
-    }
+    public VaultSessionManager getSessionManager() { return sessionManager; }
 
-    /**
-     * In-memory store of captured vaults for browsing and editing.
-     */
-    public VaultMemoryStore getVaultStore() {
-        return vaultStore;
-    }
+    public VaultService getVaultService() { return vaultService; }
+
+    public WorldGuardService getWorldGuardService() { return worldGuardService; }
+
+    public BoltService getBoltService() { return boltService; }
+
+    /** Reusable capture domain service. */
+    public VaultCaptureService getCaptureService() { return captureService; }
+
+    /** Reusable placement domain service. */
+    public VaultPlacementService getPlacementService() { return placementService; }
+
+    /** Reusable inventory domain service. */
+    public VaultInventoryService getInventoryService() { return inventoryService; }
 
     @Override
     public void onEnable() {
         instance = this;
+        // Ensure config exists and has defaults
+        ConfigInitializer.ensureMysqlDefaults(this);
+
+        // Init DB and schema
+        this.mysql = new MySQLManager(this);
+        this.mysql.setupDatabase();
+        this.schema = new DatabaseSchema(mysql);
+        this.schema.createAll();
+        this.schema.verifyIntegrity();
+        // Bootstrap worlds dictionary to satisfy FK on vaults/worlds
+        bootstrapWorlds();
+
+        // DAO + Service
+        this.vaultDAO = new VaultDAOImpl(schema);
+        this.vaultService = new VaultServiceImpl(vaultDAO);
+        // Register VaultService in Bukkit services
+        getServer().getServicesManager().register(VaultService.class, this.vaultService, this, ServicePriority.Normal);
+
+        // Integration services
+        this.worldGuardService = new WorldGuardServiceImp(this);
+        getServer().getServicesManager().register(WorldGuardService.class, this.worldGuardService, this, ServicePriority.Normal);
+        this.boltService = new BoltServiceImp(this);
+        getServer().getServicesManager().register(BoltService.class, this.boltService, this, ServicePriority.Normal);
+
+        // Domain services
+        this.captureService = new VaultCaptureService();
+        this.placementService = new VaultPlacementService();
+        this.inventoryService = new VaultInventoryService();
+
+        // Ensure menu YAMLs exist at startup
+        VaultCaptureMenu.ensureConfig();
+        VaultListMenu.ensureConfig();
+        VaultActionMenu.ensureConfig();
+
         if (getCommand("vault") != null) {
             var cmd = new VaultCommand();
             getCommand("vault").setExecutor(cmd);
@@ -36,8 +113,21 @@ public final class VaultStoragePlugin extends JavaPlugin {
         }
     }
 
+    private void bootstrapWorlds() {
+        try {
+            for (World w : Bukkit.getWorlds()) {
+                WorldEntity e = new WorldEntity();
+                e.uuid = w.getUID();
+                e.name = w.getName();
+                schema.worlds().insertOrUpdateSync(e);
+            }
+        } catch (Exception ex) {
+            getLogger().warning("Failed to bootstrap worlds table: " + ex.getMessage());
+        }
+    }
+
     @Override
     public void onDisable() {
-        // Plugin shutdown logic
+        if (this.mysql != null) this.mysql.disconnect();
     }
 }
