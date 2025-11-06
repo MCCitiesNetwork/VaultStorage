@@ -177,7 +177,7 @@ public class BoltServiceImp implements BoltService {
     public void createProtection(@NotNull Block block, @NotNull UUID ownerUuid) {
         Objects.requireNonNull(block, "block");
         Objects.requireNonNull(ownerUuid, "ownerUuid");
-        api.createProtection(block, ownerUuid, "type");
+        api.createProtection(block, ownerUuid, "private");
     }
 }
 
