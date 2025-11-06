@@ -3,6 +3,7 @@ package net.democracycraft.vault.internal.service;
 import net.democracycraft.vault.VaultStoragePlugin;
 import net.democracycraft.vault.api.convertible.Vault;
 import net.democracycraft.vault.api.service.VaultService;
+import net.democracycraft.vault.api.service.BoltService;
 import net.democracycraft.vault.internal.database.entity.VaultEntity;
 import net.democracycraft.vault.internal.database.entity.VaultItemEntity;
 import net.democracycraft.vault.internal.mappable.VaultImp;
@@ -71,6 +72,8 @@ public class VaultPlacementService {
                     return;
                 }
                 Location loc = new Location(world, e.x, e.y, e.z);
+                // Owner for protection recreation
+                UUID ownerUuid = vs.getOwner(vaultUuid);
                 // Load items
                 List<VaultItemEntity> rows = vs.listItems(vaultUuid);
                 List<ItemStack> items = new ArrayList<>(rows.size());
@@ -91,6 +94,13 @@ public class VaultPlacementService {
                     if (callback != null) callback.accept(result);
 
                     if (result.success()) {
+                        // Create Bolt protection for the placed block with the original owner
+                        BoltService bolt = plugin.getBoltService();
+                        if (bolt != null && ownerUuid != null) {
+                            Block placed = loc.getWorld().getBlockAt(loc);
+                            try { bolt.createProtection(placed, ownerUuid); } catch (Throwable ignored) {}
+                        }
+                        // Remove the vault record after successful placement
                         new BukkitRunnable() { @Override public void run() {
                             try { vs.delete(vaultUuid); } catch (Exception ignored) {}
                         } }.runTaskAsynchronously(plugin);

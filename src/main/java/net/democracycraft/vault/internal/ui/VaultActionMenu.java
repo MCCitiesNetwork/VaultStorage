@@ -257,4 +257,11 @@ public class VaultActionMenu extends ChildMenuImp {
             vs.putItem(vaultId, i, it.getAmount(), ItemSerialization.toBytes(it));
         }
     }
+
+    @Override
+    public void open() {
+        // Rebuild the dialog from YAML on each open to reflect live config changes
+        setDialog(build());
+        super.open();
+    }
 }

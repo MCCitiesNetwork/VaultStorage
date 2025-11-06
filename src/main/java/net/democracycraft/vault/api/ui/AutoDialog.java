@@ -104,7 +104,7 @@ public class AutoDialog {
         }
 
         public Builder button(Component label, Consumer<Context> handler) {
-            return button(label, null, Duration.ofMinutes(5), 1, handler);
+            return button(label, null, Duration.ofMinutes(5), 10, handler);
         }
 
         public Builder buttonWithResponse(Component label, Component tooltip, Duration expireAfter, int maxUses, BiConsumer<DialogResponseView, Audience> handler) {

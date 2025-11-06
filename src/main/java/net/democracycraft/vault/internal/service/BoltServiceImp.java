@@ -12,6 +12,7 @@ import org.popcraft.bolt.BoltAPI;
 import org.popcraft.bolt.protection.BlockProtection;
 import org.popcraft.bolt.protection.Protection;
 
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -19,7 +20,7 @@ import java.util.Objects;
 import java.util.UUID;
 
 /**
- * Service implementation that integrates with Bolt to query protections.
+ * Service implementation that integrates with Bolt to query and manage protections.
  */
 public class BoltServiceImp implements BoltService {
 
@@ -76,10 +77,6 @@ public class BoltServiceImp implements BoltService {
 
     /**
      * Returns all blocks protected by the specified player within the given bounding box and world.
-     *
-     * Coordinate note: chunk coordinates differ from block coordinates. To map a block at (x, z) to its chunk,
-     * use floor division by 16 (i.e., chunkX = floorDiv(x, 16), chunkZ = floorDiv(z, 16)). Chunk-local coordinates
-     * are then xLocal = x - (chunkX << 4) and zLocal = z - (chunkZ << 4), in the range 0..15.
      *
      * @param playerUUID  the owner's UUID (not null)
      * @param boundingBox the search area (not null)
@@ -161,4 +158,27 @@ public class BoltServiceImp implements BoltService {
         }
         return protectedBlocks;
     }
+
+    /**
+     * Attempts to remove a protection for the given block using BoltAPI.
+     * Tries multiple method signatures for compatibility.
+     */
+    @Override
+    public void removeProtection(@NotNull Block block) {
+        Objects.requireNonNull(block, "block");
+        Protection p = api.findProtection(block);
+        api.removeProtection(p);
+    }
+    /**
+     * Attempts to create a protection for the given block owned by ownerUuid using BoltAPI.
+     * Tries multiple method signatures for compatibility.
+     */
+    @Override
+    public void createProtection(@NotNull Block block, @NotNull UUID ownerUuid) {
+        Objects.requireNonNull(block, "block");
+        Objects.requireNonNull(ownerUuid, "ownerUuid");
+        api.createProtection(block, ownerUuid, "type");
+    }
 }
+
+

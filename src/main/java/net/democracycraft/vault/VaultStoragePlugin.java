@@ -20,6 +20,8 @@ import net.democracycraft.vault.internal.service.WorldGuardServiceImp;
 import net.democracycraft.vault.internal.ui.VaultActionMenu;
 import net.democracycraft.vault.internal.ui.VaultCaptureMenu;
 import net.democracycraft.vault.internal.ui.VaultListMenu;
+import net.democracycraft.vault.internal.ui.VaultScanMenu;
+import net.democracycraft.vault.internal.ui.VaultRegionListMenu;
 import org.bukkit.Bukkit;
 import org.bukkit.World;
 import org.bukkit.plugin.ServicePriority;
@@ -91,7 +93,7 @@ public final class VaultStoragePlugin extends JavaPlugin {
         getServer().getServicesManager().register(VaultService.class, this.vaultService, this, ServicePriority.Normal);
 
         // Integration services
-        this.worldGuardService = new WorldGuardServiceImp(this);
+        this.worldGuardService = new WorldGuardServiceImp();
         getServer().getServicesManager().register(WorldGuardService.class, this.worldGuardService, this, ServicePriority.Normal);
         this.boltService = new BoltServiceImp(this);
         getServer().getServicesManager().register(BoltService.class, this.boltService, this, ServicePriority.Normal);
@@ -105,6 +107,8 @@ public final class VaultStoragePlugin extends JavaPlugin {
         VaultCaptureMenu.ensureConfig();
         VaultListMenu.ensureConfig();
         VaultActionMenu.ensureConfig();
+        VaultScanMenu.ensureConfig();
+        VaultRegionListMenu.ensureConfig();
 
         if (getCommand("vault") != null) {
             var cmd = new VaultCommand();

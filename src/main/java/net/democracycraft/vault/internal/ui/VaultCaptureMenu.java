@@ -3,8 +3,8 @@ package net.democracycraft.vault.internal.ui;
 import io.papermc.paper.dialog.Dialog;
 import io.papermc.paper.registry.data.dialog.DialogBase;
 import io.papermc.paper.registry.data.dialog.body.DialogBody;
-import io.papermc.paper.registry.data.dialog.input.DialogInput;
 import net.democracycraft.vault.VaultStoragePlugin;
+import net.democracycraft.vault.api.data.Dto;
 import net.democracycraft.vault.api.service.BoltService;
 import net.democracycraft.vault.api.service.WorldGuardService;
 import net.democracycraft.vault.api.ui.AutoDialog;
@@ -17,7 +17,6 @@ import net.democracycraft.vault.internal.util.item.ItemSerialization;
 import net.democracycraft.vault.internal.util.minimessage.MiniMessageUtil;
 import net.democracycraft.vault.internal.util.yml.AutoYML;
 import org.bukkit.Bukkit;
-import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.block.Container;
 import org.bukkit.entity.Player;
@@ -37,7 +36,7 @@ import java.util.*;
 public class VaultCaptureMenu extends ParentMenuImp {
 
     /** Configurable menu texts. */
-    public static class Config implements net.democracycraft.vault.api.data.Dto, java.io.Serializable {
+    public static class Config implements Dto, java.io.Serializable {
         /** Dialog title. Supports %player% placeholder. */
         public String title = "<gold><bold>Vault Capture</bold></gold>";
         /** Instruction line explaining how to start capture. Supports %player%. */
@@ -56,20 +55,18 @@ public class VaultCaptureMenu extends ParentMenuImp {
         public String notAContainer = "That block is not a container.";
         /** Chat message when capture succeeds. Supports %player%. */
         public String capturedOk = "Vault captured.";
-        /** Label for region id input. */
-        public String regionInputLabel = "<gray>Region ID</gray>";
-        /** Button to trigger a scan of a region. */
-        public String scanRegionBtn = "<yellow>Scan Region</yellow>";
-        /** Message header when reporting mismatched protections. */
-        public String scanHeader = "<gold><bold>Region scan for %region%</bold> (<white>%count%</white> mismatches)";
-        /** Per-entry format when reporting mismatched blocks. Placeholders: %x% %y% %z% %owner% */
-        public String scanEntry = "<gray>- </gray><white>(%x%, %y%, %z%)</white> <gray>owner:</gray> <white>%owner%</white>";
-        /** Message when no mismatches. */
-        public String scanNone = "<gray>No mismatched protected containers in this region.</gray>";
-        /** Message when the region input is empty. */
-        public String scanNeedRegion = "<red>Please enter a region ID.</red>";
-        /** Message when WorldGuard or Bolt services are not available. */
-        public String scanServicesMissing = "<red>Scanning is unavailable: required services are not ready.</red>";
+        /** Button to open the scan menu. */
+        public String openScanBtn = "<yellow>Scan Region</yellow>";
+        /** Actionbar while in capture mode (when not looking at a container). */
+        public String actionBarIdle = "<yellow>Capture mode</yellow> - Right-click a container. <gray>Left-click to cancel.</gray>";
+        /** Actionbar when looking at a container. Placeholders: %owner% %vaultable% */
+        public String actionBarContainer = "<gray>Owner:</gray> <white>%owner%</white> <gray>| Vaultable:</gray> <white>%vaultable%</white>";
+        /** Text used when the container has no Bolt protection. */
+        public String actionBarUnprotectedOwner = "unprotected";
+        /** Text shown when a container is vaultable. */
+        public String actionBarVaultableYes = "yes";
+        /** Text shown when a container is NOT vaultable. */
+        public String actionBarVaultableNo = "no";
     }
 
     private static final String HEADER = String.join("\n",
@@ -115,6 +112,8 @@ public class VaultCaptureMenu extends ParentMenuImp {
         builder.button(MiniMessageUtil.parseOrPlain(cfg.startBtn, phSelf), ctx -> {
             Player actor = ctx.player();
             VaultSessionManager.Session session = VaultStoragePlugin.getInstance().getSessionManager().getOrCreate(actor.getUniqueId());
+            final org.bukkit.scheduler.BukkitTask[] actionbarTask = new org.bukkit.scheduler.BukkitTask[1];
+
             session.getDynamicListener().setListener(new Listener() {
                 @EventHandler
                 public void onInteract(PlayerInteractEvent event) {
@@ -123,6 +122,7 @@ public class VaultCaptureMenu extends ParentMenuImp {
                     // Cancel with any left click (air or block)
                     if (action == Action.LEFT_CLICK_AIR || action == Action.LEFT_CLICK_BLOCK) {
                         session.getDynamicListener().stop();
+                        if (actionbarTask[0] != null) actionbarTask[0].cancel();
                         event.getPlayer().sendMessage(MiniMessageUtil.parseOrPlain(cfg.captureCancelled, Map.of("%player%", event.getPlayer().getName())));
                         new VaultCaptureMenu(actor).open();
                         return;
@@ -132,27 +132,40 @@ public class VaultCaptureMenu extends ParentMenuImp {
                     Block block = event.getClickedBlock();
                     if (block == null) return;
                     session.getDynamicListener().stop();
+                    if (actionbarTask[0] != null) actionbarTask[0].cancel();
                     if (!(block.getState() instanceof Container)) {
                         event.getPlayer().sendMessage(MiniMessageUtil.parseOrPlain(cfg.notAContainer, Map.of("%player%", event.getPlayer().getName())));
                         new VaultCaptureMenu(actor).open();
                         return;
                     }
+
+                    // Resolve original owner via Bolt BEFORE removing protection
+                    BoltService bolt = VaultStoragePlugin.getInstance().getBoltService();
+                    UUID originalOwner = null;
+                    if (bolt != null) {
+                        try { originalOwner = bolt.getOwner(block); } catch (Throwable ignored) {}
+                    }
+                    // Remove Bolt protection prior to vaulting (main thread)
+                    if (bolt != null) {
+                        try { bolt.removeProtection(block); } catch (Throwable ignored) {}
+                    }
+
                     // Use domain service to capture (main thread)
                     VaultCaptureService captureService = VaultStoragePlugin.getInstance().getCaptureService();
                     VaultImp vault = captureService.captureFromBlock(actor, block);
                     // Persist asynchronously with VaultService
                     var plugin = VaultStoragePlugin.getInstance();
+                    UUID finalOwner = originalOwner != null ? originalOwner : actor.getUniqueId();
                     new BukkitRunnable() {
                         @Override public void run() {
                             var vs = plugin.getVaultService();
                             UUID worldId = block.getWorld().getUID();
-                            UUID owner = actor.getUniqueId();
                             // Avoid duplicates: delete existing vault at same location if present
                             var existing = vs.findByLocation(worldId, block.getX(), block.getY(), block.getZ());
                             if (existing != null) {
                                 vs.delete(existing.uuid);
                             }
-                            UUID newId = vs.createVault(worldId, block.getX(), block.getY(), block.getZ(), owner,
+                            UUID newId = vs.createVault(worldId, block.getX(), block.getY(), block.getZ(), finalOwner,
                                     vault.blockMaterial() == null ? null : vault.blockMaterial().name(),
                                     vault.blockDataString());
                             List<ItemStack> items = vault.contents();
@@ -163,7 +176,7 @@ public class VaultCaptureMenu extends ParentMenuImp {
                             }
                             new BukkitRunnable() {
                                 @Override public void run() {
-                                    var dto = new VaultDtoImp(newId, owner, List.of(),
+                                    var dto = new VaultDtoImp(newId, finalOwner, List.of(),
                                             vault.blockMaterial() == null ? null : vault.blockMaterial().name(),
                                             null, System.currentTimeMillis());
                                     VaultStoragePlugin.getInstance().getSessionManager().getOrCreate(actor.getUniqueId()).setLastVaultDto(dto);
@@ -175,55 +188,53 @@ public class VaultCaptureMenu extends ParentMenuImp {
                     }.runTaskAsynchronously(plugin);
                 }
             });
+
+            // Schedule actionbar updater during capture mode
+            actionbarTask[0] = new BukkitRunnable() {
+                @Override public void run() {
+                    if (!actor.isOnline()) { cancel(); return; }
+                    Block target = actor.getTargetBlockExact(6);
+                    if (target == null || !(target.getState() instanceof Container)) {
+                        actor.sendActionBar(MiniMessageUtil.parseOrPlain(cfg.actionBarIdle));
+                        return;
+                    }
+                    // Resolve owner via Bolt
+                    BoltService bolt = VaultStoragePlugin.getInstance().getBoltService();
+                    UUID owner = bolt != null ? bolt.getOwner(target) : null;
+                    String ownerName = owner == null ? cfg.actionBarUnprotectedOwner :
+                            Optional.ofNullable(Bukkit.getOfflinePlayer(owner).getName()).orElse(owner.toString());
+                    // Determine if viewer is member of any WG region at this block
+                    WorldGuardService wgs = VaultStoragePlugin.getInstance().getWorldGuardService();
+                    boolean isMember = false;
+                    if (wgs != null) {
+                        BoundingBox point = new BoundingBox(target.getX(), target.getY(), target.getZ(), target.getX(), target.getY(), target.getZ());
+                        var regs = wgs.getRegionsAt(point, target.getWorld());
+                        UUID viewer = actor.getUniqueId();
+                        isMember = regs.stream().anyMatch(vaultRegion -> vaultRegion.isMember(viewer));
+                    }
+                    String vaultable = isMember ? cfg.actionBarVaultableNo : cfg.actionBarVaultableYes;
+                    Map<String,String> ph = Map.of("%owner%", ownerName, "%vaultable%", vaultable);
+                    actor.sendActionBar(MiniMessageUtil.parseOrPlain(cfg.actionBarContainer, ph));
+                }
+            }.runTaskTimer(VaultStoragePlugin.getInstance(), 0L, 5L);
+
             session.getDynamicListener().start();
             // Close the dialog while waiting for the in-game click
             actor.closeDialog();
         });
 
-        // Region scan input and button
-        builder.addInput(DialogInput.text("REGION_ID", MiniMessageUtil.parseOrPlain(cfg.regionInputLabel)).labelVisible(true).build());
-        builder.buttonWithPlayer(MiniMessageUtil.parseOrPlain(cfg.scanRegionBtn), null, java.time.Duration.ofMinutes(5), 1, (actor, response) -> {
-            String regionId = Optional.ofNullable(response.getText("REGION_ID")).orElse("").trim();
-            if (regionId.isEmpty()) {
-                actor.sendMessage(MiniMessageUtil.parseOrPlain(cfg.scanNeedRegion));
-                return;
-            }
-            World world = actor.getWorld();
-            WorldGuardService wgs = VaultStoragePlugin.getInstance().getWorldGuardService();
-            BoltService bolt = VaultStoragePlugin.getInstance().getBoltService();
-            if (wgs == null || bolt == null) {
-                actor.sendMessage(MiniMessageUtil.parseOrPlain(cfg.scanServicesMissing));
-                return;
-            }
-            var regions = wgs.getRegionsIn(world);
-            var target = regions.stream().filter(r -> r.id().equalsIgnoreCase(regionId)).findFirst();
-            if (target.isEmpty()) {
-                actor.sendMessage(MiniMessageUtil.parseOrPlain("<red>Region not found: %region%</red>", Map.of("%region%", regionId)));
-                return;
-            }
-            var reg = target.get();
-            BoundingBox box = reg.boundingBox();
-            List<Block> blocks = bolt.getProtectedBlocksIn(box, world);
-            List<String> lines = new ArrayList<>();
-            for (org.bukkit.block.Block b : blocks) {
-                UUID owner = bolt.getOwner(b);
-                if (owner == null) continue;
-                if (reg.isOwner(owner) || reg.isMember(owner)) continue;
-                String name = Optional.ofNullable(Bukkit.getOfflinePlayer(owner).getName()).orElse(owner.toString());
-                Map<String,String> ph = Map.of("%x%", String.valueOf(b.getX()), "%y%", String.valueOf(b.getY()), "%z%", String.valueOf(b.getZ()), "%owner%", name);
-                lines.add(net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(MiniMessageUtil.parseOrPlain(cfg.scanEntry, ph)));
-            }
-            Map<String,String> ph = Map.of("%region%", reg.id(), "%count%", String.valueOf(lines.size()));
-            actor.sendMessage(MiniMessageUtil.parseOrPlain(cfg.scanHeader, ph));
-            if (lines.isEmpty()) {
-                actor.sendMessage(MiniMessageUtil.parseOrPlain(cfg.scanNone));
-            } else {
-                for (String line : lines) actor.sendMessage(net.kyori.adventure.text.Component.text(line));
-            }
-        });
+        // Open scan child menu
+        builder.button(MiniMessageUtil.parseOrPlain(cfg.openScanBtn, phSelf), ctx -> new VaultScanMenu(ctx.player(), this).open());
 
         builder.button(MiniMessageUtil.parseOrPlain(cfg.browseBtn, phSelf), ctx -> new VaultListMenu(ctx.player(), this, "").open());
         builder.button(MiniMessageUtil.parseOrPlain(cfg.closeBtn, phSelf), ctx -> {});
         return builder.build();
+    }
+
+    @Override
+    public void open() {
+        // Rebuild the dialog from YAML on each open to reflect live config changes
+        setDialog(build());
+        super.open();
     }
 }

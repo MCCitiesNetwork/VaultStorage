@@ -6,7 +6,6 @@ import com.sk89q.worldguard.WorldGuard;
 import com.sk89q.worldguard.protection.managers.RegionManager;
 import com.sk89q.worldguard.protection.regions.ProtectedRegion;
 import com.sk89q.worldguard.protection.regions.RegionContainer;
-import net.democracycraft.vault.VaultStoragePlugin;
 import net.democracycraft.vault.api.region.VaultRegion;
 import net.democracycraft.vault.api.service.WorldGuardService;
 import net.democracycraft.vault.internal.region.VaultRegionImp;
@@ -17,40 +16,27 @@ import org.jetbrains.annotations.NotNull;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.NavigableMap;
 import java.util.Objects;
-import java.util.TreeMap;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * WorldGuard-backed service to resolve regions and cache them per world.
+ * WorldGuard-backed service to resolve regions without maintaining an internal cache.
  *
- * Caching strategy:
- * - Per-world NavigableMap keyed by WorldGuard region id for stable updates by id.
- * - First query for a world loads all regions; subsequent calls reuse and selectively refresh.
- * - No persistence here; WorldGuard persists regions. Invalidation APIs provided for runtime changes.
+ * Design:
+ * - Every call adapts the Bukkit world to WorldEdit and pulls the current regions from WorldGuard's RegionManager.
+ * - This avoids cache invalidation complexity because regions can change frequently at runtime.
  */
 public class WorldGuardServiceImp implements WorldGuardService {
 
-    private final VaultStoragePlugin plugin;
-
-    private final WorldGuard worldGuardApi;
-
     private final RegionContainer regionContainer;
 
-    // Per-world cache: world UUID -> sorted map (by region id) of VaultRegion
-    private final Map<UUID, NavigableMap<String, VaultRegion>> regionCache = new ConcurrentHashMap<>();
-
-    public WorldGuardServiceImp(@NotNull VaultStoragePlugin plugin) {
-        this.plugin = Objects.requireNonNull(plugin, "plugin");
-        this.worldGuardApi = WorldGuard.getInstance();
-        this.regionContainer = worldGuardApi.getPlatform().getRegionContainer();
+    public WorldGuardServiceImp() {
+        this.regionContainer = WorldGuard.getInstance().getPlatform().getRegionContainer();
     }
 
     /**
-     * Returns all cached regions in the given world that overlap the provided bounding box.
-     * If the world is not cached yet, it will be loaded and cached first.
+     * Returns regions in the given world that overlap the provided bounding box.
+     * Data is fetched live from WorldGuard on each call.
      *
      * @param boundingBox the query area (not null)
      * @param world       the Bukkit world (not null)
@@ -66,87 +52,32 @@ public class WorldGuardServiceImp implements WorldGuardService {
     }
 
     /**
-     * Returns all regions in the given world, using a per-world cache populated on first access.
+     * Returns all regions in the given world. This method queries WorldGuard's RegionManager
+     * directly on each call and does not use an internal cache.
      *
      * @param world the Bukkit world (not null)
-     * @return a list view of all cached regions in the world (never null)
+     * @return a list of regions in the world (never null)
      */
     @Override
     public @NotNull List<VaultRegion> getRegionsIn(@NotNull World world) {
         Objects.requireNonNull(world, "world");
-        UUID worldId = world.getUID();
-
-        NavigableMap<String, VaultRegion> map = regionCache.get(worldId);
-        if (map == null) {
-            map = new TreeMap<>();
-            // Load and cache regions for this world
-            com.sk89q.worldedit.world.World weWorld = BukkitAdapter.adapt(world);
-            RegionManager manager = regionContainer.get(weWorld);
-            if (manager == null) {
-                regionCache.put(worldId, map);
-                return List.of();
-            }
-
-            for (Map.Entry<String, ProtectedRegion> entry : manager.getRegions().entrySet()) {
-                String id = entry.getKey();
-                ProtectedRegion protectedRegion = entry.getValue();
-                List<UUID> owners = new ArrayList<>(protectedRegion.getOwners().getPlayerDomain().getUniqueIds());
-                List<UUID> members = new ArrayList<>(protectedRegion.getMembers().getPlayerDomain().getUniqueIds());
-                BoundingBox box = getBoundingBox(protectedRegion);
-                VaultRegion vaultRegion = new VaultRegionImp(id, members, owners, box);
-                map.put(id, vaultRegion);
-            }
-            regionCache.put(worldId, map);
-        }
-
-        return new ArrayList<>(map.values());
-    }
-
-    @Override
-    public void invalidateCache(@NotNull World world) {
-        Objects.requireNonNull(world, "world");
-        regionCache.remove(world.getUID());
-    }
-
-    @Override
-    public void refreshWorld(@NotNull World world) {
-        Objects.requireNonNull(world, "world");
-        regionCache.remove(world.getUID());
-        getRegionsIn(world); // repopulate lazily
-    }
-
-    @Override
-    public void refreshRegion(@NotNull World world, @NotNull String regionId) {
-        Objects.requireNonNull(world, "world");
-        Objects.requireNonNull(regionId, "regionId");
-        UUID worldId = world.getUID();
-        NavigableMap<String, VaultRegion> map = regionCache.computeIfAbsent(worldId, k -> new TreeMap<>());
 
         com.sk89q.worldedit.world.World weWorld = BukkitAdapter.adapt(world);
         RegionManager manager = regionContainer.get(weWorld);
         if (manager == null) {
-            map.remove(regionId);
-            return;
+            return List.of();
         }
-        ProtectedRegion pr = manager.getRegion(regionId);
-        if (pr == null) {
-            map.remove(regionId);
-            return;
-        }
-        List<UUID> owners = new ArrayList<>(pr.getOwners().getPlayerDomain().getUniqueIds());
-        List<UUID> members = new ArrayList<>(pr.getMembers().getPlayerDomain().getUniqueIds());
-        BoundingBox box = getBoundingBox(pr);
-        map.put(regionId, new VaultRegionImp(regionId, members, owners, box));
-    }
 
-    @Override
-    public void removeRegion(@NotNull World world, @NotNull String regionId) {
-        Objects.requireNonNull(world, "world");
-        Objects.requireNonNull(regionId, "regionId");
-        NavigableMap<String, VaultRegion> map = regionCache.get(world.getUID());
-        if (map != null) {
-            map.remove(regionId);
+        List<VaultRegion> regions = new ArrayList<>(manager.getRegions().size());
+        for (Map.Entry<String, ProtectedRegion> entry : manager.getRegions().entrySet()) {
+            String id = entry.getKey();
+            ProtectedRegion protectedRegion = entry.getValue();
+            List<UUID> owners = new ArrayList<>(protectedRegion.getOwners().getPlayerDomain().getUniqueIds());
+            List<UUID> members = new ArrayList<>(protectedRegion.getMembers().getPlayerDomain().getUniqueIds());
+            BoundingBox box = getBoundingBox(protectedRegion);
+            regions.add(new VaultRegionImp(id, members, owners, box));
         }
+        return regions;
     }
 
     private @NotNull BoundingBox getBoundingBox(@NotNull ProtectedRegion region) {

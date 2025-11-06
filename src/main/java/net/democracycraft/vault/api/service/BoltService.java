@@ -17,8 +17,22 @@ public interface BoltService {
 
     /**
      * Returns all protected blocks within the given bounding box in a world, regardless of owner.
-     *
      */
     List<Block> getProtectedBlocksIn(BoundingBox boundingBox, World world);
+
+    /**
+     * Removes the Bolt protection for the given block if one exists.
+     * Implementations should be safe to call on the main thread.
+     * @param block target block
+     */
+    void removeProtection(Block block);
+
+    /**
+     * Creates a Bolt protection for the given block owned by the specified player.
+     * Implementations should be safe to call on the main thread.
+     * @param block target block
+     * @param ownerUuid owner of the protection
+     */
+    void createProtection(Block block, UUID ownerUuid);
 
 }

@@ -161,4 +161,11 @@ public class VaultListMenu extends ChildMenuImp {
         OfflinePlayer op = Bukkit.getOfflinePlayer(q);
         return op != null && op.getUniqueId() != null ? op.getUniqueId() : null;
     }
+
+    @Override
+    public void open() {
+        // Rebuild UI to reflect latest YAML configuration each time the menu opens
+        setDialog(build());
+        super.open();
+    }
 }

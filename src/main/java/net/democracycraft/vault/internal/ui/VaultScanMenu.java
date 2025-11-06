@@ -1,0 +1,257 @@
+package net.democracycraft.vault.internal.ui;
+
+import io.papermc.paper.dialog.Dialog;
+import io.papermc.paper.registry.data.dialog.DialogBase;
+import io.papermc.paper.registry.data.dialog.body.DialogBody;
+import io.papermc.paper.registry.data.dialog.input.DialogInput;
+import net.democracycraft.vault.VaultStoragePlugin;
+import net.democracycraft.vault.api.data.Dto;
+import net.democracycraft.vault.api.region.VaultRegion;
+import net.democracycraft.vault.api.service.BoltService;
+import net.democracycraft.vault.api.service.WorldGuardService;
+import net.democracycraft.vault.api.ui.AutoDialog;
+import net.democracycraft.vault.api.ui.ParentMenu;
+import net.democracycraft.vault.internal.mappable.VaultImp;
+import net.democracycraft.vault.internal.service.VaultCaptureService;
+import net.democracycraft.vault.internal.util.config.DataFolder;
+import net.democracycraft.vault.internal.util.minimessage.MiniMessageUtil;
+import net.democracycraft.vault.internal.util.yml.AutoYML;
+import org.bukkit.Bukkit;
+import org.bukkit.Location;
+import org.bukkit.World;
+import org.bukkit.block.Block;
+import org.bukkit.block.Container;
+import org.bukkit.entity.Player;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.scheduler.BukkitRunnable;
+import org.bukkit.util.BoundingBox;
+import org.jetbrains.annotations.NotNull;
+
+import java.util.*;
+
+/**
+ * Child menu dedicated to initiating a scan flow: search regions by query or use the current location (Here).
+ * Region selection is handled in a separate child menu to keep buttons grouped and clean at the bottom.
+ */
+public class VaultScanMenu extends ChildMenuImp {
+
+    /** YAML-backed configuration for the scan UI and messages. */
+    public static class Config implements Dto {
+        /** Dialog title. Placeholders: %player% */
+        public String title = "<gold><bold>Vault Scan</bold></gold>";
+        /** Message when no results. */
+        public String noneFound = "<gray>No protected containers found in this region.</gray>";
+        /** Error when services missing. */
+        public String servicesMissing = "<red>Scan unavailable: services not ready.</red>";
+        /** Error when target block is not a container. */
+        public String notAContainer = "<red>Target is not a container.</red>";
+        /** Message after successful vault action for an entry. */
+        public String vaultedOk = "<green>Container vaulted.</green>";
+        /** Results header. Placeholders: %region% %count% */
+        public String resultsHeader = "<gold><bold>Region %region%</bold></gold> <gray>(%count% results)</gray>";
+        /** Per-entry descriptive line. Placeholders: %x% %y% %z% %owner% */
+        public String entryLine = "<gray>- </gray><white>(%x%, %y%, %z%)</white> <gray>owner:</gray> <white>%owner%</white>";
+        /** Button label for vault action. */
+        public String entryVaultButton = "<yellow>(vault)</yellow>";
+        /** Button label for teleport action. */
+        public String entryTeleportButton = "<aqua>(teleport)</aqua>";
+        // Browse/search controls
+        /** Label for region search/filter input. */
+        public String searchLabel = "<gray>Search regions</gray>";
+        /** Button to apply region filter and open the list menu. */
+        public String searchBtn = "<aqua>Search</aqua>";
+        /** Button to detect the region at the player's current location. */
+        public String hereBtn = "<yellow>Here</yellow>";
+        /** Error when region not found. */
+        public String regionNotFound = "<red>Region not found: %region%</red>";
+    }
+
+    private static final String HEADER = String.join("\n",
+            "VaultScanMenu configuration.",
+            "Placeholders:",
+            "- %player% -> actor/player name",
+            "- %region% -> region id",
+            "- %count% -> number of results",
+            "- %x% %y% %z% %owner% -> entry values"
+    );
+
+    private static final AutoYML<Config> YML = AutoYML.create(Config.class, "VaultScanMenu", DataFolder.MENUS, HEADER);
+    private static Config cfg() { return YML.loadOrCreate(Config::new); }
+    public static void ensureConfig() { YML.loadOrCreate(Config::new); }
+
+    private final String regionId; // null -> browse/search mode; non-null -> results mode
+    private final List<Block> entries; // only used in results mode
+
+    public VaultScanMenu(@NotNull Player player, @NotNull ParentMenu parent) {
+        super(player, parent, "vault_scan");
+        this.regionId = null;
+        this.entries = List.of();
+        setDialog(build());
+    }
+
+    /** Public constructor for results mode to allow opening from the region list menu. */
+    public VaultScanMenu(@NotNull Player player, @NotNull ParentMenu parent, @NotNull String regionId, @NotNull List<Block> entries) {
+        super(player, parent, "vault_scan_results");
+        this.regionId = regionId;
+        this.entries = entries;
+        setDialog(build());
+    }
+
+    private Dialog build() {
+        Config config = cfg();
+        AutoDialog.Builder builder = getAutoDialogBuilder();
+        Map<String,String> placeholdersSelf = Map.of("%player%", getPlayer().getName());
+        builder.title(MiniMessageUtil.parseOrPlain(config.title, placeholdersSelf));
+        builder.canCloseWithEscape(true);
+        builder.afterAction(DialogBase.DialogAfterAction.CLOSE);
+
+        if (regionId == null) {
+            // Browse/search root: only Search input/button and Here. No region listing here.
+            builder.addBody(DialogBody.plainMessage(MiniMessageUtil.parseOrPlain(config.searchLabel)));
+            builder.addInput(DialogInput.text("QUERY", MiniMessageUtil.parseOrPlain(config.searchLabel)).labelVisible(true).build());
+            builder.buttonWithPlayer(MiniMessageUtil.parseOrPlain(config.searchBtn), null, java.time.Duration.ofMinutes(5), 1, (player, response) -> {
+                String q = Optional.ofNullable(response.getText("QUERY")).orElse("").trim();
+                new net.democracycraft.vault.internal.ui.VaultRegionListMenu(player, getParentMenu(), q, 0).open();
+            });
+
+            // "Here" button: detect region at player's current location and open results or list if multiple
+            builder.button(MiniMessageUtil.parseOrPlain(config.hereBtn), ctx -> {
+                WorldGuardService wgs = VaultStoragePlugin.getInstance().getWorldGuardService();
+                if (wgs == null) {
+                    ctx.player().sendMessage(MiniMessageUtil.parseOrPlain(config.servicesMissing));
+                    return;
+                }
+                var all = wgs.getRegionsIn(ctx.player().getWorld());
+                var loc = ctx.player().getLocation();
+                List<VaultRegion> containing = all.stream().filter(r -> r.contains(loc.getX(), loc.getY(), loc.getZ())).toList();
+                if (containing.isEmpty()) {
+                    ctx.player().sendMessage(MiniMessageUtil.parseOrPlain("<red>No region at your location.</red>"));
+                    return;
+                }
+                if (containing.size() > 1) {
+                    List<String> ids = containing.stream().map(VaultRegion::id).sorted(String.CASE_INSENSITIVE_ORDER).toList();
+                    new net.democracycraft.vault.internal.ui.VaultRegionListMenu(ctx.player(), getParentMenu(), ids, 0).open();
+                    return;
+                }
+                VaultRegion only = containing.getFirst();
+                List<Block> blocks = computeEntries(ctx.player(), only.id(), config);
+                if (blocks == null) return;
+                new VaultScanMenu(ctx.player(), getParentMenu(), only.id(), blocks).open();
+            });
+
+            return builder.build();
+        }
+
+        // Results mode
+        Map<String,String> placeholdersHeader = Map.of("%region%", regionId, "%count%", String.valueOf(entries.size()));
+        builder.addBody(DialogBody.plainMessage(MiniMessageUtil.parseOrPlain(config.resultsHeader, placeholdersHeader)));
+        if (entries.isEmpty()) {
+            builder.addBody(DialogBody.plainMessage(MiniMessageUtil.parseOrPlain(config.noneFound)));
+            return builder.build();
+        }
+        BoltService boltService = VaultStoragePlugin.getInstance().getBoltService();
+        for (Block entryBlock : entries) {
+            UUID ownerUuid = boltService != null ? boltService.getOwner(entryBlock) : null;
+            String ownerName = ownerUuid == null ? "unknown" : Optional.ofNullable(Bukkit.getOfflinePlayer(ownerUuid).getName()).orElse(ownerUuid.toString());
+            Map<String,String> placeholdersEntry = Map.of(
+                    "%x%", String.valueOf(entryBlock.getX()), "%y%", String.valueOf(entryBlock.getY()), "%z%", String.valueOf(entryBlock.getZ()),
+                    "%owner%", ownerName
+            );
+            builder.addBody(DialogBody.plainMessage(MiniMessageUtil.parseOrPlain(config.entryLine, placeholdersEntry)));
+            // Vault button for this entry
+            builder.button(MiniMessageUtil.parseOrPlain(config.entryVaultButton, placeholdersEntry), ctx -> {
+                // Ensure action on main thread
+                new BukkitRunnable() {
+                    @Override public void run() {
+                        Block targetBlock = ctx.player().getWorld().getBlockAt(entryBlock.getX(), entryBlock.getY(), entryBlock.getZ());
+                        if (!(targetBlock.getState() instanceof Container)) {
+                            ctx.player().sendMessage(MiniMessageUtil.parseOrPlain(config.notAContainer));
+                            return;
+                        }
+                        // Resolve original owner BEFORE removing protection
+                        BoltService boltSvc = VaultStoragePlugin.getInstance().getBoltService();
+                        UUID originalOwner = null;
+                        if (boltSvc != null) { try { originalOwner = boltSvc.getOwner(targetBlock); } catch (Throwable ignored) {} }
+                        // Remove Bolt protection before vaulting
+                        if (boltSvc != null) { try { boltSvc.removeProtection(targetBlock); } catch (Throwable ignored) {} }
+                        // Capture and persist
+                        VaultCaptureService vaultCaptureService = VaultStoragePlugin.getInstance().getCaptureService();
+                        VaultImp vault = vaultCaptureService.captureFromBlock(ctx.player(), targetBlock);
+                        var plugin = VaultStoragePlugin.getInstance();
+                        UUID finalOwner = originalOwner != null ? originalOwner : ctx.player().getUniqueId();
+                        new BukkitRunnable() {
+                            @Override public void run() {
+                                var vaultService = plugin.getVaultService();
+                                UUID worldUuid = targetBlock.getWorld().getUID();
+                                var existing = vaultService.findByLocation(worldUuid, entryBlock.getX(), entryBlock.getY(), entryBlock.getZ());
+                                if (existing != null) vaultService.delete(existing.uuid);
+                                UUID newId = vaultService.createVault(worldUuid, entryBlock.getX(), entryBlock.getY(), entryBlock.getZ(), finalOwner,
+                                        vault.blockMaterial() == null ? null : vault.blockMaterial().name(),
+                                        vault.blockDataString());
+                                List<ItemStack> items = vault.contents();
+                                for (int i = 0; i < items.size(); i++) {
+                                    ItemStack itemStack = items.get(i);
+                                    if (itemStack == null) continue;
+                                    vaultService.putItem(newId, i, itemStack.getAmount(), net.democracycraft.vault.internal.util.item.ItemSerialization.toBytes(itemStack));
+                                }
+                                new BukkitRunnable() { @Override public void run() {
+                                    ctx.player().sendMessage(MiniMessageUtil.parseOrPlain(config.vaultedOk));
+                                    List<Block> recomputed = computeEntries(ctx.player(), regionId, config);
+                                    if (recomputed == null) return;
+                                    new VaultScanMenu(ctx.player(), getParentMenu(), regionId, recomputed).open();
+                                } }.runTask(plugin);
+                            }
+                        }.runTaskAsynchronously(plugin);
+                    }
+                }.runTask(VaultStoragePlugin.getInstance());
+            });
+            // Teleport button for this entry (literal coordinates with safe centering)
+            builder.button(MiniMessageUtil.parseOrPlain(config.entryTeleportButton, placeholdersEntry), ctx -> {
+                boolean passable = entryBlock.isPassable();
+                double destY = passable ? entryBlock.getY() : (entryBlock.getY() + 1);
+                Location destination = new Location(ctx.player().getWorld(), entryBlock.getX() + 0.5, destY, entryBlock.getZ() + 0.5, ctx.player().getLocation().getYaw(), ctx.player().getLocation().getPitch());
+                ctx.player().teleport(destination);
+            });
+        }
+        return builder.build();
+    }
+
+    @Override
+    public void open() {
+        // Rebuild the dialog to reflect current YAML configuration on each open
+        setDialog(build());
+        super.open();
+    }
+
+    private static double volumeOf(VaultRegion r) {
+        BoundingBox b = r.boundingBox();
+        return Math.max(0, (b.getMaxX() - b.getMinX())) * Math.max(0, (b.getMaxY() - b.getMinY())) * Math.max(0, (b.getMaxZ() - b.getMinZ()));
+    }
+
+    private List<Block> computeEntries(Player player, String regionId, Config config) {
+        World world = player.getWorld();
+        WorldGuardService worldGuardService = VaultStoragePlugin.getInstance().getWorldGuardService();
+        BoltService boltService = VaultStoragePlugin.getInstance().getBoltService();
+        if (worldGuardService == null || boltService == null) {
+            player.sendMessage(MiniMessageUtil.parseOrPlain(config.servicesMissing));
+            return null;
+        }
+        var regions = worldGuardService.getRegionsIn(world);
+        var target = regions.stream().filter(r -> r.id().equalsIgnoreCase(regionId)).findFirst();
+        if (target.isEmpty()) {
+            player.sendMessage(MiniMessageUtil.parseOrPlain(config.regionNotFound, Map.of("%region%", regionId)));
+            return null;
+        }
+        var region = target.get();
+        BoundingBox boundingBox = region.boundingBox();
+        List<Block> protectedBlocks = boltService.getProtectedBlocksIn(boundingBox, world);
+        List<Block> entryBlocks = new ArrayList<>();
+        for (Block block : protectedBlocks) {
+            UUID ownerUuid = boltService.getOwner(block);
+            if (ownerUuid == null) continue;
+            if (region.isOwner(ownerUuid) || region.isMember(ownerUuid)) continue;
+            entryBlocks.add(block);
+        }
+        return entryBlocks;
+    }
+}

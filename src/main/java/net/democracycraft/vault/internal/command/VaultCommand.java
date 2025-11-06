@@ -32,8 +32,14 @@ public class VaultCommand implements CommandExecutor, TabCompleter {
     @Override
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
         if (args.length == 0) {
-            // default to menu
-            new MenuSubcommand().execute(new CommandContext(sender, label, new String[0]));
+            // default to menu, but respect permissions like other subs
+            Subcommand sub = findSub("menu");
+            if (sub == null) return true; // should not happen
+            if (!sub.hasPermission(sender)) {
+                sender.sendMessage("You don't have permission.");
+                return true;
+            }
+            sub.execute(new CommandContext(sender, label, new String[0]));
             return true;
         }
         String subName = args[0].toLowerCase(Locale.ROOT);
