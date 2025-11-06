@@ -194,10 +194,6 @@ var services = getServer().getServicesManager();
 var vaultSvcReg = services.getRegistration(net.democracycraft.vault.api.service.VaultService.class);
 var wgSvcReg = services.getRegistration(net.democracycraft.vault.api.service.WorldGuardService.class);
 var boltSvcReg = services.getRegistration(net.democracycraft.vault.api.service.BoltService.class);
-
-var vaultService = vaultSvcReg != null ? vaultSvcReg.getProvider() : null;
-var worldGuardService = wgSvcReg != null ? wgSvcReg.getProvider() : null;
-var boltService = boltSvcReg != null ? boltSvcReg.getProvider() : null;
 ```
 Always null‑check providers before use.
 
