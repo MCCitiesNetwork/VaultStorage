@@ -65,9 +65,13 @@ public class CaptureSubcommand implements Subcommand {
                     if (existing != null) {
                         vs.delete(existing.uuid);
                     }
-                    UUID newId = vs.createVault(worldId, block.getX(), block.getY(), block.getZ(), owner,
-                            vault.blockMaterial() == null ? null : vault.blockMaterial().name(),
-                            vault.blockDataString());
+                    UUID newId;
+                    {
+                        var created = vs.createVault(worldId, block.getX(), block.getY(), block.getZ(), owner,
+                                vault.blockMaterial() == null ? null : vault.blockMaterial().name(),
+                                vault.blockDataString());
+                        newId = created.uuid;
+                    }
                     for (int i = 0; i < vault.contents().size(); i++) {
                         ItemStack it = vault.contents().get(i);
                         if (it == null) continue;

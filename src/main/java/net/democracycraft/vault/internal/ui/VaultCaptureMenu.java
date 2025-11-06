@@ -165,9 +165,10 @@ public class VaultCaptureMenu extends ParentMenuImp {
                             if (existing != null) {
                                 vs.delete(existing.uuid);
                             }
-                            UUID newId = vs.createVault(worldId, block.getX(), block.getY(), block.getZ(), finalOwner,
+                            var created = vs.createVault(worldId, block.getX(), block.getY(), block.getZ(), finalOwner,
                                     vault.blockMaterial() == null ? null : vault.blockMaterial().name(),
                                     vault.blockDataString());
+                            UUID newId = created.uuid;
                             List<ItemStack> items = vault.contents();
                             for (int i = 0; i < items.size(); i++) {
                                 ItemStack it = items.get(i);

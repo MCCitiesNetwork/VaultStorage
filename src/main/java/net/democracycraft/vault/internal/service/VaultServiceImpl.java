@@ -1,12 +1,21 @@
 package net.democracycraft.vault.internal.service;
 
+import net.democracycraft.vault.api.convertible.Vault;
 import net.democracycraft.vault.api.dao.VaultDAO;
 import net.democracycraft.vault.api.service.VaultService;
 import net.democracycraft.vault.internal.database.entity.VaultEntity;
 import net.democracycraft.vault.internal.database.entity.VaultItemEntity;
+import net.democracycraft.vault.internal.mappable.VaultImp;
+import net.democracycraft.vault.internal.util.item.ItemSerialization;
+import org.bukkit.Bukkit;
+import org.bukkit.Location;
+import org.bukkit.Material;
+import org.bukkit.World;
+import org.bukkit.inventory.ItemStack;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.time.Instant;
 import java.util.*;
 
 public record VaultServiceImpl(VaultDAO dao) implements VaultService {
@@ -16,7 +25,7 @@ public record VaultServiceImpl(VaultDAO dao) implements VaultService {
     }
 
     @Override
-    public @NotNull UUID createVault(@NotNull UUID worldUuid, int x, int y, int z, @NotNull UUID ownerUuid,
+    public @NotNull VaultEntity createVault(@NotNull UUID worldUuid, int x, int y, int z, @NotNull UUID ownerUuid,
                                      @Nullable String material, @Nullable String blockData) {
         Objects.requireNonNull(worldUuid, "worldUuid");
         Objects.requireNonNull(ownerUuid, "ownerUuid");
@@ -32,7 +41,33 @@ public record VaultServiceImpl(VaultDAO dao) implements VaultService {
         vaultEntity.createdAtEpochMillis = now;
         vaultEntity.updatedAtEpochMillis = now;
         dao.createVault(vaultEntity, ownerUuid);
-        return vaultEntity.uuid;
+        return vaultEntity;
+    }
+
+    @Override
+    public @NotNull Vault createVault(@NotNull UUID worldUuid, int x, int y, int z, @NotNull UUID ownerUuid,
+                                      @Nullable String material, @Nullable String blockData,
+                                      @NotNull List<ItemStack> contents) {
+        VaultEntity entity = createVault(worldUuid, x, y, z, ownerUuid, material, blockData);
+        // Persist items
+        if (contents != null) {
+            for (int i = 0; i < contents.size(); i++) {
+                ItemStack it = contents.get(i);
+                if (it == null || it.getAmount() <= 0) continue;
+                dao.putItem(entity.uuid, i, it.getAmount(), ItemSerialization.toBytes(it));
+            }
+        }
+        // Build Vault object with contents
+        World world = Bukkit.getWorld(worldUuid);
+        Location loc = world == null ? null : new Location(world, x, y, z);
+        Material mat = material == null ? null : safeMaterial(material);
+        return new VaultImp(ownerUuid, entity.uuid, contents == null ? List.of() : contents, mat, loc,
+                entity.createdAtEpochMillis == null ? Instant.now() : Instant.ofEpochMilli(entity.createdAtEpochMillis),
+                blockData);
+    }
+
+    private static Material safeMaterial(String name) {
+        try { return Material.valueOf(name); } catch (IllegalArgumentException ex) { return null; }
     }
 
     @Override

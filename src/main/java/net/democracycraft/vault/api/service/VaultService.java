@@ -1,7 +1,9 @@
 package net.democracycraft.vault.api.service;
 
+import net.democracycraft.vault.api.convertible.Vault;
 import net.democracycraft.vault.internal.database.entity.VaultEntity;
 import net.democracycraft.vault.internal.database.entity.VaultItemEntity;
+import org.bukkit.inventory.ItemStack;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -13,8 +15,13 @@ import java.util.UUID;
  * Public API: High-level service for managing Vault persistence.
  */
 public interface VaultService {
-    @NotNull UUID createVault(@NotNull UUID worldUuid, int x, int y, int z, @NotNull UUID ownerUuid,
+    @NotNull VaultEntity createVault(@NotNull UUID worldUuid, int x, int y, int z, @NotNull UUID ownerUuid,
                               @Nullable String material, @Nullable String blockData);
+
+    @NotNull Vault createVault(@NotNull UUID worldUuid, int x, int y, int z, @NotNull UUID ownerUuid,
+                               @Nullable String material, @Nullable String blockData,
+                               @NotNull List<ItemStack> contents);
+
     @NotNull Optional<VaultEntity> get(@NotNull UUID vaultUuid);
     @Nullable VaultEntity findByLocation(@NotNull UUID worldUuid, int x, int y, int z);
     void delete(@NotNull UUID vaultUuid);

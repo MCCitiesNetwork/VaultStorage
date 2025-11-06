@@ -183,11 +183,13 @@ public class VaultScanMenu extends ChildMenuImp {
                             @Override public void run() {
                                 var vaultService = plugin.getVaultService();
                                 UUID worldUuid = targetBlock.getWorld().getUID();
-                                var existing = vaultService.findByLocation(worldUuid, entryBlock.getX(), entryBlock.getY(), entryBlock.getZ());
-                                if (existing != null) vaultService.delete(existing.uuid);
-                                UUID newId = vaultService.createVault(worldUuid, entryBlock.getX(), entryBlock.getY(), entryBlock.getZ(), finalOwner,
-                                        vault.blockMaterial() == null ? null : vault.blockMaterial().name(),
-                                        vault.blockDataString());
+                                UUID newId;
+                                {
+                                    var created = vaultService.createVault(worldUuid, entryBlock.getX(), entryBlock.getY(), entryBlock.getZ(), finalOwner,
+                                            vault.blockMaterial() == null ? null : vault.blockMaterial().name(),
+                                            vault.blockDataString());
+                                    newId = created.uuid;
+                                }
                                 List<ItemStack> items = vault.contents();
                                 for (int i = 0; i < items.size(); i++) {
                                     ItemStack itemStack = items.get(i);
