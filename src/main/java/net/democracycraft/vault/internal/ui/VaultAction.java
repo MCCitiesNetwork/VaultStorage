@@ -1,27 +1,28 @@
 package net.democracycraft.vault.internal.ui;
 
+import net.democracycraft.vault.internal.security.VaultPermission;
+
 /**
  * Actions available for a Vault when opening its virtual inventory.
  */
 public enum VaultAction {
     /** View-only mode: player can inspect items but cannot modify them. */
-    VIEW("vault.action.view"),
+    VIEW(VaultPermission.ACTION_VIEW),
     /** Edit mode: player can move items and persist changes back to the vault. */
-    EDIT("vault.action.edit"),
+    EDIT(VaultPermission.ACTION_EDIT),
     /** Copy mode: player can take items without affecting the original vault. */
-    COPY("vault.action.copy");
+    COPY(VaultPermission.ACTION_COPY);
 
-    private final String permission;
+    private final VaultPermission permission;
 
-    VaultAction(String permission) {
+    VaultAction(VaultPermission permission) {
         this.permission = permission;
     }
 
     /**
-     * Returns the required permission node for this action.
+     * Returns the required VaultPermission for this action.
      */
-    public String permission() {
+    public VaultPermission permission() {
         return permission;
     }
 }
-

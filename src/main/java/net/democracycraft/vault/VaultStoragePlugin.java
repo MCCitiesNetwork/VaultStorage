@@ -22,8 +22,11 @@ import net.democracycraft.vault.internal.ui.VaultCaptureMenu;
 import net.democracycraft.vault.internal.ui.VaultListMenu;
 import net.democracycraft.vault.internal.ui.VaultScanMenu;
 import net.democracycraft.vault.internal.ui.VaultRegionListMenu;
+import net.democracycraft.vault.internal.ui.VaultPlacementMenu;
+import net.democracycraft.vault.internal.security.VaultPermission;
 import org.bukkit.Bukkit;
 import org.bukkit.World;
+import org.bukkit.permissions.Permission;
 import org.bukkit.plugin.ServicePriority;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -109,11 +112,40 @@ public final class VaultStoragePlugin extends JavaPlugin {
         VaultActionMenu.ensureConfig();
         VaultScanMenu.ensureConfig();
         VaultRegionListMenu.ensureConfig();
+        VaultPlacementMenu.ensureConfig();
 
         if (getCommand("vault") != null) {
             var cmd = new VaultCommand();
             getCommand("vault").setExecutor(cmd);
             getCommand("vault").setTabCompleter(cmd);
+        }
+
+        // Validate defined permissions vs plugin.yml
+        validatePermissionsMapping();
+    }
+
+    private void validatePermissionsMapping() {
+        try {
+            java.util.Set<String> pluginNodes = new java.util.HashSet<>();
+            for (Permission p : getDescription().getPermissions()) {
+                pluginNodes.add(p.getName());
+            }
+            java.util.Set<String> enumNodes = new java.util.HashSet<>();
+            for (VaultPermission vp : VaultPermission.values()) {
+                enumNodes.add(vp.node());
+            }
+            java.util.Set<String> missingInPluginYml = new java.util.HashSet<>(enumNodes);
+            missingInPluginYml.removeAll(pluginNodes);
+            java.util.Set<String> missingInEnum = new java.util.HashSet<>(pluginNodes);
+            missingInEnum.removeAll(enumNodes);
+            if (!missingInPluginYml.isEmpty()) {
+                getLogger().warning("Permissions defined in code but missing in plugin.yml: " + missingInPluginYml);
+            }
+            if (!missingInEnum.isEmpty()) {
+                getLogger().warning("Permissions present in plugin.yml but not in VaultPermission enum: " + missingInEnum);
+            }
+        } catch (Throwable t) {
+            getLogger().warning("Failed to validate permissions mapping: " + t.getMessage());
         }
     }
 

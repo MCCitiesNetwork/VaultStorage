@@ -12,11 +12,13 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
+import net.democracycraft.vault.internal.security.VaultPermission;
+import org.jetbrains.annotations.NotNull;
 
 /** /vault open <vaultId> [view|copy|edit] */
 public class OpenSubcommand implements Subcommand {
     @Override public List<String> names() { return List.of("open", "inv"); }
-    @Override public String permission() { return "vault.user"; }
+    @Override public @NotNull VaultPermission permission() { return VaultPermission.USER; }
     @Override public String usage() { return "open <vaultId> [view|copy|edit]"; }
 
     @Override
@@ -29,7 +31,7 @@ public class OpenSubcommand implements Subcommand {
         String mode = ctx.args().length >= 2 ? ctx.args()[1] : "view";
         VaultAction action;
         try { action = VaultAction.valueOf(mode.toUpperCase(Locale.ROOT)); } catch (IllegalArgumentException ex) { ctx.sender().sendMessage("Unknown action. Use view|copy|edit."); return; }
-        if (!p.hasPermission(action.permission()) && !p.hasPermission("vault.admin")) { ctx.sender().sendMessage("You don't have permission for that action."); return; }
+        if (!VaultPermission.has(p, VaultPermission.from(action))) { ctx.sender().sendMessage("You don't have permission for that action."); return; }
 
         var plugin = VaultStoragePlugin.getInstance();
         new BukkitRunnable() {
@@ -41,7 +43,7 @@ public class OpenSubcommand implements Subcommand {
                     return;
                 }
                 UUID owner = vs.getOwner(id);
-                boolean allowed = owner != null && owner.equals(p.getUniqueId()) || ctx.sender().hasPermission("vault.admin");
+                boolean allowed = owner != null && owner.equals(p.getUniqueId()) || VaultPermission.ADMIN.has(ctx.sender());
                 if (!allowed) {
                     new BukkitRunnable() { @Override public void run() { ctx.sender().sendMessage("You don't have access to that vault."); } }.runTask(plugin);
                     return;
@@ -60,7 +62,7 @@ public class OpenSubcommand implements Subcommand {
             List<String> actions = new ArrayList<>();
             Player p = (ctx.sender() instanceof Player pl) ? pl : null;
             for (VaultAction a : VaultAction.values()) {
-                if (p == null || p.hasPermission(a.permission()) || p.hasPermission("vault.admin")) {
+                if (p == null || VaultPermission.has(p, VaultPermission.from(a))) {
                     actions.add(a.name().toLowerCase(Locale.ROOT));
                 }
             }

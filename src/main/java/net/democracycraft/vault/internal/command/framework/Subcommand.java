@@ -4,16 +4,21 @@ import org.bukkit.command.CommandSender;
 
 import java.util.Collections;
 import java.util.List;
+import net.democracycraft.vault.internal.security.VaultPermission;
+import org.jetbrains.annotations.NotNull;
 
+/**
+ * Represents a concrete subcommand of /vault.
+ * Implementations MUST return a non-null {@link VaultPermission} from permission().
+ */
 public interface Subcommand {
     List<String> names();
-    String permission(); // null or empty = vault.user
+    @NotNull VaultPermission permission(); // MUST be non-null
     String usage();
 
     default boolean hasPermission(CommandSender sender) {
-        String p = permission();
-        String eff = (p == null || p.isBlank()) ? "vault.user" : p;
-        return sender.hasPermission(eff) || sender.hasPermission("vault.admin");
+        VaultPermission perm = permission();
+        return VaultPermission.has(sender, perm);
     }
 
     void execute(CommandContext ctx);

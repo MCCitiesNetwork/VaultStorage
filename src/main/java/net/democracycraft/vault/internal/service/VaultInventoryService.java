@@ -27,6 +27,11 @@ public class VaultInventoryService {
 
     /** Opens a virtual inventory for the given vault id and action. */
     public void openVirtualInventory(Player player, UUID vaultId, VaultAction action) {
+        openVirtualInventory(player, vaultId, action, null);
+    }
+
+    /** Opens a virtual inventory with a callback to run (on main thread) after it closes. */
+    public void openVirtualInventory(Player player, UUID vaultId, VaultAction action, Runnable reopenCallback) {
         var plugin = VaultStoragePlugin.getInstance();
         new BukkitRunnable() {
             @Override public void run() {
@@ -44,12 +49,12 @@ public class VaultInventoryService {
                 for (var it : items) {
                     if (it.slot >= 0 && it.slot < invSize) contents[it.slot] = ItemSerialization.fromBytes(it.item);
                 }
-                new BukkitRunnable() { @Override public void run() { openOnMain(player, vaultId, action, contents, invSize); } }.runTask(plugin);
+                new BukkitRunnable() { @Override public void run() { openOnMain(player, vaultId, action, contents, invSize, reopenCallback); } }.runTask(plugin);
             }
         }.runTaskAsynchronously(plugin);
     }
 
-    private void openOnMain(Player player, UUID vaultId, VaultAction action, ItemStack[] contents, int size) {
+    private void openOnMain(Player player, UUID vaultId, VaultAction action, ItemStack[] contents, int size, Runnable reopenCallback) {
         Inventory inv = Bukkit.createInventory(null, size, ChatColor.WHITE + "Vault " + vaultId + " - " + action.name());
         for (int i = 0; i < Math.min(size, contents.length); i++) {
             ItemStack it = contents[i];
@@ -105,6 +110,9 @@ public class VaultInventoryService {
                     new BukkitRunnable() { @Override public void run() { saveToDb(vaultId, newContents); } }.runTaskAsynchronously(VaultStoragePlugin.getInstance());
                 }
                 dyn.stop();
+                if (reopenCallback != null) {
+                    Bukkit.getScheduler().runTask(VaultStoragePlugin.getInstance(), reopenCallback);
+                }
             }
         };
 

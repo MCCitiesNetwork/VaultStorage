@@ -12,13 +12,15 @@ import org.bukkit.scheduler.BukkitRunnable;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import net.democracycraft.vault.internal.security.VaultPermission;
+import org.jetbrains.annotations.NotNull;
 
 /** /vault list [mine|all] */
 public class ListSubcommand implements Subcommand {
     private static final DateTimeFormatter FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").withZone(ZoneId.systemDefault());
 
     @Override public List<String> names() { return List.of("list", "ls"); }
-    @Override public String permission() { return "vault.user"; }
+    @Override public @NotNull VaultPermission permission() { return VaultPermission.USER; }
     @Override public String usage() { return "list [mine|all]"; }
 
     @Override
@@ -29,7 +31,7 @@ public class ListSubcommand implements Subcommand {
             String opt = ctx.args()[0].toLowerCase(Locale.ROOT);
             if (opt.equals("all")) mine = false;
         }
-        boolean admin = sender.hasPermission("vault.admin");
+        boolean admin = VaultPermission.ADMIN.has(sender);
         Player player = sender instanceof Player p ? p : null;
         UUID filterOwner = mine && player != null ? player.getUniqueId() : null;
         World world = player != null ? player.getWorld() : Bukkit.getWorlds().getFirst();
@@ -76,7 +78,7 @@ public class ListSubcommand implements Subcommand {
         if (ctx.args().length <= 1) {
             List<String> opts = new ArrayList<>();
             opts.add("mine");
-            if (ctx.sender().hasPermission("vault.admin")) opts.add("all");
+            if (VaultPermission.ADMIN.has(ctx.sender())) opts.add("all");
             String prefix = ctx.args().length == 0 ? "" : ctx.args()[0];
             return ctx.filter(opts, prefix);
         }

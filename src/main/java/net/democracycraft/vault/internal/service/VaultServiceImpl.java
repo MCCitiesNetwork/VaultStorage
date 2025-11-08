@@ -130,4 +130,5 @@ public record VaultServiceImpl(VaultDAO dao) implements VaultService {
         Objects.requireNonNull(vaultUuid, "vaultUuid");
         return dao.listItems(vaultUuid);
     }
+
 }

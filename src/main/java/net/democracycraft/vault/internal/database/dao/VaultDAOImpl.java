@@ -18,12 +18,21 @@ public record VaultDAOImpl(DatabaseSchema schema) implements VaultDAO {
     public void createVault(@NotNull VaultEntity vault, @NotNull UUID ownerUuid) {
         Objects.requireNonNull(vault, "vault");
         Objects.requireNonNull(ownerUuid, "ownerUuid");
-        // Upsert vault and owner (1:1)
-        schema.vaults().insertOrUpdateSync(vault);
-        VaultOwnerEntity owner = new VaultOwnerEntity();
-        owner.vaultUuid = vault.uuid;
-        owner.ownerUuid = ownerUuid;
-        schema.vaultOwners().insertOrUpdateSync(owner);
+        try {
+            schema.vaults().insertOrUpdateSync(vault);
+            // Guard: ensure vault row exists before inserting owner to avoid FK violation
+            VaultEntity persisted = schema.vaults().findBy("uuid", vault.uuid);
+            if (persisted == null) {
+                net.democracycraft.vault.VaultStoragePlugin.getInstance().getLogger().warning("Skipped owner insert: vault row not found for uuid " + vault.uuid);
+                return;
+            }
+            VaultOwnerEntity owner = new VaultOwnerEntity();
+            owner.vaultUuid = vault.uuid;
+            owner.ownerUuid = ownerUuid;
+            schema.vaultOwners().insertOrUpdateSync(owner);
+        } catch (Exception ex) {
+            net.democracycraft.vault.VaultStoragePlugin.getInstance().getLogger().warning("Failed to create vault + owner: " + ex.getMessage());
+        }
     }
 
     @Override

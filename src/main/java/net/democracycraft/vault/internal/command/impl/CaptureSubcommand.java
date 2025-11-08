@@ -1,6 +1,7 @@
 package net.democracycraft.vault.internal.command.impl;
 
 import net.democracycraft.vault.VaultStoragePlugin;
+import net.democracycraft.vault.api.service.BoltService;
 import net.democracycraft.vault.internal.command.framework.CommandContext;
 import net.democracycraft.vault.internal.command.framework.Subcommand;
 import net.democracycraft.vault.internal.data.VaultDtoImp;
@@ -20,13 +21,15 @@ import org.bukkit.inventory.ItemStack;
 
 import java.util.List;
 import java.util.UUID;
+import net.democracycraft.vault.internal.security.VaultPermission;
+import org.jetbrains.annotations.NotNull;
 
 /**
  * /vault capture: puts the player into capture mode to right-click a container and vault it.
  */
 public class CaptureSubcommand implements Subcommand {
     @Override public List<String> names() { return List.of("capture", "cap"); }
-    @Override public String permission() { return "vault.user"; }
+    @Override public @NotNull VaultPermission permission() { return VaultPermission.USER; }
     @Override public String usage() { return "capture"; }
 
     @Override
@@ -39,6 +42,8 @@ public class CaptureSubcommand implements Subcommand {
             public void onInteract(PlayerInteractEvent event) {
                 if (!event.getPlayer().getUniqueId().equals(player.getUniqueId())) return;
                 Action action = event.getAction();
+                // Always cancel to avoid unintended interactions
+                event.setCancelled(true);
                 if (action == Action.LEFT_CLICK_AIR || action == Action.LEFT_CLICK_BLOCK) {
                     session.getDynamicListener().stop();
                     player.sendMessage("Capture cancelled.");
@@ -52,14 +57,25 @@ public class CaptureSubcommand implements Subcommand {
                     player.sendMessage("That block is not a container.");
                     return;
                 }
+                // Resolve original owner via Bolt BEFORE capturing
+                BoltService bolt = VaultStoragePlugin.getInstance().getBoltService();
+                UUID originalOwner = null;
+                if (bolt != null) {
+                    try { originalOwner = bolt.getOwner(block); } catch (Throwable ignored) {}
+                    if (originalOwner == null) {
+                        player.sendMessage("No Bolt owner found; you will be set as the vault owner.");
+                    }
+                    // Remove Bolt protection prior to vaulting
+                    try { bolt.removeProtection(block); } catch (Throwable ignored) {}
+                }
                 // Capture and persist
                 VaultCaptureService svc = VaultStoragePlugin.getInstance().getCaptureService();
                 VaultImp vault = svc.captureFromBlock(player, block);
                 var plugin = VaultStoragePlugin.getInstance();
+                UUID finalOwner = originalOwner != null ? originalOwner : player.getUniqueId();
                 Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
                     var vs = plugin.getVaultService();
                     UUID worldId = block.getWorld().getUID();
-                    UUID owner = player.getUniqueId();
                     // Avoid duplicates at same location
                     var existing = vs.findByLocation(worldId, block.getX(), block.getY(), block.getZ());
                     if (existing != null) {
@@ -67,7 +83,7 @@ public class CaptureSubcommand implements Subcommand {
                     }
                     UUID newId;
                     {
-                        var created = vs.createVault(worldId, block.getX(), block.getY(), block.getZ(), owner,
+                        var created = vs.createVault(worldId, block.getX(), block.getY(), block.getZ(), finalOwner,
                                 vault.blockMaterial() == null ? null : vault.blockMaterial().name(),
                                 vault.blockDataString());
                         newId = created.uuid;
@@ -78,7 +94,7 @@ public class CaptureSubcommand implements Subcommand {
                         vs.putItem(newId, i, it.getAmount(), ItemSerialization.toBytes(it));
                     }
                     Bukkit.getScheduler().runTask(plugin, () -> {
-                        var dto = new VaultDtoImp(newId, owner, List.of(),
+                        var dto = new VaultDtoImp(newId, finalOwner, List.of(),
                                 vault.blockMaterial() == null ? null : vault.blockMaterial().name(),
                                 null, System.currentTimeMillis());
                         VaultStoragePlugin.getInstance().getSessionManager().getOrCreate(player.getUniqueId()).setLastVaultDto(dto);

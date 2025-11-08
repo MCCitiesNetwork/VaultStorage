@@ -25,4 +25,5 @@ public interface WorldGuardService {
      * The result is fetched live from WorldGuard.
      */
     @NotNull List<VaultRegion> getRegionsIn(@NotNull World world);
+
 }

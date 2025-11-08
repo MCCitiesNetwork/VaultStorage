@@ -64,6 +64,19 @@ public class VaultScanMenu extends ChildMenuImp {
         public String hereBtn = "<yellow>Here</yellow>";
         /** Error when region not found. */
         public String regionNotFound = "<red>Region not found: %region%</red>";
+        /** Message when Bolt has no owner and the player becomes the vault owner. */
+        public String noBoltOwner = "<yellow>No Bolt owner found; you will be set as the vault owner.</yellow>";
+        /**
+         * Maximum number of entries to render per page when showing results.
+         * Keep this reasonably small to avoid dialog overflow and client lag.
+         */
+        public int pageSize = 5;
+        /** Button label for navigating to the previous page. */
+        public String prevBtn = "<yellow>< Prev</yellow>";
+        /** Button label for navigating to the next page. */
+        public String nextBtn = "<yellow>Next ></yellow>";
+        /** Label shown indicating the current page and total pages. Placeholders: %page% %total% */
+        public String pageLabel = "<gray>Page %page% / %total%</gray>";
     }
 
     private static final String HEADER = String.join("\n",
@@ -81,11 +94,14 @@ public class VaultScanMenu extends ChildMenuImp {
 
     private final String regionId; // null -> browse/search mode; non-null -> results mode
     private final List<Block> entries; // only used in results mode
+    /** Zero-based current page index in results mode. */
+    private final int pageIndex;
 
     public VaultScanMenu(@NotNull Player player, @NotNull ParentMenu parent) {
         super(player, parent, "vault_scan");
         this.regionId = null;
         this.entries = List.of();
+        this.pageIndex = 0;
         setDialog(build());
     }
 
@@ -94,6 +110,16 @@ public class VaultScanMenu extends ChildMenuImp {
         super(player, parent, "vault_scan_results");
         this.regionId = regionId;
         this.entries = entries;
+        this.pageIndex = 0;
+        setDialog(build());
+    }
+
+    /** Results-mode constructor with explicit page index (zero-based). */
+    public VaultScanMenu(@NotNull Player player, @NotNull ParentMenu parent, @NotNull String regionId, @NotNull List<Block> entries, int pageIndex) {
+        super(player, parent, "vault_scan_results");
+        this.regionId = regionId;
+        this.entries = entries;
+        this.pageIndex = Math.max(0, pageIndex);
         setDialog(build());
     }
 
@@ -136,21 +162,34 @@ public class VaultScanMenu extends ChildMenuImp {
                 VaultRegion only = containing.getFirst();
                 List<Block> blocks = computeEntries(ctx.player(), only.id(), config);
                 if (blocks == null) return;
-                new VaultScanMenu(ctx.player(), getParentMenu(), only.id(), blocks).open();
+                new VaultScanMenu(ctx.player(), getParentMenu(), only.id(), blocks, 0).open();
             });
 
             return builder.build();
         }
 
         // Results mode
+        int size = entries.size();
+        int perPage = Math.max(1, config.pageSize);
+        int totalPages = Math.max(1, (int) Math.ceil(size / (double) perPage));
+        int currentPage = Math.min(pageIndex, totalPages - 1);
+        int startIndex = currentPage * perPage;
+        int endIndex = Math.min(startIndex + perPage, size);
+
         Map<String,String> placeholdersHeader = Map.of("%region%", regionId, "%count%", String.valueOf(entries.size()));
         builder.addBody(DialogBody.plainMessage(MiniMessageUtil.parseOrPlain(config.resultsHeader, placeholdersHeader)));
         if (entries.isEmpty()) {
             builder.addBody(DialogBody.plainMessage(MiniMessageUtil.parseOrPlain(config.noneFound)));
             return builder.build();
         }
+
+        // Page indicator
+        Map<String,String> phPage = Map.of("%page%", String.valueOf(currentPage + 1), "%total%", String.valueOf(totalPages));
+        builder.addBody(DialogBody.plainMessage(MiniMessageUtil.parseOrPlain(config.pageLabel, phPage)));
+
         BoltService boltService = VaultStoragePlugin.getInstance().getBoltService();
-        for (Block entryBlock : entries) {
+        for (int i = startIndex; i < endIndex; i++) {
+            Block entryBlock = entries.get(i);
             UUID ownerUuid = boltService != null ? boltService.getOwner(entryBlock) : null;
             String ownerName = ownerUuid == null ? "unknown" : Optional.ofNullable(Bukkit.getOfflinePlayer(ownerUuid).getName()).orElse(ownerUuid.toString());
             Map<String,String> placeholdersEntry = Map.of(
@@ -172,6 +211,9 @@ public class VaultScanMenu extends ChildMenuImp {
                         BoltService boltSvc = VaultStoragePlugin.getInstance().getBoltService();
                         UUID originalOwner = null;
                         if (boltSvc != null) { try { originalOwner = boltSvc.getOwner(targetBlock); } catch (Throwable ignored) {} }
+                        if (boltSvc != null && originalOwner == null) {
+                            ctx.player().sendMessage(MiniMessageUtil.parseOrPlain(config.noBoltOwner));
+                        }
                         // Remove Bolt protection before vaulting
                         if (boltSvc != null) { try { boltSvc.removeProtection(targetBlock); } catch (Throwable ignored) {} }
                         // Capture and persist
@@ -200,7 +242,9 @@ public class VaultScanMenu extends ChildMenuImp {
                                     ctx.player().sendMessage(MiniMessageUtil.parseOrPlain(config.vaultedOk));
                                     List<Block> recomputed = computeEntries(ctx.player(), regionId, config);
                                     if (recomputed == null) return;
-                                    new VaultScanMenu(ctx.player(), getParentMenu(), regionId, recomputed).open();
+                                    int newTotal = Math.max(1, (int) Math.ceil(recomputed.size() / (double) Math.max(1, config.pageSize)));
+                                    int safePage = Math.min(currentPage, newTotal - 1);
+                                    new VaultScanMenu(ctx.player(), getParentMenu(), regionId, recomputed, safePage).open();
                                 } }.runTask(plugin);
                             }
                         }.runTaskAsynchronously(plugin);
@@ -215,6 +259,15 @@ public class VaultScanMenu extends ChildMenuImp {
                 ctx.player().teleport(destination);
             });
         }
+
+        // Navigation buttons
+        if (currentPage > 0) {
+            builder.button(MiniMessageUtil.parseOrPlain(config.prevBtn), ctx -> new VaultScanMenu(ctx.player(), getParentMenu(), regionId, entries, currentPage - 1).open());
+        }
+        if (currentPage < totalPages - 1) {
+            builder.button(MiniMessageUtil.parseOrPlain(config.nextBtn), ctx -> new VaultScanMenu(ctx.player(), getParentMenu(), regionId, entries, currentPage + 1).open());
+        }
+
         return builder.build();
     }
 
@@ -227,9 +280,15 @@ public class VaultScanMenu extends ChildMenuImp {
 
     private static double volumeOf(VaultRegion r) {
         BoundingBox b = r.boundingBox();
-        return Math.max(0, (b.getMaxX() - b.getMinX())) * Math.max(0, (b.getMaxY() - b.getMinY())) * Math.max(0, (b.getMaxZ() - b.getMinZ()));
+        return Math.max(0, (b.getMaxX() - b.getMinX()))
+                * Math.max(0, (b.getMaxY() - b.getMinY()))
+                * Math.max(0, (b.getMaxZ() - b.getMinZ()));
     }
 
+    /**
+     * Computes candidate blocks in the region that are protected by Bolt and not owned/membership by that region's owner list.
+     * Returns null and notifies the player if services are missing or region not found.
+     */
     private List<Block> computeEntries(Player player, String regionId, Config config) {
         World world = player.getWorld();
         WorldGuardService worldGuardService = VaultStoragePlugin.getInstance().getWorldGuardService();
@@ -257,3 +316,4 @@ public class VaultScanMenu extends ChildMenuImp {
         return entryBlocks;
     }
 }
+

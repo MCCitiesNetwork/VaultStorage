@@ -9,6 +9,7 @@ import net.democracycraft.vault.VaultStoragePlugin;
 import net.democracycraft.vault.api.data.Dto;
 import net.democracycraft.vault.api.service.VaultService;
 import net.democracycraft.vault.api.ui.AutoDialog;
+import net.democracycraft.vault.internal.service.VaultInventoryService;
 import net.democracycraft.vault.internal.session.VaultSessionManager;
 import net.democracycraft.vault.internal.util.config.DataFolder;
 import net.democracycraft.vault.internal.util.item.ItemSerialization;
@@ -102,14 +103,14 @@ public class VaultActionMenu extends ChildMenuImp {
 
         // Build SingleOption with available actions filtered by permissions
         List<SingleOptionDialogInput.OptionEntry> entries = new ArrayList<>();
-        Player p = getPlayer();
+        Player player = getPlayer();
         String firstValue = null;
-        for (VaultAction a : VaultAction.values()) {
-            if (p.hasPermission(a.permission())) {
-                String value = a.name().toLowerCase(Locale.ROOT);
+        for (VaultAction vaultAction : VaultAction.values()) {
+            if (vaultAction.permission().has(player)) {
+                String value = vaultAction.name().toLowerCase(Locale.ROOT);
                 boolean selected = firstValue == null; // preselect first permitted
                 if (firstValue == null) firstValue = value;
-                Map<String,String> ph = Map.of("%action%", cap(a.name()));
+                Map<String,String> ph = Map.of("%action%", cap(vaultAction.name()));
                 entries.add(SingleOptionDialogInput.OptionEntry.create(value, MiniMessageUtil.parseOrPlain(cfg.actionOptionFormat, ph), selected));
             }
         }
@@ -129,14 +130,9 @@ public class VaultActionMenu extends ChildMenuImp {
             openInventoryAsync(actor, action, cfg);
         });
 
-        // Place block button (does not require selecting an inventory action)
+        // Place block button (relative placement UI)
         builder.buttonWithPlayer(MiniMessageUtil.parseOrPlain(cfg.placeBtn), null, java.time.Duration.ofMinutes(5), 1, (actor, response) -> {
-            actor.sendMessage(MiniMessageUtil.parseOrPlain(cfg.placing));
-            VaultStoragePlugin.getInstance().getPlacementService().placeFromDatabaseAsync(vaultId, res -> {
-                Map<String,String> ph = Map.of("%msg%", res.message());
-                if (res.success()) actor.sendMessage(MiniMessageUtil.parseOrPlain(cfg.placeOk, ph));
-                else actor.sendMessage(MiniMessageUtil.parseOrPlain(cfg.placeFail, ph));
-            });
+            new VaultPlacementMenu(actor, (ParentMenuImp) getParentMenu(), vaultId).open();
         });
 
         builder.button(MiniMessageUtil.parseOrPlain(cfg.backBtn), ctx -> new VaultListMenu(ctx.player(), (ParentMenuImp) getParentMenu(), "").open());
@@ -150,112 +146,8 @@ public class VaultActionMenu extends ChildMenuImp {
     private static String cap(String s) { return s.substring(0,1).toUpperCase(Locale.ROOT) + s.substring(1).toLowerCase(Locale.ROOT); }
 
     private void openInventoryAsync(Player player, VaultAction action, Config cfg) {
-        var plugin = VaultStoragePlugin.getInstance();
-        new BukkitRunnable() {
-            @Override public void run() {
-                VaultService vs = plugin.getVaultService();
-                var entityOpt = vs.get(vaultId);
-                if (entityOpt.isEmpty()) {
-                    new BukkitRunnable() { @Override public void run() {
-                        player.sendMessage(MiniMessageUtil.parseOrPlain(cfg.notFound));
-                        new VaultListMenu(player, (ParentMenuImp) getParentMenu(), "").open();
-                    }}.runTask(plugin);
-                    return;
-                }
-                var items = vs.listItems(vaultId);
-                // Build ItemStacks array
-                int maxSlot = items.stream().mapToInt(it -> it.slot).max().orElse(-1);
-                int invSize = Math.min(54, Math.max(9, ((Math.max(maxSlot + 1, 9) + 8) / 9) * 9));
-                ItemStack[] contents = new ItemStack[invSize];
-                Arrays.fill(contents, null);
-                for (var it : items) {
-                    if (it.slot >= 0 && it.slot < invSize) contents[it.slot] = ItemSerialization.fromBytes(it.item);
-                }
-                new BukkitRunnable() { @Override public void run() { openInventoryOnMain(player, action, cfg, contents, invSize); } }.runTask(plugin);
-            }
-        }.runTaskAsynchronously(plugin);
-    }
-
-    private void openInventoryOnMain(Player player, VaultAction action, Config cfg, ItemStack[] contents, int size) {
-        Map<String,String> ph = Map.of("%id%", vaultId.toString(), "%action%", cap(action.name()));
-        Inventory inv = Bukkit.createInventory(null, size, MiniMessageUtil.parseOrPlain(cfg.inventoryTitle, ph));
-        for (int i = 0; i < Math.min(size, contents.length); i++) {
-            ItemStack it = contents[i];
-            if (it != null) inv.setItem(i, it.clone());
-        }
-
-        VaultSessionManager.Session session = VaultStoragePlugin.getInstance().getSessionManager().getOrCreate(player.getUniqueId());
-        DynamicListener dyn = session.getDynamicListener();
-
-        Listener listener = new Listener() {
-            @EventHandler
-            public void onClick(InventoryClickEvent event) {
-                if (!event.getWhoClicked().getUniqueId().equals(player.getUniqueId())) return;
-                if (event.getView().getTopInventory() != inv) return;
-                switch (action) {
-                    case VIEW -> event.setCancelled(true);
-                    case COPY -> {
-                        if (event.getClickedInventory() == inv) {
-                            ItemStack current = event.getCurrentItem();
-                            if (current != null) {
-                                event.setCancelled(true);
-                                ItemStack copy = current.clone();
-                                Map<Integer, ItemStack> notFit = player.getInventory().addItem(copy);
-                                if (!notFit.isEmpty()) {
-                                    for (ItemStack leftover : notFit.values()) {
-                                        if (leftover != null) player.getWorld().dropItemNaturally(player.getLocation(), leftover);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    case EDIT -> {
-                        // allow edits; no cancel
-                    }
-                }
-            }
-            @EventHandler
-            public void onDrag(InventoryDragEvent event) {
-                if (!event.getWhoClicked().getUniqueId().equals(player.getUniqueId())) return;
-                if (event.getView().getTopInventory() != inv) return;
-                if (action == VaultAction.VIEW) {
-                    event.setCancelled(true);
-                } else if (action == VaultAction.COPY) {
-                    boolean affectsTop = event.getRawSlots().stream().anyMatch(slot -> slot < inv.getSize());
-                    if (affectsTop) event.setCancelled(true);
-                }
-            }
-            @EventHandler
-            public void onClose(InventoryCloseEvent event) {
-                if (!event.getPlayer().getUniqueId().equals(player.getUniqueId())) return;
-                if (event.getInventory() != inv) return;
-                if (action == VaultAction.EDIT) {
-                    ItemStack[] newContents = inv.getContents();
-                    new BukkitRunnable() { @Override public void run() { saveInventoryToDb(newContents); } }.runTaskAsynchronously(VaultStoragePlugin.getInstance());
-                    player.sendMessage(MiniMessageUtil.parseOrPlain(cfg.saved));
-                }
-                dyn.stop();
-            }
-        };
-
-        dyn.setListener(listener);
-        dyn.start();
-        player.openInventory(inv);
-    }
-
-    private void saveInventoryToDb(ItemStack[] contents) {
-        VaultService vs = VaultStoragePlugin.getInstance().getVaultService();
-        // Remove existing items first
-        var existing = vs.listItems(vaultId);
-        for (var row : existing) {
-            vs.removeItem(vaultId, row.slot);
-        }
-        // Insert new items
-        for (int i = 0; i < contents.length; i++) {
-            ItemStack it = contents[i];
-            if (it == null) continue;
-            vs.putItem(vaultId, i, it.getAmount(), ItemSerialization.toBytes(it));
-        }
+        VaultInventoryService invSvc = VaultStoragePlugin.getInstance().getInventoryService();
+        invSvc.openVirtualInventory(player, vaultId, action, () -> new VaultActionMenu(player, (ParentMenuImp) getParentMenu(), vaultId).open());
     }
 
     @Override
