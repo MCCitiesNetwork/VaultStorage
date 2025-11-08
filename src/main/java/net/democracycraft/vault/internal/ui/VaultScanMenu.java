@@ -12,6 +12,7 @@ import net.democracycraft.vault.api.service.WorldGuardService;
 import net.democracycraft.vault.api.ui.AutoDialog;
 import net.democracycraft.vault.api.ui.ParentMenu;
 import net.democracycraft.vault.internal.mappable.VaultImp;
+import net.democracycraft.vault.internal.security.VaultPermission;
 import net.democracycraft.vault.internal.service.VaultCaptureService;
 import net.democracycraft.vault.internal.util.config.DataFolder;
 import net.democracycraft.vault.internal.util.minimessage.MiniMessageUtil;
@@ -66,6 +67,12 @@ public class VaultScanMenu extends ChildMenuImp {
         public String regionNotFound = "<red>Region not found: %region%</red>";
         /** Message when Bolt has no owner and the player becomes the vault owner. */
         public String noBoltOwner = "<yellow>No Bolt owner found; you will be set as the vault owner.</yellow>";
+        /** Message when actor not allowed to vault an entry (overlapping-region policy). */
+        public String notAllowed = "<red>Not allowed by region/container rules.</red>";
+        /** Optional per-entry vaultable flag yes. */
+        public String vaultableYes = "yes";
+        /** Optional per-entry vaultable flag no. */
+        public String vaultableNo = "no";
         /**
          * Maximum number of entries to render per page when showing results.
          * Keep this reasonably small to avoid dialog overflow and client lag.
@@ -199,7 +206,6 @@ public class VaultScanMenu extends ChildMenuImp {
             builder.addBody(DialogBody.plainMessage(MiniMessageUtil.parseOrPlain(config.entryLine, placeholdersEntry)));
             // Vault button for this entry
             builder.button(MiniMessageUtil.parseOrPlain(config.entryVaultButton, placeholdersEntry), ctx -> {
-                // Ensure action on main thread
                 new BukkitRunnable() {
                     @Override public void run() {
                         Block targetBlock = ctx.player().getWorld().getBlockAt(entryBlock.getX(), entryBlock.getY(), entryBlock.getZ());
@@ -207,16 +213,41 @@ public class VaultScanMenu extends ChildMenuImp {
                             ctx.player().sendMessage(MiniMessageUtil.parseOrPlain(config.notAContainer));
                             return;
                         }
-                        // Resolve original owner BEFORE removing protection
                         BoltService boltSvc = VaultStoragePlugin.getInstance().getBoltService();
                         UUID originalOwner = null;
                         if (boltSvc != null) { try { originalOwner = boltSvc.getOwner(targetBlock); } catch (Throwable ignored) {} }
-                        if (boltSvc != null && originalOwner == null) {
+
+                        // Re-evaluate authorization live (membership might have changed)
+                        WorldGuardService wgs = VaultStoragePlugin.getInstance().getWorldGuardService();
+                        boolean hasOverride = VaultPermission.ACTION_PLACE_OVERRIDE.has(ctx.player());
+                        boolean actorOwnerAny = false;
+                        boolean actorMemberAny = false;
+                        boolean containerOwnerMemberOrOwnerAny = false;
+                        if (wgs != null) {
+                            BoundingBox point = new BoundingBox(targetBlock.getX(), targetBlock.getY(), targetBlock.getZ(), targetBlock.getX(), targetBlock.getY(), targetBlock.getZ());
+                            var overlapping = wgs.getRegionsAt(point, targetBlock.getWorld());
+                            UUID actorUuid = ctx.player().getUniqueId();
+                            for (var r : overlapping) {
+                                if (r.isOwner(actorUuid)) actorOwnerAny = true;
+                                if (r.isMember(actorUuid)) actorMemberAny = true;
+                                if (originalOwner != null && (r.isOwner(originalOwner) || r.isMember(originalOwner))) containerOwnerMemberOrOwnerAny = true;
+                            }
+                        }
+                        boolean actorIsContainerOwner = originalOwner != null && originalOwner.equals(ctx.player().getUniqueId());
+                        boolean actorMemberOrOwnerAny = actorOwnerAny || actorMemberAny;
+                        boolean allowed = hasOverride ||
+                                (actorOwnerAny && originalOwner != null && !actorIsContainerOwner && !containerOwnerMemberOrOwnerAny) ||
+                                (actorIsContainerOwner && !actorMemberOrOwnerAny);
+                        if (!allowed || (originalOwner == null && !hasOverride)) {
+                            ctx.player().sendMessage(MiniMessageUtil.parseOrPlain(config.notAllowed));
+                            return;
+                        }
+
+                        if (boltSvc != null && originalOwner == null && hasOverride) {
                             ctx.player().sendMessage(MiniMessageUtil.parseOrPlain(config.noBoltOwner));
                         }
-                        // Remove Bolt protection before vaulting
                         if (boltSvc != null) { try { boltSvc.removeProtection(targetBlock); } catch (Throwable ignored) {} }
-                        // Capture and persist
+
                         VaultCaptureService vaultCaptureService = VaultStoragePlugin.getInstance().getCaptureService();
                         VaultImp vault = vaultCaptureService.captureFromBlock(ctx.player(), targetBlock);
                         var plugin = VaultStoragePlugin.getInstance();
@@ -233,10 +264,10 @@ public class VaultScanMenu extends ChildMenuImp {
                                     newId = created.uuid;
                                 }
                                 List<ItemStack> items = vault.contents();
-                                for (int i = 0; i < items.size(); i++) {
-                                    ItemStack itemStack = items.get(i);
+                                for (int idx = 0; idx < items.size(); idx++) {
+                                    ItemStack itemStack = items.get(idx);
                                     if (itemStack == null) continue;
-                                    vaultService.putItem(newId, i, itemStack.getAmount(), net.democracycraft.vault.internal.util.item.ItemSerialization.toBytes(itemStack));
+                                    vaultService.putItem(newId, idx, itemStack.getAmount(), net.democracycraft.vault.internal.util.item.ItemSerialization.toBytes(itemStack));
                                 }
                                 new BukkitRunnable() { @Override public void run() {
                                     ctx.player().sendMessage(MiniMessageUtil.parseOrPlain(config.vaultedOk));
@@ -286,8 +317,13 @@ public class VaultScanMenu extends ChildMenuImp {
     }
 
     /**
-     * Computes candidate blocks in the region that are protected by Bolt and not owned/membership by that region's owner list.
-     * Returns null and notifies the player if services are missing or region not found.
+     * Computes candidate blocks in the region that the actor is allowed to vault per capture policy.
+     * Policy:
+     * - Override: include all protected (including unprotected) containers in region bounding box.
+     * - Region owner: include containers whose Bolt owner exists, is not self, and is not member/owner of ANY overlapping region at that block.
+     * - Region member (non-owner): include none.
+     * - Non-involved (no membership/ownership in ANY overlapping region): include only containers whose Bolt owner is self.
+     * Unprotected containers are only included if override.
      */
     private List<Block> computeEntries(Player player, String regionId, Config config) {
         World world = player.getWorld();
@@ -307,10 +343,30 @@ public class VaultScanMenu extends ChildMenuImp {
         BoundingBox boundingBox = region.boundingBox();
         List<Block> protectedBlocks = boltService.getProtectedBlocksIn(boundingBox, world);
         List<Block> entryBlocks = new ArrayList<>();
+        boolean hasOverride = VaultPermission.ACTION_PLACE_OVERRIDE.has(player);
+        UUID actorUuid = player.getUniqueId();
         for (Block block : protectedBlocks) {
             UUID ownerUuid = boltService.getOwner(block);
-            if (ownerUuid == null) continue;
-            if (region.isOwner(ownerUuid) || region.isMember(ownerUuid)) continue;
+            // Overlapping regions at block point (single coordinate bounding box)
+            BoundingBox point = new BoundingBox(block.getX(), block.getY(), block.getZ(), block.getX(), block.getY(), block.getZ());
+            var overlapping = worldGuardService.getRegionsAt(point, world);
+            boolean actorOwnerAny = false;
+            boolean actorMemberAny = false;
+            boolean containerOwnerMemberOrOwnerAny = false;
+            for (var r : overlapping) {
+                if (r.isOwner(actorUuid)) actorOwnerAny = true;
+                if (r.isMember(actorUuid)) actorMemberAny = true;
+                if (ownerUuid != null && (r.isOwner(ownerUuid) || r.isMember(ownerUuid))) containerOwnerMemberOrOwnerAny = true;
+            }
+            boolean actorIsContainerOwner = ownerUuid != null && ownerUuid.equals(actorUuid);
+            boolean actorMemberOrOwnerAny = actorOwnerAny || actorMemberAny;
+            // Authorization same as CaptureSubcommand
+            boolean allowed = hasOverride ||
+                    (actorOwnerAny && ownerUuid != null && !actorIsContainerOwner && !containerOwnerMemberOrOwnerAny) ||
+                    (actorIsContainerOwner && !actorMemberOrOwnerAny);
+            if (!allowed) continue;
+            // Exclude unprotected unless override (policy requires existing owner except override)
+            if (ownerUuid == null && !hasOverride) continue;
             entryBlocks.add(block);
         }
         return entryBlocks;

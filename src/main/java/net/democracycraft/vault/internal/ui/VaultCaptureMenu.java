@@ -14,7 +14,6 @@ import net.democracycraft.vault.internal.security.VaultPermission;
 import net.democracycraft.vault.internal.service.VaultCaptureService;
 import net.democracycraft.vault.internal.session.VaultSessionManager;
 import net.democracycraft.vault.internal.util.config.DataFolder;
-import net.democracycraft.vault.internal.util.item.ItemSerialization;
 import net.democracycraft.vault.internal.util.minimessage.MiniMessageUtil;
 import net.democracycraft.vault.internal.util.yml.AutoYML;
 import org.bukkit.Bukkit;
@@ -33,6 +32,16 @@ import java.util.*;
 
 /**
  * Vault capture UI shown when the command is executed.
+ * <p>
+ * Authorization policy (overlapping-region aware):
+ * <ul>
+ *   <li>Override permission: may always capture.</li>
+ *   <li>Region owner: may capture only if the container has a Bolt owner different from themselves AND that owner is not a member nor an owner of ANY overlapping region.</li>
+ *   <li>Region member (non-owner): may not capture any container in overlapping regions.</li>
+ *   <li>Non-involved (not owner or member of any overlapping region): may capture only their own Bolt-owned containers.</li>
+ *   <li>Unprotected containers (no Bolt owner) are capturable only with override.</li>
+ * </ul>
+ * Action bar reflects vaultability in real time using the same logic.
  */
 public class VaultCaptureMenu extends ParentMenuImp {
 
@@ -69,7 +78,7 @@ public class VaultCaptureMenu extends ParentMenuImp {
         /** Text shown when a container is NOT vaultable. */
         public String actionBarVaultableNo = "no";
         /** Message when player lacks membership and no override permission. */
-        public String notAllowed = "<red>You must be a region member or have override permission.</red>";
+        public String notAllowed = "<red>Not allowed: region/container rules.</red>";
         /** Message when Bolt has no owner for the target and the player will become the vault owner. */
         public String noBoltOwner = "<yellow>No Bolt owner found; you will be set as the vault owner.</yellow>";
     }
@@ -116,6 +125,11 @@ public class VaultCaptureMenu extends ParentMenuImp {
         // Start capture mode: installs a dynamic listener for the next relevant click, then closes the dialog
         builder.button(MiniMessageUtil.parseOrPlain(cfg.startBtn, phSelf), ctx -> {
             Player actor = ctx.player();
+            // Require capture permission before entering capture mode
+            if (!VaultPermission.ACTION_CAPTURE.has(actor)) {
+                actor.sendMessage("You don't have permission to capture containers.");
+                return;
+            }
             VaultSessionManager.Session session = VaultStoragePlugin.getInstance().getSessionManager().getOrCreate(actor.getUniqueId());
             final org.bukkit.scheduler.BukkitTask[] actionbarTask = new org.bukkit.scheduler.BukkitTask[1];
 
@@ -124,9 +138,7 @@ public class VaultCaptureMenu extends ParentMenuImp {
                 public void onInteract(PlayerInteractEvent event) {
                     if (!event.getPlayer().getUniqueId().equals(actor.getUniqueId())) return;
                     Action action = event.getAction();
-                    // Always cancel to avoid unintended interactions in capture mode
                     event.setCancelled(true);
-                    // Cancel with any left click (air or block)
                     if (action == Action.LEFT_CLICK_AIR || action == Action.LEFT_CLICK_BLOCK) {
                         session.getDynamicListener().stop();
                         if (actionbarTask[0] != null) actionbarTask[0].cancel();
@@ -134,7 +146,6 @@ public class VaultCaptureMenu extends ParentMenuImp {
                         new VaultCaptureMenu(actor).open();
                         return;
                     }
-                    // Proceed only on right-click on a block
                     if (action != Action.RIGHT_CLICK_BLOCK) return;
                     Block block = event.getClickedBlock();
                     if (block == null) return;
@@ -146,63 +157,83 @@ public class VaultCaptureMenu extends ParentMenuImp {
                         return;
                     }
 
-                    // Region membership / override enforcement BEFORE capture
-                    boolean allowed = true;
+                    boolean hasOverride = VaultPermission.ACTION_PLACE_OVERRIDE.has(actor);
+                    BoltService bolt = VaultStoragePlugin.getInstance().getBoltService();
+                    UUID originalOwner = null;
+                    if (bolt != null) {
+                        try { originalOwner = bolt.getOwner(block); } catch (Throwable ignored) {}
+                    }
+                    boolean playerIsContainerOwner = originalOwner != null && originalOwner.equals(actor.getUniqueId());
+
                     WorldGuardService wgs = VaultStoragePlugin.getInstance().getWorldGuardService();
+                    boolean playerIsRegionOwnerAny = false;
+                    boolean playerIsRegionMemberAny = false;
+                    boolean containerOwnerIsRegionMemberOrOwnerAny = false;
                     if (wgs != null) {
                         BoundingBox point = new BoundingBox(block.getX(), block.getY(), block.getZ(), block.getX(), block.getY(), block.getZ());
                         var regs = wgs.getRegionsAt(point, block.getWorld());
                         UUID viewer = actor.getUniqueId();
-                        boolean isMember = regs.stream().anyMatch(r -> r.isMember(viewer));
-                        boolean hasOverride = VaultPermission.ACTION_PLACE_OVERRIDE.has(actor);
-                        allowed = isMember || hasOverride;
+                        for (var r : regs) {
+                            if (r.isOwner(viewer)) playerIsRegionOwnerAny = true;
+                            if (r.isMember(viewer)) playerIsRegionMemberAny = true;
+                            if (originalOwner != null && (r.isOwner(originalOwner) || r.isMember(originalOwner))) {
+                                containerOwnerIsRegionMemberOrOwnerAny = true;
+                            }
+                        }
                     }
+
+                    boolean disallowedOwnerSelf = playerIsRegionOwnerAny && playerIsContainerOwner;
+
+                    boolean baseAllowed;
+                    if (playerIsRegionOwnerAny) {
+                        baseAllowed = (originalOwner != null) && !playerIsContainerOwner && !containerOwnerIsRegionMemberOrOwnerAny;
+                    } else if (playerIsRegionMemberAny) {
+                        baseAllowed = false;
+                    } else {
+                        baseAllowed = playerIsContainerOwner;
+                    }
+
+                    if (originalOwner == null && !hasOverride) baseAllowed = false;
+
+                    boolean allowed = !disallowedOwnerSelf && (hasOverride ? true : baseAllowed);
+
+                    try {
+                        VaultStoragePlugin.getInstance().getLogger().info(String.format(
+                                "[CaptureMenuCheck] actor=%s loc=%d,%d,%d ownerAny=%s memberAny=%s contOwner=%s contOwnerMemberOrOwnerAny=%s isContOwner=%s override=%s disallowedOwnerSelf=%s baseAllowed=%s finalAllowed=%s",
+                                actor.getName(), block.getX(), block.getY(), block.getZ(), playerIsRegionOwnerAny, playerIsRegionMemberAny, originalOwner, containerOwnerIsRegionMemberOrOwnerAny, playerIsContainerOwner, hasOverride, disallowedOwnerSelf, baseAllowed, allowed));
+                    } catch (Throwable ignored) {}
+
                     if (!allowed) {
                         actor.sendMessage(MiniMessageUtil.parseOrPlain(cfg.notAllowed, Map.of("%player%", actor.getName())));
                         new VaultCaptureMenu(actor).open();
                         return;
                     }
 
-                    // Resolve original owner via Bolt BEFORE removing protection
-                    BoltService bolt = VaultStoragePlugin.getInstance().getBoltService();
-                    UUID originalOwner = null;
-                    if (bolt != null) {
-                        try { originalOwner = bolt.getOwner(block); } catch (Throwable ignored) {}
-                    }
-                    // Inform player if no owner was found
-                    if (bolt != null && originalOwner == null) {
+                    if (bolt != null && originalOwner == null && hasOverride) {
                         actor.sendMessage(MiniMessageUtil.parseOrPlain(cfg.noBoltOwner));
                     }
-                    // Remove Bolt protection prior to vaulting (main thread)
                     if (bolt != null) {
                         try { bolt.removeProtection(block); } catch (Throwable ignored) {}
                     }
 
-                    // Use domain service to capture (main thread)
                     VaultCaptureService captureService = VaultStoragePlugin.getInstance().getCaptureService();
                     VaultImp vault = captureService.captureFromBlock(actor, block);
-                    // Persist asynchronously with VaultService
                     var plugin = VaultStoragePlugin.getInstance();
                     UUID finalOwner = originalOwner != null ? originalOwner : actor.getUniqueId();
                     new BukkitRunnable() {
                         @Override public void run() {
                             var vs = plugin.getVaultService();
                             UUID worldId = block.getWorld().getUID();
-                            // Avoid duplicates: delete existing vault at same location if present
                             var existing = vs.findByLocation(worldId, block.getX(), block.getY(), block.getZ());
                             if (existing != null) {
                                 vs.delete(existing.uuid);
                             }
-                            var created = vs.createVault(worldId, block.getX(), block.getY(), block.getZ(), finalOwner,
-                                    vault.blockMaterial() == null ? null : vault.blockMaterial().name(),
-                                    vault.blockDataString());
-                            UUID newId = created.uuid;
                             List<ItemStack> items = vault.contents();
-                            for (int i = 0; i < items.size(); i++) {
-                                ItemStack it = items.get(i);
-                                if (it == null) continue;
-                                vs.putItem(newId, i, it.getAmount(), ItemSerialization.toBytes(it));
-                            }
+                            var createdVault = vs.createVault(worldId, block.getX(), block.getY(), block.getZ(), finalOwner,
+                                    vault.blockMaterial() == null ? null : vault.blockMaterial().name(),
+                                    vault.blockDataString(),
+                                    items);
+                            UUID newId = createdVault.getUniqueIdentifier();
                             new BukkitRunnable() {
                                 @Override public void run() {
                                     var dto = new VaultDtoImp(newId, finalOwner, List.of(),
@@ -218,7 +249,6 @@ public class VaultCaptureMenu extends ParentMenuImp {
                 }
             });
 
-            // Schedule actionbar updater during capture mode
             actionbarTask[0] = new BukkitRunnable() {
                 @Override public void run() {
                     if (!actor.isOnline()) { cancel(); return; }
@@ -227,22 +257,44 @@ public class VaultCaptureMenu extends ParentMenuImp {
                         actor.sendActionBar(MiniMessageUtil.parseOrPlain(cfg.actionBarIdle));
                         return;
                     }
-                    // Resolve owner via Bolt
                     BoltService bolt = VaultStoragePlugin.getInstance().getBoltService();
                     UUID owner = bolt != null ? bolt.getOwner(target) : null;
                     String ownerName = owner == null ? cfg.actionBarUnprotectedOwner :
                             Optional.ofNullable(Bukkit.getOfflinePlayer(owner).getName()).orElse(owner.toString());
-                    // Determine if viewer is member of any WG region at this block
+
                     WorldGuardService wgsLocal = VaultStoragePlugin.getInstance().getWorldGuardService();
-                    boolean isMember = false;
+                    boolean playerIsRegionOwnerAny = false;
+                    boolean playerIsRegionMemberAny = false;
+                    boolean containerOwnerIsRegionMemberOrOwnerAny = false;
                     if (wgsLocal != null) {
                         BoundingBox point = new BoundingBox(target.getX(), target.getY(), target.getZ(), target.getX(), target.getY(), target.getZ());
                         var regs = wgsLocal.getRegionsAt(point, target.getWorld());
                         UUID viewer = actor.getUniqueId();
-                        isMember = regs.stream().anyMatch(vaultRegion -> vaultRegion.isMember(viewer));
+                        for (var r : regs) {
+                            if (r.isOwner(viewer)) playerIsRegionOwnerAny = true;
+                            if (r.isMember(viewer)) playerIsRegionMemberAny = true;
+                            if (owner != null && (r.isOwner(owner) || r.isMember(owner))) {
+                                containerOwnerIsRegionMemberOrOwnerAny = true;
+                            }
+                        }
                     }
+                    boolean playerIsContainerOwner = owner != null && owner.equals(actor.getUniqueId());
                     boolean hasOverride = VaultPermission.ACTION_PLACE_OVERRIDE.has(actor);
-                    boolean allowed = isMember || hasOverride;
+
+                    boolean disallowedOwnerSelf = playerIsRegionOwnerAny && playerIsContainerOwner;
+
+                    boolean baseAllowed;
+                    if (playerIsRegionOwnerAny) {
+                        baseAllowed = (owner != null) && !playerIsContainerOwner && !containerOwnerIsRegionMemberOrOwnerAny;
+                    } else if (playerIsRegionMemberAny) {
+                        baseAllowed = false;
+                    } else {
+                        baseAllowed = playerIsContainerOwner;
+                    }
+                    if (owner == null && !hasOverride) baseAllowed = false;
+
+                    boolean allowed = !disallowedOwnerSelf && (hasOverride ? true : baseAllowed);
+
                     String vaultable = allowed ? cfg.actionBarVaultableYes : cfg.actionBarVaultableNo;
                     Map<String,String> ph = Map.of("%owner%", ownerName, "%vaultable%", vaultable);
                     actor.sendActionBar(MiniMessageUtil.parseOrPlain(cfg.actionBarContainer, ph));
@@ -250,7 +302,6 @@ public class VaultCaptureMenu extends ParentMenuImp {
             }.runTaskTimer(VaultStoragePlugin.getInstance(), 0L, 5L);
 
             session.getDynamicListener().start();
-            // Close the dialog while waiting for the in-game click
             actor.closeDialog();
         });
 

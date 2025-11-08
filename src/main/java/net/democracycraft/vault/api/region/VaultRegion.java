@@ -23,6 +23,9 @@ public interface VaultRegion {
     /** @return axis-aligned bounding box of the region (never null) */
     @NotNull BoundingBox boundingBox();
 
+    /** @return WorldGuard region priority; higher wins when overlapping */
+    int priority();
+
     /**
      * Checks if the given player UUID is a member of this region.
      */

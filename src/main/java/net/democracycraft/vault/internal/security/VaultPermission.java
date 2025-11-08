@@ -23,7 +23,9 @@ public enum VaultPermission {
     /** Permission to place back the original block and restore its contents. */
     ACTION_PLACE("vaultstorage.action.place"),
     /** Permission to override region membership when capturing/placing a vault block. */
-    ACTION_PLACE_OVERRIDE("vaultstorage.action.place.override");
+    ACTION_PLACE_OVERRIDE("vaultstorage.action.place.override"),
+    /** Permission to capture a container into a vault. */
+    ACTION_CAPTURE("vaultstorage.action.capture");
 
     private final String node;
 

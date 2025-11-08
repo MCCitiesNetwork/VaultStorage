@@ -5,6 +5,7 @@ import io.papermc.paper.registry.data.dialog.DialogBase;
 import io.papermc.paper.registry.data.dialog.body.DialogBody;
 import net.democracycraft.vault.VaultStoragePlugin;
 import net.democracycraft.vault.api.data.Dto;
+import net.democracycraft.vault.api.service.VaultService;
 import net.democracycraft.vault.api.service.WorldGuardService;
 import net.democracycraft.vault.api.ui.AutoDialog;
 import net.democracycraft.vault.internal.security.VaultPermission;
@@ -26,6 +27,7 @@ import org.bukkit.util.BoundingBox;
 
 import java.util.Map;
 import java.util.UUID;
+import java.util.List;
 
 /**
  * Placement UI that mirrors the capture flow but places a selected vault relatively to the clicked face.
@@ -161,7 +163,20 @@ public class VaultPlacementMenu extends ChildMenuImp {
                 placement.placeFromDatabaseRelativeAsync(vaultId, targetLoc, result -> {
                     Map<String,String> ph = Map.of("%msg%", result.message());
                     actor.sendMessage(MiniMessageUtil.parseOrPlain(result.success() ? config.placeOk : config.placeFail, ph));
-                    new VaultListMenu(actor, (ParentMenuImp) getParentMenu(), "").open();
+                    // Only reopen list if there are vaults left in this world (same criterion as VaultListMenu)
+                    if (result.success()) {
+                        VaultService vs = VaultStoragePlugin.getInstance().getVaultService();
+                        List<net.democracycraft.vault.internal.database.entity.VaultEntity> restantes = vs.listInWorld(actor.getWorld().getUID());
+                        if (!restantes.isEmpty()) {
+                            new VaultListMenu(actor, (ParentMenuImp) getParentMenu(), "").open();
+                        } else {
+                            actor.sendMessage("You have no more vaults to place in this world.");
+                            actor.closeDialog();
+                        }
+                    } else {
+                        // On failure, allow retry by showing the list
+                        new VaultListMenu(actor, (ParentMenuImp) getParentMenu(), "").open();
+                    }
                 });
                 // Stop placement session after a single placement
                 session.getDynamicListener().stop();

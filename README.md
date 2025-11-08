@@ -20,6 +20,14 @@ Command reference (in‑game):
 - /vault menu — same as /vault.
 - /vault list [mine|all] — shows your Vaults; admins may browse by world.
 - /vault open <vaultId> [view|copy|edit] — opens a specific Vault with a chosen action.
+- /vault capture — enters capture mode to vault a container by right‑clicking it.
+
+Capture rules (summary shown by the UI and enforced by the command):
+- With override permission, you can always capture.
+- Region owners can capture containers whose Bolt owner is NOT a member or owner of the region (and not themselves).
+- Non‑members of the region can capture their own containers (Bolt owner) only if they are NOT a member/owner at that location.
+- Members (who are not owners) cannot capture anything inside the region, not even their own containers.
+- “Vaultable: yes/no” in the action bar reflects these rules in real time.
 
 If a command says you don’t have permission, ask a server admin to enable it for you.
 
@@ -58,23 +66,27 @@ Best practices:
 
 ### Permissions
 Assign via your permissions plugin (examples: LuckPerms, PermissionsEx):
-- vault.user — basic usage (open menu, list, use common actions)
-- vault.admin — admin override for elevated actions
-- vault.action.view — allow viewing a Vault’s contents in a virtual inventory
-- vault.action.copy — allow copying items from a Vault to the player inventory
-- vault.action.edit — allow editing Vault contents inside the virtual inventory
-- vault.action.place — allow placing the stored block back into the world
+- vaultstorage.user — basic usage (open menu, list, use common actions)
+- vaultstorage.admin — admin override for all plugin actions
+- vaultstorage.action.view — allow viewing a Vault’s contents in a virtual inventory (default: true)
+- vaultstorage.action.copy — allow copying items from a Vault to the player inventory (default: op)
+- vaultstorage.action.edit — allow editing Vault contents inside the virtual inventory (default: op)
+- vaultstorage.action.place — allow placing the stored block back into the world (default: op)
+- vaultstorage.action.place.override — bypass region/container checks when capturing/placing (default: op)
+- vaultstorage.action.capture — allow entering capture mode and vaulting containers (default: false)
 
-Defaults are conservative (typically op); grant to user groups as appropriate.
+Notes:
+- The capture/placement logic is enforced both by the menu and the /vault capture command.
+- “Override” permission bypasses region and container ownership checks.
 
 ### Commands (admin view)
-- /vault — opens the main menu (requires vault.user)
-- /vault menu — explicit alias for the main menu (requires vault.user)
-- /vault list [mine|all] — list player vaults; with vault.admin, can browse per world
+- /vault — opens the main menu (requires vaultstorage.user)
+- /vault menu — explicit alias for the main menu (requires vaultstorage.user)
+- /vault list [mine|all] — list player vaults; with vaultstorage.admin, can browse per world
 - /vault open <vaultId> [view|copy|edit] — opens a Vault with the requested mode
   - Access check: owners and admins
-- /vault place <vaultId> — attempts to place the original block back
-  - Requires vault.action.place
+- /vault place <vaultId> — attempts to place the original block back (requires vaultstorage.action.place)
+- /vault capture — enters capture mode to vault a container by right‑clicking it (requires vaultstorage.action.capture)
 
 Tab completion:
 - Subcommands complete for players with permission.
@@ -170,7 +182,7 @@ Health signals in console:
 
 Common symptoms and checks:
 - “No MySQL connection available” — verify mysql.host/port/database/user/password and network reachability; confirm privileges and SSL settings.
-- “You don’t have permission.” — grant vault.user or the specific vault.action.* permission; admins may use vault.admin.
+- “You don’t have permission.” — grant vaultstorage.user or the specific vaultstorage.action.* permission; admins may use vaultstorage.admin.
 - “Services not ready.” — ensure WorldEdit, WorldGuard, and Bolt are present and enabled.
 - “Vault not found.” — the provided ID may be invalid or already removed; re-list and try again.
 

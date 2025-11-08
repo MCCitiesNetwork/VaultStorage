@@ -9,15 +9,13 @@ import com.sk89q.worldguard.protection.regions.RegionContainer;
 import net.democracycraft.vault.api.region.VaultRegion;
 import net.democracycraft.vault.api.service.WorldGuardService;
 import net.democracycraft.vault.internal.region.VaultRegionImp;
+import org.bukkit.Bukkit;
+import org.bukkit.OfflinePlayer;
 import org.bukkit.World;
 import org.bukkit.util.BoundingBox;
 import org.jetbrains.annotations.NotNull;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.UUID;
+import java.util.*;
 
 /**
  * WorldGuard-backed service to resolve regions without maintaining an internal cache.
@@ -70,14 +68,23 @@ public class WorldGuardServiceImp implements WorldGuardService {
 
         List<VaultRegion> regions = new ArrayList<>(manager.getRegions().size());
         for (Map.Entry<String, ProtectedRegion> entry : manager.getRegions().entrySet()) {
-            String id = entry.getKey();
-            ProtectedRegion protectedRegion = entry.getValue();
-            List<UUID> owners = new ArrayList<>(protectedRegion.getOwners().getPlayerDomain().getUniqueIds());
-            List<UUID> members = new ArrayList<>(protectedRegion.getMembers().getPlayerDomain().getUniqueIds());
-            BoundingBox box = getBoundingBox(protectedRegion);
-            regions.add(new VaultRegionImp(id, members, owners, box));
+            regions.add(buildVaultRegion(entry.getKey(), entry.getValue()));
         }
         return regions;
+    }
+
+    private VaultRegion buildVaultRegion(String id, @NotNull ProtectedRegion protectedRegion) {
+        var ownerSet = new LinkedHashSet<UUID>();
+        var memberSet = new LinkedHashSet<UUID>();
+        ProtectedRegion cursor = protectedRegion;
+        while (cursor != null) {
+            ownerSet.addAll(cursor.getOwners().getPlayerDomain().getUniqueIds());
+            memberSet.addAll(cursor.getMembers().getPlayerDomain().getUniqueIds());
+            cursor = cursor.getParent();
+        }
+        int priority = protectedRegion.getPriority();
+        BoundingBox box = getBoundingBox(protectedRegion);
+        return new VaultRegionImp(id, new ArrayList<>(memberSet), new ArrayList<>(ownerSet), box, priority);
     }
 
     private @NotNull BoundingBox getBoundingBox(@NotNull ProtectedRegion region) {
