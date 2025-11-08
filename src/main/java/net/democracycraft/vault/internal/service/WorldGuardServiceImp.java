@@ -12,6 +12,7 @@ import net.democracycraft.vault.internal.region.VaultRegionImp;
 import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.World;
+import org.bukkit.block.Block;
 import org.bukkit.util.BoundingBox;
 import org.jetbrains.annotations.NotNull;
 
@@ -36,16 +37,15 @@ public class WorldGuardServiceImp implements WorldGuardService {
      * Returns regions in the given world that overlap the provided bounding box.
      * Data is fetched live from WorldGuard on each call.
      *
-     * @param boundingBox the query area (not null)
-     * @param world       the Bukkit world (not null)
+     * @param block       the block to check (not null)
      * @return a list of regions overlapping the box (never null)
      */
     @Override
-    public @NotNull List<VaultRegion> getRegionsAt(@NotNull BoundingBox boundingBox, @NotNull World world) {
-        Objects.requireNonNull(boundingBox, "boundingBox");
-        Objects.requireNonNull(world, "world");
+    public @NotNull List<VaultRegion> getRegionsAt(@NotNull Block block) {
+        Objects.requireNonNull(block, "block");
+        World world = block.getWorld();
         return getRegionsIn(world).stream()
-                .filter(region -> region.boundingBox().overlaps(boundingBox))
+                .filter(region -> region.boundingBox().contains(block.getLocation().toVector()))
                 .toList();
     }
 

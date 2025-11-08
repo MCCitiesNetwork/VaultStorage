@@ -136,8 +136,7 @@ public class VaultPlacementMenu extends ChildMenuImp {
                 WorldGuardService wgs = VaultStoragePlugin.getInstance().getWorldGuardService();
                 boolean allowed = true;
                 if (wgs != null) {
-                    BoundingBox point = new BoundingBox(target.getX(), target.getY(), target.getZ(), target.getX(), target.getY(), target.getZ());
-                    var regs = wgs.getRegionsAt(point, target.getWorld());
+                    var regs = wgs.getRegionsAt(target);
                     UUID viewer = actor.getUniqueId();
                     boolean isMember = regs.stream().anyMatch(r -> r.isMember(viewer));
                     boolean hasOverride = VaultPermission.ACTION_PLACE_OVERRIDE.has(actor);
@@ -194,8 +193,7 @@ public class VaultPlacementMenu extends ChildMenuImp {
                 WorldGuardService wgs = VaultStoragePlugin.getInstance().getWorldGuardService();
                 boolean isMember = false;
                 if (wgs != null) {
-                    BoundingBox point = new BoundingBox(target.getX(), target.getY(), target.getZ(), target.getX(), target.getY(), target.getZ());
-                    var regs = wgs.getRegionsAt(point, target.getWorld());
+                    var regs = wgs.getRegionsAt(target);
                     UUID viewer = actor.getUniqueId();
                     isMember = regs.stream().anyMatch(r -> r.isMember(viewer));
                 }

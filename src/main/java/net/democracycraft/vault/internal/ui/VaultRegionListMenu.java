@@ -48,7 +48,21 @@ public class VaultRegionListMenu extends ChildMenuImp {
         public String regionNotFound = "<red>Region not found: %region%</red>";
     }
 
-    private static final AutoYML<Config> YML = AutoYML.create(Config.class, "VaultRegionListMenu", DataFolder.MENUS, "VaultRegionListMenu configuration.");
+    /**
+     * YAML header describing configuration placeholders.
+     */
+    private static final String HEADER = String.join("\n",
+            "VaultRegionListMenu configuration.",
+            "All strings accept MiniMessage or plain text.",
+            "Placeholders:",
+            "- %player% -> current player name (title)",
+            "- %query%  -> current filter query (title, header)",
+            "- %count%  -> total results (header)",
+            "- %page%   -> current page number (1-based)",
+            "- %pages%  -> total pages",
+            "- %region% -> region id for buttons" );
+
+    private static final AutoYML<Config> YML = AutoYML.create(Config.class, "VaultRegionListMenu", DataFolder.MENUS, HEADER);
     public static void ensureConfig() { YML.loadOrCreate(Config::new); }
     private static Config cfg() { return YML.loadOrCreate(Config::new); }
 
