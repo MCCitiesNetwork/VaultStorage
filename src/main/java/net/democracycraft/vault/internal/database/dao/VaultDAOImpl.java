@@ -112,6 +112,23 @@ public record VaultDAOImpl(DatabaseSchema schema) implements VaultDAO {
         schema.vaultItems().insertOrUpdateSync(itemEntity);
     }
 
+    /**
+     * Batch insert/update items for a vault.
+     * Strategy: generate synthetic UUIDs; rely on unique (vaultUuid,slot) to trigger ON DUPLICATE KEY UPDATE.
+     */
+    @Override
+    public void putItems(@NotNull UUID vaultUuid, @NotNull List<VaultItemEntity> items) {
+        Objects.requireNonNull(vaultUuid, "vaultUuid");
+        Objects.requireNonNull(items, "items");
+        if (items.isEmpty()) return;
+        // Ensure required fields; assign random UUIDs to leverage ON DUPLICATE for unique slot constraint.
+        for (VaultItemEntity row : items) {
+            if (row.vaultUuid == null) row.vaultUuid = vaultUuid;
+            if (row.uuid == null) row.uuid = UUID.randomUUID();
+        }
+        schema.vaultItems().insertBatchSync(items);
+    }
+
     @Override
     public void removeItem(@NotNull UUID vaultUuid, int slot) {
         Objects.requireNonNull(vaultUuid, "vaultUuid");

@@ -7,26 +7,16 @@ import io.papermc.paper.registry.data.dialog.input.DialogInput;
 import io.papermc.paper.registry.data.dialog.input.SingleOptionDialogInput;
 import net.democracycraft.vault.VaultStoragePlugin;
 import net.democracycraft.vault.api.data.Dto;
-import net.democracycraft.vault.api.service.VaultService;
 import net.democracycraft.vault.api.ui.AutoDialog;
+import net.democracycraft.vault.internal.security.VaultPermission;
 import net.democracycraft.vault.internal.service.VaultInventoryService;
-import net.democracycraft.vault.internal.session.VaultSessionManager;
 import net.democracycraft.vault.internal.util.config.DataFolder;
-import net.democracycraft.vault.internal.util.item.ItemSerialization;
 import net.democracycraft.vault.internal.util.minimessage.MiniMessageUtil;
-import net.democracycraft.vault.internal.util.listener.DynamicListener;
 import net.democracycraft.vault.internal.util.yml.AutoYML;
-import org.bukkit.Bukkit;
-import org.bukkit.inventory.Inventory;
-import org.bukkit.inventory.ItemStack;
 import org.bukkit.entity.Player;
-import org.bukkit.event.EventHandler;
-import org.bukkit.event.Listener;
-import org.bukkit.event.inventory.InventoryClickEvent;
-import org.bukkit.event.inventory.InventoryCloseEvent;
-import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.scheduler.BukkitRunnable;
 
+import java.time.Duration;
 import java.util.*;
 
 /**
@@ -38,6 +28,7 @@ public class VaultActionMenu extends ChildMenuImp {
     private static final String KEY_ACTION = "ACTION";
 
     private final UUID vaultId;
+    private final VaultUIContext uiContext;
 
     /** Configurable menu texts. */
     public static class Config implements Dto, java.io.Serializable {
@@ -69,6 +60,14 @@ public class VaultActionMenu extends ChildMenuImp {
         public String placeOk = "<green>%msg%</green>";
         /** Placement failure prefix. Placeholder %msg%. */
         public String placeFail = "<red>%msg%</red>";
+        /** Button label for deleting the vault (admin only). */
+        public String deleteBtn = "<red><bold>Delete Vault</bold></red>";
+        /** Chat message shown after successful deletion. */
+        public String deleteOk = "<green>Vault deleted.</green>";
+        /** Chat message shown if deletion fails. */
+        public String deleteFail = "<red>Vault deletion failed.</red>";
+        /** Chat message shown while deletion runs asynchronously. */
+        public String deleteLoading = "<gray>Deleting vault...</gray>";
     }
 
     private static final String HEADER = String.join("\n",
@@ -88,9 +87,10 @@ public class VaultActionMenu extends ChildMenuImp {
     public static void ensureConfig() { YML.loadOrCreate(Config::new); }
     private static VaultActionMenu.Config cfg() { return YML.loadOrCreate(VaultActionMenu.Config::new); }
 
-    public VaultActionMenu(Player player, ParentMenuImp parent, UUID vaultId) {
-        super(player, parent, "vault_action_" + vaultId);
+    public VaultActionMenu(Player player, ParentMenuImp parent, VaultUIContext ctx, UUID vaultId) {
+        super(player, parent, "vault_action");
         this.vaultId = vaultId;
+        this.uiContext = ctx;
         setDialog(build());
     }
 
@@ -116,7 +116,7 @@ public class VaultActionMenu extends ChildMenuImp {
         }
         if (entries.isEmpty()) {
             builder.addBody(DialogBody.plainMessage(MiniMessageUtil.parseOrPlain(cfg.noActions)));
-            builder.button(MiniMessageUtil.parseOrPlain(cfg.backBtn), ctx -> new VaultListMenu(ctx.player(), (ParentMenuImp) getParentMenu(), "").open());
+            builder.button(MiniMessageUtil.parseOrPlain(cfg.backBtn), ctx -> new VaultListMenu(ctx.player(), (ParentMenuImp) getParentMenu(), uiContext,"").open());
             return builder.build();
         }
 
@@ -132,10 +132,54 @@ public class VaultActionMenu extends ChildMenuImp {
 
         // Place block button (relative placement UI)
         builder.buttonWithPlayer(MiniMessageUtil.parseOrPlain(cfg.placeBtn), null, java.time.Duration.ofMinutes(5), 1, (actor, response) -> {
-            new VaultPlacementMenu(actor, (ParentMenuImp) getParentMenu(), vaultId).open();
+            new VaultPlacementMenu(actor, (ParentMenuImp) getParentMenu(), vaultId, uiContext).open();
         });
 
-        builder.button(MiniMessageUtil.parseOrPlain(cfg.backBtn), ctx -> new VaultListMenu(ctx.player(), (ParentMenuImp) getParentMenu(), "").open());
+        // Admin-only delete button
+        /**
+         * Admin delete operation:
+         * Visible only if actor has ADMIN permission. On click it re-validates permission,
+         * sends a loading message, performs asynchronous deletion (with existence check),
+         * then returns to the vault list (or closes dialog if parent missing).
+         */
+        if (VaultPermission.ADMIN.has(player)) {
+            builder.buttonWithPlayer(MiniMessageUtil.parseOrPlain(cfg.deleteBtn), null, Duration.ofMinutes(2), 1, (actor, response) -> {
+                if (!net.democracycraft.vault.internal.security.VaultPermission.ADMIN.has(actor)) {
+                    actor.sendMessage("You don't have permission.");
+                    return;
+                }
+                actor.sendMessage(MiniMessageUtil.parseOrPlain(cfg.deleteLoading));
+                var plugin = net.democracycraft.vault.VaultStoragePlugin.getInstance();
+                new BukkitRunnable() {
+                    @Override public void run() {
+                        boolean success;
+                        try {
+                            var vaultService = plugin.getVaultService();
+                            var exists = vaultService.get(vaultId).isPresent();
+                            if (!exists) {
+                                success = false;
+                            } else {
+                                vaultService.delete(vaultId);
+                                success = true;
+                            }
+                        } catch (Throwable t) { success = false; }
+                        final boolean ok = success;
+                        new BukkitRunnable() {
+                            @Override public void run() {
+                                actor.sendMessage(MiniMessageUtil.parseOrPlain(ok ? cfg.deleteOk : cfg.deleteFail));
+                                if (getParentMenu() instanceof ParentMenuImp parent) {
+                                    new VaultListMenu(actor, parent, uiContext, "").open();
+                                } else {
+                                    actor.closeDialog();
+                                }
+                            }
+                        }.runTask(plugin);
+                    }
+                }.runTaskAsynchronously(plugin);
+            });
+        }
+
+        builder.button(MiniMessageUtil.parseOrPlain(cfg.backBtn), ctx -> new VaultListMenu(ctx.player(), (ParentMenuImp) getParentMenu(), uiContext, "").open());
         return builder.build();
     }
 
@@ -147,7 +191,7 @@ public class VaultActionMenu extends ChildMenuImp {
 
     private void openInventoryAsync(Player player, VaultAction action, Config cfg) {
         VaultInventoryService invSvc = VaultStoragePlugin.getInstance().getInventoryService();
-        invSvc.openVirtualInventory(player, vaultId, action, () -> new VaultActionMenu(player, (ParentMenuImp) getParentMenu(), vaultId).open());
+        invSvc.openVirtualInventory(player, vaultId, action, getParentMenu(), () -> new VaultActionMenu(player, (ParentMenuImp) getParentMenu(), uiContext, vaultId).open());
     }
 
     @Override

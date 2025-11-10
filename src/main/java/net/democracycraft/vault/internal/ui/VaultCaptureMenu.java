@@ -28,6 +28,8 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.scheduler.BukkitRunnable;
 
 import java.util.*;
+import net.democracycraft.vault.internal.database.entity.VaultItemEntity;
+import net.democracycraft.vault.internal.util.item.ItemSerialization;
 
 /**
  * Vault capture UI shown when the command is executed.
@@ -64,6 +66,8 @@ public class VaultCaptureMenu extends ParentMenuImp {
         public String notAContainer = "That block is not a container.";
         /** Chat message when capture succeeds. Supports %player%. */
         public String capturedOk = "Vault captured.";
+        /** Chat message when target container is empty and nothing is persisted. Supports %player%. */
+        public String emptyCaptureSkipped = "Container empty; nothing captured.";
         /** Button to open the scan menu. */
         public String openScanBtn = "<yellow>Scan Region</yellow>";
         /** Actionbar while in capture mode (when not looking at a container). */
@@ -125,12 +129,17 @@ public class VaultCaptureMenu extends ParentMenuImp {
     /** Ensures the YAML file for this menu exists by creating defaults if missing. */
     public static void ensureConfig() { YML.loadOrCreate(Config::new); }
 
-    /**
-     * Creates a new capture menu for the given player.
-     * @param player the player who will interact with the dialog
-     */
+    private final VaultUIContext uiContext;
+
+    /** Existing constructor kept: self-filter context */
     public VaultCaptureMenu(Player player) {
+        this(player, VaultUIContext.self(player.getUniqueId()));
+    }
+
+    /** New constructor accepting UI context (admin or filtered). */
+    public VaultCaptureMenu(Player player, VaultUIContext context) {
         super(player, "vault_capture");
+        this.uiContext = context;
         setDialog(build());
     }
 
@@ -141,7 +150,13 @@ public class VaultCaptureMenu extends ParentMenuImp {
     private Dialog build() {
         Config cfg = cfg();
         AutoDialog.Builder builder = getAutoDialogBuilder();
-        Map<String,String> phSelf = Map.of("%player%", getPlayer().getName());
+        Map<String,String> phSelf = new java.util.HashMap<>();
+        phSelf.put("%player%", getPlayer().getName());
+        if (uiContext.filterOwner() != null) {
+            phSelf.put("%filterOwner%", uiContext.filterOwner().toString());
+        } else if (uiContext.admin()) {
+            phSelf.put("%filterOwner%", "ALL");
+        }
         builder.title(MiniMessageUtil.parseOrPlain(cfg.title, phSelf));
         builder.canCloseWithEscape(true);
         builder.afterAction(DialogBase.DialogAfterAction.CLOSE);
@@ -203,6 +218,15 @@ public class VaultCaptureMenu extends ParentMenuImp {
                     }
 
                     VaultCaptureService captureService = VaultStoragePlugin.getInstance().getCaptureService();
+                    // Unified emptiness check (handles double chests via block inventory)
+                    boolean empty;
+                    try { empty = captureService.isContainerEmpty(block); } catch (IllegalArgumentException ex) { empty = true; }
+                    if (empty) {
+                        actor.sendMessage(MiniMessageUtil.parseOrPlain(cfg.emptyCaptureSkipped, Map.of("%player%", actor.getName())));
+                        new VaultCaptureMenu(actor).open();
+                        return;
+                    }
+
                     VaultImp vault = captureService.captureFromBlock(actor, block);
                     var plugin = VaultStoragePlugin.getInstance();
                     UUID finalOwner = originalOwner != null ? originalOwner : actor.getUniqueId();
@@ -214,8 +238,7 @@ public class VaultCaptureMenu extends ParentMenuImp {
                             if (existing != null) {
                                 vs.delete(existing.uuid);
                             }
-                            List<ItemStack> items = vault.contents();
-                            // Create vault row first (no contents overload) then put items, same as command flow
+                            // Create vault row and obtain its UUID before batching items
                             UUID newId;
                             {
                                 var created = vs.createVault(worldId, block.getX(), block.getY(), block.getZ(), finalOwner,
@@ -223,10 +246,21 @@ public class VaultCaptureMenu extends ParentMenuImp {
                                         vault.blockDataString());
                                 newId = created.uuid;
                             }
+                            List<ItemStack> items = vault.contents();
+                            // Batch persist items (single round-trip) instead of per-slot writes
+                            java.util.List<VaultItemEntity> batch = new java.util.ArrayList<>(items.size());
                             for (int idx = 0; idx < items.size(); idx++) {
                                 ItemStack itemStack = items.get(idx);
                                 if (itemStack == null) continue;
-                                vs.putItem(newId, idx, itemStack.getAmount(), net.democracycraft.vault.internal.util.item.ItemSerialization.toBytes(itemStack));
+                                VaultItemEntity vie = new VaultItemEntity();
+                                vie.vaultUuid = newId;
+                                vie.slot = idx;
+                                vie.amount = itemStack.getAmount();
+                                vie.item = ItemSerialization.toBytes(itemStack);
+                                batch.add(vie);
+                            }
+                            if (!batch.isEmpty()) {
+                                vs.putItems(newId, batch);
                             }
                             new BukkitRunnable() {
                                 @Override public void run() {
@@ -277,12 +311,15 @@ public class VaultCaptureMenu extends ParentMenuImp {
         });
 
         // Open scan child menu
-        builder.button(MiniMessageUtil.parseOrPlain(cfg.openScanBtn, phSelf), ctx -> new VaultScanMenu(ctx.player(), this).open());
+        builder.button(MiniMessageUtil.parseOrPlain(cfg.openScanBtn, phSelf), ctx -> new VaultScanMenu(ctx.player(), this, uiContext).open());
 
-        builder.button(MiniMessageUtil.parseOrPlain(cfg.browseBtn, phSelf), ctx -> new VaultListMenu(ctx.player(), this, "").open());
+        builder.button(MiniMessageUtil.parseOrPlain(cfg.browseBtn, phSelf), ctx -> new VaultListMenu(ctx.player(), this, uiContext, "").open());
         builder.button(MiniMessageUtil.parseOrPlain(cfg.closeBtn, phSelf), ctx -> {});
         return builder.build();
     }
+
+    /** Public accessor for empty capture message (used by command subcaptures). */
+    public static String emptyCaptureMessage() { return cfg().emptyCaptureSkipped; }
 
     private static String getReasonSegment(VaultCapturePolicy.Decision decision, String ownerName, String regionsList, Config cfg, Player actor) {
         String reasonText;

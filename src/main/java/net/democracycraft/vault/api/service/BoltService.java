@@ -7,7 +7,7 @@ import org.bukkit.util.BoundingBox;
 import java.util.List;
 import java.util.UUID;
 
-public interface BoltService {
+public interface BoltService extends Service {
 
     UUID getOwner(Block block);
 

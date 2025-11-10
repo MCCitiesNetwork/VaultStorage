@@ -11,10 +11,12 @@ import net.democracycraft.vault.api.service.BoltService;
 import net.democracycraft.vault.api.service.WorldGuardService;
 import net.democracycraft.vault.api.ui.AutoDialog;
 import net.democracycraft.vault.api.ui.ParentMenu;
+import net.democracycraft.vault.internal.database.entity.VaultItemEntity;
 import net.democracycraft.vault.internal.mappable.VaultImp;
 import net.democracycraft.vault.internal.security.VaultCapturePolicy;
 import net.democracycraft.vault.internal.service.VaultCaptureService;
 import net.democracycraft.vault.internal.util.config.DataFolder;
+import net.democracycraft.vault.internal.util.item.ItemSerialization;
 import net.democracycraft.vault.internal.util.minimessage.MiniMessageUtil;
 import net.democracycraft.vault.internal.util.yml.AutoYML;
 import org.bukkit.Bukkit;
@@ -33,6 +35,17 @@ import java.util.*;
 /**
  * Child menu dedicated to initiating a scan flow: search regions by query or use the current location (Here).
  * Region selection is handled in a separate child menu to keep buttons grouped and clean at the bottom.
+ * <p>
+ * Filtering rules:
+ * <ul>
+ *   <li>When constructed via {@link VaultScanMenu#VaultScanMenu(Player, ParentMenu)} or with a self {@link VaultUIContext}, the scan is <b>owner-filtered</b> to the actor (only containers whose Bolt owner equals the player).</li>
+ *   <li>If an admin {@link VaultUIContext} without filterOwner is provided, results are not owner-filtered.</li>
+ *   <li>All candidate containers are additionally validated by the centralized {@link net.democracycraft.vault.internal.security.VaultCapturePolicy} to enforce region/ownership rules.</li>
+ * </ul>
+ * Empty container handling:
+ * <ul>
+ *   <li>When vaulting from the scan results, empty containers are skipped (block removed, protection removed) and the configurable message {@code emptyCaptureSkipped} is shown.</li>
+ * </ul>
  */
 public class VaultScanMenu extends ChildMenuImp {
 
@@ -47,7 +60,9 @@ public class VaultScanMenu extends ChildMenuImp {
         /** Error when target block is not a container. */
         public String notAContainer = "<red>Target is not a container.</red>";
         /** Message after successful vault action for an entry. */
-        public String vaultedOk = "<green>Container vaulted.</green>";
+        public String vaultedOk = "Container vaulted.";
+        /** Message when the target container is empty and nothing is persisted. */
+        public String emptyCaptureSkipped = "Container empty; nothing captured.";
         /** Results header. Placeholders: %region% %count% */
         public String resultsHeader = "<gold><bold>Region %region%</bold></gold> <gray>(%count% results)</gray>";
         /** Per-entry descriptive line. Placeholders: %x% %y% %z% %owner% */
@@ -92,7 +107,9 @@ public class VaultScanMenu extends ChildMenuImp {
             "- %player% -> actor/player name",
             "- %region% -> region id",
             "- %count% -> number of results",
-            "- %x% %y% %z% %owner% -> entry values"
+            "- %x% %y% %z% %owner% -> entry values",
+            "Fields:",
+            "- emptyCaptureSkipped -> message when a vaulted container was empty and persistence skipped"
     );
 
     private static final AutoYML<Config> YML = AutoYML.create(Config.class, "VaultScanMenu", DataFolder.MENUS, HEADER);
@@ -103,9 +120,15 @@ public class VaultScanMenu extends ChildMenuImp {
     private final List<Block> entries; // only used in results mode
     /** Zero-based current page index in results mode. */
     private final int pageIndex;
+    private final VaultUIContext uiContext;
 
     public VaultScanMenu(@NotNull Player player, @NotNull ParentMenu parent) {
+        this(player, parent, new VaultUIContext(player.getUniqueId(), player.getUniqueId(), false));
+    }
+
+    public VaultScanMenu(@NotNull Player player, @NotNull ParentMenu parent, @NotNull VaultUIContext ctx) {
         super(player, parent, "vault_scan");
+        this.uiContext = ctx;
         this.regionId = null;
         this.entries = List.of();
         this.pageIndex = 0;
@@ -113,8 +136,9 @@ public class VaultScanMenu extends ChildMenuImp {
     }
 
     /** Public constructor for results mode to allow opening from the region list menu. */
-    public VaultScanMenu(@NotNull Player player, @NotNull ParentMenu parent, @NotNull String regionId, @NotNull List<Block> entries) {
+    public VaultScanMenu(@NotNull Player player, @NotNull ParentMenu parent, @NotNull VaultUIContext ctx, @NotNull String regionId, @NotNull List<Block> entries) {
         super(player, parent, "vault_scan_results");
+        this.uiContext = ctx;
         this.regionId = regionId;
         this.entries = entries;
         this.pageIndex = 0;
@@ -122,8 +146,9 @@ public class VaultScanMenu extends ChildMenuImp {
     }
 
     /** Results-mode constructor with explicit page index (zero-based). */
-    public VaultScanMenu(@NotNull Player player, @NotNull ParentMenu parent, @NotNull String regionId, @NotNull List<Block> entries, int pageIndex) {
+    public VaultScanMenu(@NotNull Player player, @NotNull ParentMenu parent, @NotNull VaultUIContext ctx, @NotNull String regionId, @NotNull List<Block> entries, int pageIndex) {
         super(player, parent, "vault_scan_results");
+        this.uiContext = ctx;
         this.regionId = regionId;
         this.entries = entries;
         this.pageIndex = Math.max(0, pageIndex);
@@ -144,7 +169,8 @@ public class VaultScanMenu extends ChildMenuImp {
             builder.addInput(DialogInput.text("QUERY", MiniMessageUtil.parseOrPlain(config.searchLabel)).labelVisible(true).build());
             builder.buttonWithPlayer(MiniMessageUtil.parseOrPlain(config.searchBtn), null, java.time.Duration.ofMinutes(5), 1, (player, response) -> {
                 String q = Optional.ofNullable(response.getText("QUERY")).orElse("").trim();
-                new net.democracycraft.vault.internal.ui.VaultRegionListMenu(player, getParentMenu(), q, 0).open();
+                // VaultRegionListMenu does not accept uiContext; use its (player, parent, query, page) constructor
+                new VaultRegionListMenu(player, getParentMenu(), q, 0).open();
             });
 
             // "Here" button: detect region at player's current location and open results or list if multiple
@@ -163,13 +189,15 @@ public class VaultScanMenu extends ChildMenuImp {
                 }
                 if (containing.size() > 1) {
                     List<String> ids = containing.stream().map(VaultRegion::id).sorted(String.CASE_INSENSITIVE_ORDER).toList();
-                    new net.democracycraft.vault.internal.ui.VaultRegionListMenu(ctx.player(), getParentMenu(), ids, 0).open();
+                    // VaultRegionListMenu subset constructor: (player, parent, ids, page)
+                    new VaultRegionListMenu(ctx.player(), getParentMenu(), ids, 0).open();
                     return;
                 }
                 VaultRegion only = containing.getFirst();
                 List<Block> blocks = computeEntries(ctx.player(), only.id(), config);
                 if (blocks == null) return;
-                new VaultScanMenu(ctx.player(), getParentMenu(), only.id(), blocks, 0).open();
+                // Pass uiContext into results-mode constructor
+                new VaultScanMenu(ctx.player(), getParentMenu(), uiContext, only.id(), blocks, 0).open();
             });
 
             return builder.build();
@@ -206,6 +234,8 @@ public class VaultScanMenu extends ChildMenuImp {
             builder.addBody(DialogBody.plainMessage(MiniMessageUtil.parseOrPlain(config.entryLine, placeholdersEntry)));
             // Vault button for this entry
             builder.button(MiniMessageUtil.parseOrPlain(config.entryVaultButton, placeholdersEntry), ctx -> {
+                // Show a loading menu while we process DB work
+                new LoadingMenu(ctx.player(), getParentMenu(), Map.of("%player%", ctx.player().getName())).open();
                 new BukkitRunnable() {
                     @Override public void run() {
                         Block targetBlock = ctx.player().getWorld().getBlockAt(entryBlock.getX(), entryBlock.getY(), entryBlock.getZ());
@@ -230,6 +260,19 @@ public class VaultScanMenu extends ChildMenuImp {
                         if (boltSvc != null) { try { boltSvc.removeProtection(targetBlock); } catch (Throwable ignored) {} }
 
                         VaultCaptureService vaultCaptureService = VaultStoragePlugin.getInstance().getCaptureService();
+                        // Pre-check emptiness: if empty, skip vaulting (do not remove block) and just refresh list.
+                        boolean empty;
+                        try { empty = vaultCaptureService.isContainerEmpty(targetBlock); } catch (IllegalArgumentException ex) { empty = true; }
+                        if (empty) {
+                            ctx.player().sendMessage(MiniMessageUtil.parseOrPlain(config.emptyCaptureSkipped));
+                            List<Block> recomputed = computeEntries(ctx.player(), regionId, config);
+                            if (recomputed == null) return;
+                            int newTotal = Math.max(1, (int) Math.ceil(recomputed.size() / (double) Math.max(1, config.pageSize)));
+                            int safePage = Math.min(currentPage, newTotal - 1);
+                            new VaultScanMenu(ctx.player(), getParentMenu(), uiContext, regionId, recomputed, safePage).open();
+                            return;
+                        }
+
                         VaultImp vault = vaultCaptureService.captureFromBlock(ctx.player(), targetBlock);
                         var plugin = VaultStoragePlugin.getInstance();
                         UUID finalOwner = originalOwner != null ? originalOwner : ctx.player().getUniqueId();
@@ -239,16 +282,28 @@ public class VaultScanMenu extends ChildMenuImp {
                                 UUID worldUuid = targetBlock.getWorld().getUID();
                                 UUID newId;
                                 {
+                                    var existing = vaultService.findByLocation(worldUuid, entryBlock.getX(), entryBlock.getY(), entryBlock.getZ());
+                                    if (existing != null) { vaultService.delete(existing.uuid); }
                                     var created = vaultService.createVault(worldUuid, entryBlock.getX(), entryBlock.getY(), entryBlock.getZ(), finalOwner,
                                             vault.blockMaterial() == null ? null : vault.blockMaterial().name(),
                                             vault.blockDataString());
                                     newId = created.uuid;
                                 }
                                 List<ItemStack> items = vault.contents();
+                                // Batch persist items to minimize DB round-trips
+                                List<VaultItemEntity> batch = new java.util.ArrayList<>(items.size());
                                 for (int idx = 0; idx < items.size(); idx++) {
                                     ItemStack itemStack = items.get(idx);
                                     if (itemStack == null) continue;
-                                    vaultService.putItem(newId, idx, itemStack.getAmount(), net.democracycraft.vault.internal.util.item.ItemSerialization.toBytes(itemStack));
+                                    VaultItemEntity vie = new VaultItemEntity();
+                                    vie.vaultUuid = newId;
+                                    vie.slot = idx;
+                                    vie.amount = itemStack.getAmount();
+                                    vie.item = ItemSerialization.toBytes(itemStack);
+                                    batch.add(vie);
+                                }
+                                if (!batch.isEmpty()) {
+                                    vaultService.putItems(newId, batch);
                                 }
                                 new BukkitRunnable() { @Override public void run() {
                                     ctx.player().sendMessage(MiniMessageUtil.parseOrPlain(config.vaultedOk));
@@ -256,7 +311,8 @@ public class VaultScanMenu extends ChildMenuImp {
                                     if (recomputed == null) return;
                                     int newTotal = Math.max(1, (int) Math.ceil(recomputed.size() / (double) Math.max(1, config.pageSize)));
                                     int safePage = Math.min(currentPage, newTotal - 1);
-                                    new VaultScanMenu(ctx.player(), getParentMenu(), regionId, recomputed, safePage).open();
+                                    // Include uiContext when re-opening results
+                                    new VaultScanMenu(ctx.player(), getParentMenu(), uiContext, regionId, recomputed, safePage).open();
                                 } }.runTask(plugin);
                             }
                         }.runTaskAsynchronously(plugin);
@@ -274,10 +330,10 @@ public class VaultScanMenu extends ChildMenuImp {
 
         // Navigation buttons
         if (currentPage > 0) {
-            builder.button(MiniMessageUtil.parseOrPlain(config.prevBtn), ctx -> new VaultScanMenu(ctx.player(), getParentMenu(), regionId, entries, currentPage - 1).open());
+            builder.button(MiniMessageUtil.parseOrPlain(config.prevBtn), ctx -> new VaultScanMenu(ctx.player(), getParentMenu(), uiContext, regionId, entries, currentPage - 1).open());
         }
         if (currentPage < totalPages - 1) {
-            builder.button(MiniMessageUtil.parseOrPlain(config.nextBtn), ctx -> new VaultScanMenu(ctx.player(), getParentMenu(), regionId, entries, currentPage + 1).open());
+            builder.button(MiniMessageUtil.parseOrPlain(config.nextBtn), ctx -> new VaultScanMenu(ctx.player(), getParentMenu(), uiContext, regionId, entries, currentPage + 1).open());
         }
 
         return builder.build();
@@ -299,12 +355,18 @@ public class VaultScanMenu extends ChildMenuImp {
 
     /**
      * Computes candidate blocks in the region that the actor is allowed to vault per capture policy.
-     * Policy:
-     * - Override: include all protected (including unprotected) containers in region bounding box.
-     * - Region owner: include containers whose Bolt owner exists, is not self, and is not member/owner of ANY overlapping region at that block.
-     * - Region member (non-owner): include none.
-     * - Non-involved (no membership/ownership in ANY overlapping region): include only containers whose Bolt owner is self.
-     * Unprotected containers are only included if override.
+     * <p>Owner filter: If {@link VaultUIContext#filterOwner()} is non-null, only containers whose Bolt owner matches that UUID are considered.</p>
+     * <p>Policy: Each protected block is evaluated with {@link net.democracycraft.vault.internal.security.VaultCapturePolicy#evaluate(Player, Block)}; only allowed decisions pass.</p>
+     * <p>Unprotected containers are only included when the policy returns allowed (e.g. override).</p>
+     *
+     * <p><strong>Region-owner behavior:</strong> When the actor is an owner of the target region, the owner filter is disabled
+     * (even if {@code filterOwner} is present) and the centralized policy fully determines visibility and eligibility.
+     * For non-owners, the owner filter remains enforced so they only see their own vaultable containers.</p>
+     *
+     * @param player   actor performing the scan
+     * @param regionId region identifier to scan within
+     * @param config   active configuration snapshot
+     * @return list of vaultable container blocks (may be empty), or null if services missing / region not found
      */
     private List<Block> computeEntries(Player player, String regionId, Config config) {
         World world = player.getWorld();
@@ -321,6 +383,7 @@ public class VaultScanMenu extends ChildMenuImp {
             return null;
         }
         var region = target.get();
+        boolean actorOwnsRegion = region.isOwner(player.getUniqueId());
         BoundingBox boundingBox = region.boundingBox();
         List<Block> protectedBlocks = boltService.getProtectedBlocksIn(boundingBox, world);
         List<Block> entryBlocks = new ArrayList<>();
@@ -328,6 +391,11 @@ public class VaultScanMenu extends ChildMenuImp {
             // Central policy decides per-block allowance
             VaultCapturePolicy.Decision decision = VaultCapturePolicy.evaluate(player, block);
             if (!decision.allowed()) continue;
+            // Apply owner filter only when actor is NOT a region owner
+            if (!actorOwnsRegion && uiContext.filterOwner() != null) {
+                UUID owner = boltService.getOwner(block);
+                if (owner == null || !owner.equals(uiContext.filterOwner())) continue;
+            }
             entryBlocks.add(block);
         }
         return entryBlocks;

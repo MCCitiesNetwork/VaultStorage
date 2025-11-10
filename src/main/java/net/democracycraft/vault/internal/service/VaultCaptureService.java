@@ -25,11 +25,34 @@ import java.util.stream.Collectors;
 public class VaultCaptureService {
 
     /**
+     * Determines if the given block is a container and if its effective inventory is empty.
+     * <p>For chests, uses the combined {@link Chest#getBlockInventory()} ensuring double chests are evaluated as a whole.</p>
+     * <p>Empty definition: no non-null ItemStack whose type != AIR and amount > 0.</p>
+     * @param block target block expected to be a Container
+     * @return true if empty, false otherwise
+     * @throws IllegalArgumentException if the block is not a container
+     */
+    public boolean isContainerEmpty(Block block) {
+        if (!(block.getState() instanceof Container c)) {
+            throw new IllegalArgumentException("Target block is not a container.");
+        }
+        Inventory inv = (c instanceof Chest chest) ? chest.getBlockInventory() : c.getInventory();
+        for (ItemStack stack : inv.getContents()) {
+            if (stack == null) continue;
+            if (stack.getType() == Material.AIR) continue;
+            if (stack.getAmount() <= 0) continue;
+            return false; // Found meaningful content
+        }
+        return true;
+    }
+
+    /**
      * Captures the given block's inventory and metadata into a new Vault.
      * Contract:
      * - The block must be a Container; otherwise throws IllegalArgumentException.
      * - Clears the block's inventory and removes the block (sets to AIR).
-     * - Returns a new VaultImp with items, material, location, timestamp, and block data string.
+     * - Returns a new {@link VaultImp} with items, material, location, timestamp, and block data string.
+     * - Does NOT perform an emptiness check; callers should invoke {@link #isContainerEmpty(Block)} beforehand when conditional behavior is required.
      *
      * This method must be called on the main thread.
      */
@@ -40,6 +63,7 @@ public class VaultCaptureService {
         Inventory captureInv = (container instanceof Chest chest) ? chest.getBlockInventory() : container.getInventory();
         List<ItemStack> stacks = Arrays.stream(captureInv.getContents())
                 .filter(Objects::nonNull)
+                .filter(is -> is.getType() != Material.AIR && is.getAmount() > 0)
                 .collect(Collectors.toList());
 
         // Clear inventory and remove block
@@ -47,7 +71,6 @@ public class VaultCaptureService {
         Material material = block.getType();
         var location = block.getLocation();
         Instant when = Instant.now();
-        block.getBlockData();
         String blockDataString = block.getBlockData().getAsString();
         block.setType(Material.AIR);
 

@@ -13,7 +13,7 @@ import java.util.List;
  * This API performs live lookups against WorldGuard's RegionManager on every call
  * and does not maintain any internal cache.
  */
-public interface WorldGuardService {
+public interface WorldGuardService extends Service {
     /**
      * Returns regions overlapping the bounding box in the given world.
      * The result is fetched live from WorldGuard.

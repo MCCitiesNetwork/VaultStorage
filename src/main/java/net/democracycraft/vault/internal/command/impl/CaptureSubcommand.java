@@ -24,6 +24,8 @@ import org.bukkit.inventory.ItemStack;
 import java.util.List;
 import java.util.UUID;
 import org.jetbrains.annotations.NotNull;
+import net.democracycraft.vault.internal.database.entity.VaultItemEntity;
+import net.democracycraft.vault.internal.ui.VaultCaptureMenu;
 
 /**
  * Subcommand: /vault capture
@@ -94,6 +96,11 @@ public class CaptureSubcommand implements Subcommand {
                 // Capture and persist
                 VaultCaptureService svc = VaultStoragePlugin.getInstance().getCaptureService();
                 VaultImp vault = svc.captureFromBlock(player, block);
+                // If empty, skip persistence and notify.
+                if (vault.contents().isEmpty()) {
+                    player.sendMessage(VaultCaptureMenu.emptyCaptureMessage());
+                    return;
+                }
                 var plugin = VaultStoragePlugin.getInstance();
                 UUID finalOwner = originalOwner != null ? originalOwner : player.getUniqueId();
                 Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
@@ -111,11 +118,19 @@ public class CaptureSubcommand implements Subcommand {
                                 vault.blockDataString());
                         newId = created.uuid;
                     }
+                    // Batch persist contents
+                    List<VaultItemEntity> batch = new java.util.ArrayList<>(vault.contents().size());
                     for (int i = 0; i < vault.contents().size(); i++) {
                         ItemStack it = vault.contents().get(i);
                         if (it == null) continue;
-                        vs.putItem(newId, i, it.getAmount(), ItemSerialization.toBytes(it));
+                        VaultItemEntity ve = new VaultItemEntity();
+                        ve.vaultUuid = newId;
+                        ve.slot = i;
+                        ve.amount = it.getAmount();
+                        ve.item = ItemSerialization.toBytes(it);
+                        batch.add(ve);
                     }
+                    if (!batch.isEmpty()) vs.putItems(newId, batch);
                     Bukkit.getScheduler().runTask(plugin, () -> {
                         var dto = new VaultDtoImp(newId, finalOwner, List.of(),
                                 vault.blockMaterial() == null ? null : vault.blockMaterial().name(),

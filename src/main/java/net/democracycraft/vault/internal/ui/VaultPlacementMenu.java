@@ -5,7 +5,6 @@ import io.papermc.paper.registry.data.dialog.DialogBase;
 import io.papermc.paper.registry.data.dialog.body.DialogBody;
 import net.democracycraft.vault.VaultStoragePlugin;
 import net.democracycraft.vault.api.data.Dto;
-import net.democracycraft.vault.api.service.VaultService;
 import net.democracycraft.vault.api.service.WorldGuardService;
 import net.democracycraft.vault.api.ui.AutoDialog;
 import net.democracycraft.vault.internal.security.VaultPermission;
@@ -23,11 +22,9 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.scheduler.BukkitRunnable;
-import org.bukkit.util.BoundingBox;
 
 import java.util.Map;
 import java.util.UUID;
-import java.util.List;
 
 /**
  * Placement UI that mirrors the capture flow but places a selected vault relatively to the clicked face.
@@ -37,7 +34,7 @@ public class VaultPlacementMenu extends ChildMenuImp {
     private final UUID vaultId;
 
     /** Configurable menu texts for placement. */
-    public static class Config implements Dto, java.io.Serializable {
+    public static class Config implements Dto {
         /** Dialog title. Supports %player%. */
         public String title = "<gold><bold>Vault Placement</bold></gold>";
         /** Instruction line explaining how to start placement. Supports %player%. */
@@ -57,7 +54,7 @@ public class VaultPlacementMenu extends ChildMenuImp {
         /** Text shown when NOT allowed to place. */
         public String placeNo = "no";
         /** Message when player lacks membership and no override permission. */
-        public String notAllowed = "<red>You must be a region member or have override permission.</red>";
+        public String notAllowed = "<red>You must be a region member/owner or have override permission.</red>";
         /** Success prefix for placement (placeholder %msg%). */
         public String placeOk = "<green>%msg%</green>";
         /** Failure prefix for placement (placeholder %msg%). */
@@ -76,13 +73,15 @@ public class VaultPlacementMenu extends ChildMenuImp {
     );
 
     private static final AutoYML<Config> YML = AutoYML.create(Config.class, "VaultPlacementMenu", DataFolder.MENUS, HEADER);
+    private final VaultUIContext context;
     private static Config cfg() { return YML.loadOrCreate(Config::new); }
     /** Ensure YAML exists. */
     public static void ensureConfig() { YML.loadOrCreate(Config::new); }
 
-    public VaultPlacementMenu(Player player, ParentMenuImp parent, UUID vaultId) {
+    public VaultPlacementMenu(Player player, ParentMenuImp parent, UUID vaultId, VaultUIContext context) {
         super(player, parent, "vault_place_" + vaultId);
         this.vaultId = vaultId;
+        this.context = context;
         setDialog(build());
     }
 
@@ -105,6 +104,17 @@ public class VaultPlacementMenu extends ChildMenuImp {
         super.open();
     }
 
+    /**
+     * Starts placement interaction capturing the next right-click on a block face.
+     * <p>
+     * Concurrency notes:
+     * <ul>
+     *   <li>Shows a configurable {@link LoadingMenu} while the placement DB operation runs asynchronously.</li>
+     *   <li>All UI updates (messages/dialog opens) are scheduled back on the main thread after the DB callback.</li>
+     *   <li>Prevents race conditions that could reopen dialogs before the DB result is available.</li>
+     * </ul>
+     * </p>
+     */
     private void startPlacement(Player actor) {
         Config config = cfg();
         VaultSessionManager.Session session = VaultStoragePlugin.getInstance().getSessionManager().getOrCreate(actor.getUniqueId());
@@ -121,7 +131,7 @@ public class VaultPlacementMenu extends ChildMenuImp {
                     session.getDynamicListener().stop();
                     if (actionbarTask[0] != null) actionbarTask[0].cancel();
                     actor.sendMessage(MiniMessageUtil.parseOrPlain(config.placementCancelled));
-                    new VaultPlacementMenu(actor, (ParentMenuImp) getParentMenu(), vaultId).open();
+                    new VaultPlacementMenu(actor, (ParentMenuImp) getParentMenu(), vaultId, context).open();
                     return;
                 }
                 if (action != Action.RIGHT_CLICK_BLOCK) return;
@@ -138,9 +148,9 @@ public class VaultPlacementMenu extends ChildMenuImp {
                 if (wgs != null) {
                     var regs = wgs.getRegionsAt(target);
                     UUID viewer = actor.getUniqueId();
-                    boolean isMember = regs.stream().anyMatch(r -> r.isMember(viewer));
+                    boolean isMemberOrOwner = regs.stream().anyMatch(r -> r.isMember(viewer) || r.isOwner(viewer));
                     boolean hasOverride = VaultPermission.ACTION_PLACE_OVERRIDE.has(actor);
-                    allowed = isMember || hasOverride;
+                    allowed = isMemberOrOwner || hasOverride;
                 }
                 if (!allowed) {
                     actor.sendMessage(MiniMessageUtil.parseOrPlain(config.notAllowed));
@@ -149,33 +159,35 @@ public class VaultPlacementMenu extends ChildMenuImp {
                 }
                 // Perform relative placement
                 VaultPlacementService placement = VaultStoragePlugin.getInstance().getPlacementService();
-                // Show loading dialog while placement is processed
-                {
-                    AutoDialog.Builder lb = getAutoDialogBuilder();
-                    lb.title(MiniMessageUtil.parseOrPlain(config.title, Map.of("%player%", actor.getName())));
-                    lb.canCloseWithEscape(false);
-                    lb.afterAction(DialogBase.DialogAfterAction.CLOSE);
-                    lb.addBody(DialogBody.plainMessage(MiniMessageUtil.parseOrPlain(config.loading)));
-                    setDialog(lb.build());
-                    VaultPlacementMenu.super.open();
-                }
+                // Show configurable LoadingMenu while placement is processed
+                new LoadingMenu(actor, getParentMenu(), Map.of("%player%", actor.getName(), "%vault%", String.valueOf(vaultId))).open();
                 placement.placeFromDatabaseRelativeAsync(vaultId, targetLoc, result -> {
-                    Map<String,String> ph = Map.of("%msg%", result.message());
-                    actor.sendMessage(MiniMessageUtil.parseOrPlain(result.success() ? config.placeOk : config.placeFail, ph));
-                    // Only reopen list if there are vaults left in this world (same criterion as VaultListMenu)
-                    if (result.success()) {
-                        VaultService vs = VaultStoragePlugin.getInstance().getVaultService();
-                        List<net.democracycraft.vault.internal.database.entity.VaultEntity> restantes = vs.listInWorld(actor.getWorld().getUID());
-                        if (!restantes.isEmpty()) {
-                            new VaultListMenu(actor, (ParentMenuImp) getParentMenu(), "").open();
-                        } else {
-                            actor.sendMessage("You have no more vaults to place in this world.");
-                            actor.closeDialog();
-                        }
-                    } else {
-                        // On failure, allow retry by showing the list
-                        new VaultListMenu(actor, (ParentMenuImp) getParentMenu(), "").open();
+                    var plugin = VaultStoragePlugin.getInstance();
+                    // Compute follow-up state (remaining vaults) off the main thread if possible
+                    boolean hasAnyInWorld;
+                    try {
+                        var vs = plugin.getVaultService();
+                        hasAnyInWorld = !vs.listInWorld(actor.getWorld().getUID()).isEmpty();
+                    } catch (Throwable t) {
+                        hasAnyInWorld = true; // be lenient on failure
                     }
+                    final boolean ok = result.success();
+                    final boolean hasAny = hasAnyInWorld;
+                    new BukkitRunnable() { @Override public void run() {
+                        // Back on main: notify and open proper dialog
+                        Map<String,String> ph = java.util.Map.of("%msg%", result.message());
+                        actor.sendMessage(MiniMessageUtil.parseOrPlain(ok ? config.placeOk : config.placeFail, ph));
+                        if (ok) {
+                            if (hasAny) {
+                                new VaultListMenu(actor, (ParentMenuImp) getParentMenu(), context, "").open();
+                            } else {
+                                actor.sendMessage("You have no more vaults to place in this world.");
+                                actor.closeDialog();
+                            }
+                        } else {
+                            new VaultListMenu(actor, (ParentMenuImp) getParentMenu(), context, "").open();
+                        }
+                    }}.runTask(plugin);
                 });
                 // Stop placement session after a single placement
                 session.getDynamicListener().stop();

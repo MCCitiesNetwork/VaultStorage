@@ -49,19 +49,25 @@ public record VaultServiceImpl(VaultDAO dao) implements VaultService {
                                       @Nullable String material, @Nullable String blockData,
                                       @NotNull List<ItemStack> contents) {
         VaultEntity entity = createVault(worldUuid, x, y, z, ownerUuid, material, blockData);
-        // Persist items
-        if (contents != null) {
+        // Persist items using batch to reduce round-trips.
+        if (!contents.isEmpty()) {
+            List<VaultItemEntity> batch = new ArrayList<>(contents.size());
             for (int i = 0; i < contents.size(); i++) {
                 ItemStack it = contents.get(i);
                 if (it == null || it.getAmount() <= 0) continue;
-                dao.putItem(entity.uuid, i, it.getAmount(), ItemSerialization.toBytes(it));
+                VaultItemEntity ve = new VaultItemEntity();
+                ve.vaultUuid = entity.uuid; // ensured by putItems but set for clarity
+                ve.slot = i;
+                ve.amount = it.getAmount();
+                ve.item = ItemSerialization.toBytes(it);
+                batch.add(ve);
             }
+            if (!batch.isEmpty()) dao.putItems(entity.uuid, batch);
         }
-        // Build Vault object with contents
         World world = Bukkit.getWorld(worldUuid);
         Location loc = world == null ? null : new Location(world, x, y, z);
         Material mat = material == null ? null : safeMaterial(material);
-        return new VaultImp(ownerUuid, entity.uuid, contents == null ? List.of() : contents, mat, loc,
+        return new VaultImp(ownerUuid, entity.uuid, contents, mat, loc,
                 entity.createdAtEpochMillis == null ? Instant.now() : Instant.ofEpochMilli(entity.createdAtEpochMillis),
                 blockData);
     }
@@ -117,6 +123,18 @@ public record VaultServiceImpl(VaultDAO dao) implements VaultService {
     public void putItem(@NotNull UUID vaultUuid, int slot, int amount, byte[] itemBytes) {
         Objects.requireNonNull(vaultUuid, "vaultUuid");
         dao.putItem(vaultUuid, slot, amount, itemBytes);
+    }
+
+    /**
+     * Batch insert/update implementation delegating to DAO.
+     * Assumes all rows belong to the same vaultUuid.
+     */
+    @Override
+    public void putItems(@NotNull UUID vaultUuid, @NotNull List<VaultItemEntity> items) {
+        Objects.requireNonNull(vaultUuid, "vaultUuid");
+        Objects.requireNonNull(items, "items");
+        if (items.isEmpty()) return;
+        dao.putItems(vaultUuid, items);
     }
 
     @Override

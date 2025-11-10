@@ -10,6 +10,8 @@ import net.democracycraft.vault.api.service.BoltService;
 import net.democracycraft.vault.api.service.WorldGuardService;
 import net.democracycraft.vault.api.ui.AutoDialog;
 import net.democracycraft.vault.api.ui.ParentMenu;
+import net.democracycraft.vault.internal.security.VaultCapturePolicy;
+import net.democracycraft.vault.internal.security.VaultPermission;
 import net.democracycraft.vault.internal.util.config.DataFolder;
 import net.democracycraft.vault.internal.util.minimessage.MiniMessageUtil;
 import net.democracycraft.vault.internal.util.yml.AutoYML;
@@ -132,7 +134,10 @@ public class VaultRegionListMenu extends ChildMenuImp {
                 if (currentPage < pages - 1) builder.button(MiniMessageUtil.parseOrPlain(config.nextPageBtn), ctx -> new VaultRegionListMenu(ctx.player(), getParentMenu(), subsetIds, currentPage + 1).open());
             }
 
-            builder.button(MiniMessageUtil.parseOrPlain(config.backBtn), ctx -> new VaultScanMenu(ctx.player(), getParentMenu()).open());
+            builder.button(MiniMessageUtil.parseOrPlain(config.backBtn), ctx -> {
+                VaultUIContext backCtx = VaultPermission.ADMIN.has(ctx.player()) ? VaultUIContext.admin(ctx.player().getUniqueId()) : VaultUIContext.self(ctx.player().getUniqueId());
+                new VaultScanMenu(ctx.player(), getParentMenu(), backCtx).open();
+            });
             return builder.build();
         }
 
@@ -177,7 +182,10 @@ public class VaultRegionListMenu extends ChildMenuImp {
             if (currentPage < pages - 1) builder.button(MiniMessageUtil.parseOrPlain(config.nextPageBtn), ctx -> new VaultRegionListMenu(ctx.player(), getParentMenu(), query, currentPage + 1).open());
         }
 
-        builder.button(MiniMessageUtil.parseOrPlain(config.backBtn), ctx -> new VaultScanMenu(ctx.player(), getParentMenu()).open());
+        builder.button(MiniMessageUtil.parseOrPlain(config.backBtn), ctx -> {
+            VaultUIContext backCtx = VaultPermission.ADMIN.has(ctx.player()) ? VaultUIContext.admin(ctx.player().getUniqueId()) : VaultUIContext.self(ctx.player().getUniqueId());
+            new VaultScanMenu(ctx.player(), getParentMenu(), backCtx).open();
+        });
         return builder.build();
     }
 
@@ -187,10 +195,17 @@ public class VaultRegionListMenu extends ChildMenuImp {
         super.open();
     }
 
+    /**
+     * Opens the scan results menu for a selected region applying permission-based filtering.
+     * <p>Context rules: ADMIN -> full (no owner filter); USER -> self-filter.</p>
+     * @param player actor opening results
+     * @param regionId target region identifier
+     */
     private void openResultsFor(Player player, String regionId) {
         List<Block> blocks = computeEntries(player, regionId);
         if (blocks == null) return; // message already shown
-        new VaultScanMenu(player, getParentMenu(), regionId, blocks).open();
+        VaultUIContext context = VaultPermission.ADMIN.has(player) ? VaultUIContext.admin(player.getUniqueId()) : VaultUIContext.self(player.getUniqueId());
+        new VaultScanMenu(player, getParentMenu(), context, regionId, blocks).open();
     }
 
     private List<VaultRegion> filterAndSort(List<VaultRegion> all, String filter) {
@@ -219,10 +234,16 @@ public class VaultRegionListMenu extends ChildMenuImp {
         BoundingBox box = region.boundingBox();
         List<Block> protectedBlocks = bolt.getProtectedBlocksIn(box, player.getWorld());
         List<Block> out = new ArrayList<>();
+        boolean admin = VaultPermission.ADMIN.has(player);
+        UUID filterOwner = admin ? null : player.getUniqueId();
         for (Block b : protectedBlocks) {
-            UUID owner = bolt.getOwner(b);
-            if (owner == null) continue;
-            if (region.isOwner(owner) || region.isMember(owner)) continue;
+            // Centralized policy gate
+            var decision = VaultCapturePolicy.evaluate(player, b);
+            if (!decision.allowed()) continue;
+            if (filterOwner != null) {
+                UUID owner = bolt.getOwner(b);
+                if (owner == null || !owner.equals(filterOwner)) continue;
+            }
             out.add(b);
         }
         return out;

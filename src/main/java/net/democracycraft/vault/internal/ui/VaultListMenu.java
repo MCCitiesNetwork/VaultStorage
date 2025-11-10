@@ -27,6 +27,7 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class VaultListMenu extends ChildMenuImp {
 
+    private final VaultUIContext uiContext;
     private final String query;
     private final List<Entry> entries;
 
@@ -75,8 +76,9 @@ public class VaultListMenu extends ChildMenuImp {
     private static Config cfg() { return YML.loadOrCreate(Config::new); }
 
     /** Creates a menu and triggers async loading with the given query. */
-    public VaultListMenu(Player player, ParentMenuImp parent, String query) {
+    public VaultListMenu(Player player, ParentMenuImp parent, VaultUIContext ctx, String query) {
         super(player, parent, "vault_list");
+        this.uiContext = ctx;
         this.query = query == null ? "" : query.trim();
         this.entries = null; // loading
         setDialog(build());
@@ -84,8 +86,9 @@ public class VaultListMenu extends ChildMenuImp {
     }
 
     /** Internal constructor with precomputed entries. */
-    private VaultListMenu(Player player, ParentMenuImp parent, String query, List<Entry> entries) {
+    private VaultListMenu(Player player, ParentMenuImp parent, VaultUIContext ctx, String query, List<Entry> entries) {
         super(player, parent, "vault_list");
+        this.uiContext = ctx;
         this.query = query == null ? "" : query.trim();
         this.entries = entries == null ? List.of() : List.copyOf(entries);
         setDialog(build());
@@ -102,11 +105,14 @@ public class VaultListMenu extends ChildMenuImp {
         builder.canCloseWithEscape(true);
         builder.afterAction(DialogBase.DialogAfterAction.CLOSE);
 
-        builder.addInput(DialogInput.text("QUERY", MiniMessageUtil.parseOrPlain(cfg.searchLabel, phQuery)).labelVisible(true).build());
-        builder.buttonWithPlayer(MiniMessageUtil.parseOrPlain(cfg.searchBtn, phQuery), null, java.time.Duration.ofMinutes(5), 1, (player, response) -> {
-            String q = Optional.ofNullable(response.getText("QUERY")).orElse("").trim();
-            new VaultListMenu(player, (ParentMenuImp) getParentMenu(), q).open();
-        });
+        // Hide search box when a strict owner filter is active
+        if (uiContext.filterOwner() == null) {
+            builder.addInput(DialogInput.text("QUERY", MiniMessageUtil.parseOrPlain(cfg.searchLabel, phQuery)).labelVisible(true).build());
+            builder.buttonWithPlayer(MiniMessageUtil.parseOrPlain(cfg.searchBtn, phQuery), null, java.time.Duration.ofMinutes(5), 1, (player, response) -> {
+                String q = Optional.ofNullable(response.getText("QUERY")).orElse("").trim();
+                new VaultListMenu(player, (ParentMenuImp) getParentMenu(), uiContext, q).open();
+            });
+        }
 
         if (entries == null) {
             builder.addBody(DialogBody.plainMessage(MiniMessageUtil.parseOrPlain(cfg.loading)));
@@ -116,7 +122,7 @@ public class VaultListMenu extends ChildMenuImp {
             for (Entry e : entries) {
                 Map<String, String> ph = Map.of("%owner%", e.ownerName(), "%index%", String.valueOf(e.indexWithinOwner()));
                 Component label = MiniMessageUtil.parseOrPlain(cfg.itemFormat, ph);
-                builder.button(label, ctx -> new VaultActionMenu(ctx.player(), (ParentMenuImp) getParentMenu(), e.id()).open());
+                builder.button(label, ctx -> new VaultActionMenu(ctx.player(), (ParentMenuImp) getParentMenu(), uiContext, e.id()).open());
             }
         }
 
@@ -131,12 +137,17 @@ public class VaultListMenu extends ChildMenuImp {
             @Override public void run() {
                 VaultService vs = plugin.getVaultService();
                 List<net.democracycraft.vault.internal.database.entity.VaultEntity> vaults;
-                String q = VaultListMenu.this.query;
-                if (q == null || q.isBlank()) {
-                    vaults = vs.listInWorld(p.getWorld().getUID());
+                if (uiContext.filterOwner() != null) {
+                    // Strict filter by owner
+                    vaults = vs.listByOwner(uiContext.filterOwner());
                 } else {
-                    UUID owner = parseUuidOrName(q);
-                    if (owner != null) vaults = vs.listByOwner(owner); else vaults = List.of();
+                    String q = VaultListMenu.this.query;
+                    if (q == null || q.isBlank()) {
+                        vaults = vs.listInWorld(p.getWorld().getUID());
+                    } else {
+                        UUID owner = parseUuidOrName(q);
+                        if (owner != null) vaults = vs.listByOwner(owner); else vaults = List.of();
+                    }
                 }
                 // Resolve owner names and index per owner
                 Map<UUID,Integer> ownerCounts = new ConcurrentHashMap<>();
@@ -149,7 +160,7 @@ public class VaultListMenu extends ChildMenuImp {
                 }
                 new BukkitRunnable() {
                     @Override public void run() {
-                        new VaultListMenu(p, (ParentMenuImp) getParentMenu(), query, out).open();
+                        new VaultListMenu(p, (ParentMenuImp) getParentMenu(), uiContext, query, out).open();
                     }
                 }.runTask(plugin);
             }

@@ -2,6 +2,7 @@ package net.democracycraft.vault;
 
 import net.democracycraft.vault.api.dao.VaultDAO;
 import net.democracycraft.vault.api.service.BoltService;
+import net.democracycraft.vault.api.service.MojangService;
 import net.democracycraft.vault.api.service.VaultService;
 import net.democracycraft.vault.api.service.WorldGuardService;
 import net.democracycraft.vault.internal.command.VaultCommand;
@@ -9,20 +10,16 @@ import net.democracycraft.vault.internal.database.DatabaseSchema;
 import net.democracycraft.vault.internal.database.MySQLManager;
 import net.democracycraft.vault.internal.database.dao.VaultDAOImpl;
 import net.democracycraft.vault.internal.database.entity.WorldEntity;
-import net.democracycraft.vault.internal.service.BoltServiceImp;
-import net.democracycraft.vault.internal.service.VaultServiceImpl;
+import net.democracycraft.vault.internal.service.*;
 import net.democracycraft.vault.internal.session.VaultSessionManager;
 import net.democracycraft.vault.internal.util.config.ConfigInitializer;
-import net.democracycraft.vault.internal.service.VaultCaptureService;
-import net.democracycraft.vault.internal.service.VaultPlacementService;
-import net.democracycraft.vault.internal.service.VaultInventoryService;
-import net.democracycraft.vault.internal.service.WorldGuardServiceImp;
 import net.democracycraft.vault.internal.ui.VaultActionMenu;
 import net.democracycraft.vault.internal.ui.VaultCaptureMenu;
 import net.democracycraft.vault.internal.ui.VaultListMenu;
 import net.democracycraft.vault.internal.ui.VaultScanMenu;
 import net.democracycraft.vault.internal.ui.VaultRegionListMenu;
 import net.democracycraft.vault.internal.ui.VaultPlacementMenu;
+import net.democracycraft.vault.internal.ui.LoadingMenu;
 import net.democracycraft.vault.internal.security.VaultPermission;
 import org.bukkit.Bukkit;
 import org.bukkit.World;
@@ -43,7 +40,9 @@ public final class VaultStoragePlugin extends JavaPlugin {
     private VaultPlacementService placementService;
     private VaultInventoryService inventoryService;
 
+
     // Integration services
+    private MojangService mojangService;
     private VaultService vaultService;
     private WorldGuardService worldGuardService;
     private BoltService boltService;
@@ -73,6 +72,8 @@ public final class VaultStoragePlugin extends JavaPlugin {
 
     /** Reusable inventory domain service. */
     public VaultInventoryService getInventoryService() { return inventoryService; }
+
+    public MojangService getMojangService() { return mojangService; }
 
     @Override
     public void onEnable() {
@@ -106,6 +107,10 @@ public final class VaultStoragePlugin extends JavaPlugin {
         this.placementService = new VaultPlacementService();
         this.inventoryService = new VaultInventoryService();
 
+        // External lookup services
+        this.mojangService = new MojangServiceImpl();
+        getServer().getServicesManager().register(MojangService.class, this.mojangService, this, ServicePriority.Normal);
+
         // Ensure menu YAMLs exist at startup
         VaultCaptureMenu.ensureConfig();
         VaultListMenu.ensureConfig();
@@ -113,6 +118,7 @@ public final class VaultStoragePlugin extends JavaPlugin {
         VaultScanMenu.ensureConfig();
         VaultRegionListMenu.ensureConfig();
         VaultPlacementMenu.ensureConfig();
+        LoadingMenu.ensureConfig();
 
         if (getCommand("vault") != null) {
             var cmd = new VaultCommand();
