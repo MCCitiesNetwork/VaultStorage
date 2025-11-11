@@ -235,9 +235,10 @@ public class VaultRegionListMenu extends ChildMenuImp {
         List<Block> protectedBlocks = bolt.getProtectedBlocksIn(box, player.getWorld());
         List<Block> out = new ArrayList<>();
         boolean admin = VaultPermission.ADMIN.has(player);
-        UUID filterOwner = admin ? null : player.getUniqueId();
+        boolean actorOwnsRegion = region.isOwner(player.getUniqueId());
+        UUID filterOwner = admin ? null : (actorOwnsRegion ? null : player.getUniqueId());
+        // When actor is owner of the region, do NOT apply self-filter; rely solely on the centralized policy decision per block.
         for (Block b : protectedBlocks) {
-            // Centralized policy gate
             var decision = VaultCapturePolicy.evaluate(player, b);
             if (!decision.allowed()) continue;
             if (filterOwner != null) {

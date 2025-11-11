@@ -20,10 +20,18 @@ public record VaultDAOImpl(DatabaseSchema schema) implements VaultDAO {
         Objects.requireNonNull(ownerUuid, "ownerUuid");
         // Insert vault row first
         schema.vaults().insertOrUpdateSync(vault);
-        // Verify persistence
         VaultEntity persisted = schema.vaults().findBy("uuid", vault.uuid);
         if (persisted == null) {
-            throw new IllegalStateException("Vault row was not persisted for uuid " + vault.uuid);
+            // Retry once with a fresh UUID (possible silent collision / race in underlying store)
+            UUID original = vault.uuid;
+            vault.uuid = UUID.randomUUID();
+            schema.vaults().insertOrUpdateSync(vault);
+            persisted = schema.vaults().findBy("uuid", vault.uuid);
+            if (persisted == null) {
+                throw new IllegalStateException("Vault row was not persisted after retry. originalUuid=" + original + " retryUuid=" + vault.uuid +
+                        " worldUuid=" + vault.worldUuid + " x=" + vault.x + " y=" + vault.y + " z=" + vault.z +
+                        " material=" + vault.material + " blockDataLen=" + (vault.blockData == null ? 0 : vault.blockData.length()));
+            }
         }
         // Insert owner row
         VaultOwnerEntity owner = new VaultOwnerEntity();

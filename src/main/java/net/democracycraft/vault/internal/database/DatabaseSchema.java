@@ -43,8 +43,12 @@ public class DatabaseSchema {
         // Constraints and indexes (ignore if they already exist)
         mysql.withConnection(conn -> {
             try (var st = conn.createStatement()) {
-                // Unique vault location per world
-                st.execute("ALTER TABLE `vaults` ADD UNIQUE `uq_vault_loc` (`worldUuid`,`x`,`y`,`z`)");
+                // If legacy unique index exists for location, drop it to allow multiple vaults at same coords
+                st.execute("ALTER TABLE `vaults` DROP INDEX `uq_vault_loc`");
+            } catch (Exception ignored) {}
+
+            try (var st = conn.createStatement()) {
+                st.execute("CREATE INDEX `idx_vault_loc` ON `vaults`(`worldUuid`,`x`,`y`,`z`)");
             } catch (Exception ignored) {}
 
             try (var st = conn.createStatement()) {

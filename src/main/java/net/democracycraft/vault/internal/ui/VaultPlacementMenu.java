@@ -10,6 +10,7 @@ import net.democracycraft.vault.api.ui.AutoDialog;
 import net.democracycraft.vault.internal.security.VaultPermission;
 import net.democracycraft.vault.internal.service.VaultPlacementService;
 import net.democracycraft.vault.internal.session.VaultSessionManager;
+import net.democracycraft.vault.internal.session.VaultSessionManager.Mode;
 import net.democracycraft.vault.internal.util.config.DataFolder;
 import net.democracycraft.vault.internal.util.minimessage.MiniMessageUtil;
 import net.democracycraft.vault.internal.util.yml.AutoYML;
@@ -118,6 +119,8 @@ public class VaultPlacementMenu extends ChildMenuImp {
     private void startPlacement(Player actor) {
         Config config = cfg();
         VaultSessionManager.Session session = VaultStoragePlugin.getInstance().getSessionManager().getOrCreate(actor.getUniqueId());
+        // Switch to PLACEMENT mode, cancelling any prior capture/placement state
+        session.switchTo(Mode.PLACEMENT);
         final org.bukkit.scheduler.BukkitTask[] actionbarTask = new org.bukkit.scheduler.BukkitTask[1];
 
         session.getDynamicListener().setListener(new Listener() {
@@ -125,24 +128,23 @@ public class VaultPlacementMenu extends ChildMenuImp {
             public void onInteract(PlayerInteractEvent event) {
                 if (!event.getPlayer().getUniqueId().equals(actor.getUniqueId())) return;
                 Action action = event.getAction();
-                // Always cancel to avoid unintended interactions
                 event.setCancelled(true);
                 if (action == Action.LEFT_CLICK_AIR || action == Action.LEFT_CLICK_BLOCK) {
                     session.getDynamicListener().stop();
                     if (actionbarTask[0] != null) actionbarTask[0].cancel();
+                    session.clearActionBarTask();
+                    session.switchTo(Mode.NONE);
                     actor.sendMessage(MiniMessageUtil.parseOrPlain(config.placementCancelled));
-                    new VaultPlacementMenu(actor, (ParentMenuImp) getParentMenu(), vaultId, context).open();
-                    return;
+                    return; // Do NOT reopen menu
                 }
                 if (action != Action.RIGHT_CLICK_BLOCK) return;
                 Block clicked = event.getClickedBlock();
                 if (clicked == null) return;
-                // Compute target adjacent block by face
                 BlockFace face = event.getBlockFace();
                 Block target = clicked.getRelative(face);
                 Location targetLoc = target.getLocation();
 
-                // Enforce membership/override at target -- uses bbox at target coordinates
+                // Membership/override check
                 WorldGuardService wgs = VaultStoragePlugin.getInstance().getWorldGuardService();
                 boolean allowed = true;
                 if (wgs != null) {
@@ -154,49 +156,54 @@ public class VaultPlacementMenu extends ChildMenuImp {
                 }
                 if (!allowed) {
                     actor.sendMessage(MiniMessageUtil.parseOrPlain(config.notAllowed));
-                    // stay in placement mode
-                    return;
+                    return; // Stay in placement mode
                 }
-                // Perform relative placement
+
                 VaultPlacementService placement = VaultStoragePlugin.getInstance().getPlacementService();
-                // Show configurable LoadingMenu while placement is processed
                 new LoadingMenu(actor, getParentMenu(), Map.of("%player%", actor.getName(), "%vault%", String.valueOf(vaultId))).open();
+                // Stop session listener and actionbar (single placement then exit mode)
+                session.getDynamicListener().stop();
+                if (actionbarTask[0] != null) actionbarTask[0].cancel();
+                session.clearActionBarTask();
+                session.switchTo(Mode.NONE);
+
                 placement.placeFromDatabaseRelativeAsync(vaultId, targetLoc, result -> {
                     var plugin = VaultStoragePlugin.getInstance();
-                    // Compute follow-up state (remaining vaults) off the main thread if possible
-                    boolean hasAnyInWorld;
-                    try {
-                        var vs = plugin.getVaultService();
-                        hasAnyInWorld = !vs.listInWorld(actor.getWorld().getUID()).isEmpty();
-                    } catch (Throwable t) {
-                        hasAnyInWorld = true; // be lenient on failure
-                    }
-                    final boolean ok = result.success();
-                    final boolean hasAny = hasAnyInWorld;
                     new BukkitRunnable() { @Override public void run() {
-                        // Back on main: notify and open proper dialog
                         Map<String,String> ph = java.util.Map.of("%msg%", result.message());
-                        actor.sendMessage(MiniMessageUtil.parseOrPlain(ok ? config.placeOk : config.placeFail, ph));
-                        if (ok) {
-                            if (hasAny) {
+                        actor.sendMessage(MiniMessageUtil.parseOrPlain(result.success() ? config.placeOk : config.placeFail, ph));
+                        if (result.success()) {
+                            // Re-query vaults synchronously to determine if any remain
+                            try {
+                                var vs = plugin.getVaultService();
+                                UUID worldId = actor.getWorld().getUID();
+                                boolean anyLeft;
+                                if (context.filterOwner() != null) {
+                                    var owned = vs.listByOwner(context.filterOwner());
+                                    anyLeft = owned.stream().anyMatch(v -> worldId.equals(v.worldUuid));
+                                } else {
+                                    anyLeft = !vs.listInWorld(worldId).isEmpty();
+                                }
+                                if (anyLeft) {
+                                    new VaultListMenu(actor, (ParentMenuImp) getParentMenu(), context, "").open();
+                                } else {
+                                    actor.sendMessage("You have no more vaults to place in this world.");
+                                    actor.closeDialog();
+                                }
+                            } catch (Throwable t) {
+                                // On error, fallback to list menu for recovery
                                 new VaultListMenu(actor, (ParentMenuImp) getParentMenu(), context, "").open();
-                            } else {
-                                actor.sendMessage("You have no more vaults to place in this world.");
-                                actor.closeDialog();
                             }
                         } else {
+                            // Failure: return to list for retry
                             new VaultListMenu(actor, (ParentMenuImp) getParentMenu(), context, "").open();
                         }
                     }}.runTask(plugin);
                 });
-                // Stop placement session after a single placement
-                session.getDynamicListener().stop();
-                if (actionbarTask[0] != null) actionbarTask[0].cancel();
-                return;
             }
         });
 
-        // Actionbar updater
+        // Actionbar updater registered in session for cleanup when switching modes
         actionbarTask[0] = new BukkitRunnable() {
             @Override public void run() {
                 if (!actor.isOnline()) { cancel(); return; }
@@ -207,7 +214,7 @@ public class VaultPlacementMenu extends ChildMenuImp {
                 if (wgs != null) {
                     var regs = wgs.getRegionsAt(target);
                     UUID viewer = actor.getUniqueId();
-                    isMember = regs.stream().anyMatch(r -> r.isMember(viewer));
+                    isMember = regs.stream().anyMatch(r -> r.isMember(viewer) || r.isOwner(viewer));
                 }
                 boolean hasOverride = VaultPermission.ACTION_PLACE_OVERRIDE.has(actor);
                 boolean allowed = isMember || hasOverride;
@@ -215,6 +222,7 @@ public class VaultPlacementMenu extends ChildMenuImp {
                 actor.sendActionBar(MiniMessageUtil.parseOrPlain(config.actionBarTarget, ph));
             }
         }.runTaskTimer(VaultStoragePlugin.getInstance(), 0L, 5L);
+        session.setActionBarTask(actionbarTask[0]);
 
         session.getDynamicListener().start();
         actor.closeDialog();

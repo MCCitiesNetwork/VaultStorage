@@ -1,9 +1,7 @@
 package net.democracycraft.vault.internal.util.config;
 
 public enum DataFolder {
-    PERMISSIONS("permissions"),
-    MENUS("menus"),
-    EXPORTS("exports");
+    MENUS("menus");
 
 
     private final String path;

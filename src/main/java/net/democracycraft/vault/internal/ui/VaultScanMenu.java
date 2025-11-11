@@ -15,6 +15,7 @@ import net.democracycraft.vault.internal.database.entity.VaultItemEntity;
 import net.democracycraft.vault.internal.mappable.VaultImp;
 import net.democracycraft.vault.internal.security.VaultCapturePolicy;
 import net.democracycraft.vault.internal.service.VaultCaptureService;
+import net.democracycraft.vault.internal.service.VaultCaptureService.CaptureOutcome;
 import net.democracycraft.vault.internal.util.config.DataFolder;
 import net.democracycraft.vault.internal.util.item.ItemSerialization;
 import net.democracycraft.vault.internal.util.minimessage.MiniMessageUtil;
@@ -36,15 +37,16 @@ import java.util.*;
  * Child menu dedicated to initiating a scan flow: search regions by query or use the current location (Here).
  * Region selection is handled in a separate child menu to keep buttons grouped and clean at the bottom.
  * <p>
- * Filtering rules:
+ * Filtering rules (now apply to any Bolt-protected block, not just containers):
  * <ul>
- *   <li>When constructed via {@link VaultScanMenu#VaultScanMenu(Player, ParentMenu)} or with a self {@link VaultUIContext}, the scan is <b>owner-filtered</b> to the actor (only containers whose Bolt owner equals the player).</li>
+ *   <li>When constructed via {@link VaultScanMenu#VaultScanMenu(Player, ParentMenu)} or with a self {@link VaultUIContext}, the scan is <b>owner-filtered</b> to the actor (only blocks whose Bolt owner equals the player).</li>
  *   <li>If an admin {@link VaultUIContext} without filterOwner is provided, results are not owner-filtered.</li>
- *   <li>All candidate containers are additionally validated by the centralized {@link net.democracycraft.vault.internal.security.VaultCapturePolicy} to enforce region/ownership rules.</li>
+ *   <li>All candidate blocks are validated by {@link VaultCapturePolicy} to enforce region/ownership rules.</li>
  * </ul>
- * Empty container handling:
+ * Empty and non-container handling:
  * <ul>
- *   <li>When vaulting from the scan results, empty containers are skipped (block removed, protection removed) and the configurable message {@code emptyCaptureSkipped} is shown.</li>
+ *   <li>Non-container blocks, and containers with empty inventory, behave like an "empty capture": Bolt protection is removed but no vault is persisted.</li>
+ *   <li>Containers with items are vaulted and removed; remaining halves of double chests are re-protected.</li>
  * </ul>
  */
 public class VaultScanMenu extends ChildMenuImp {
@@ -54,19 +56,17 @@ public class VaultScanMenu extends ChildMenuImp {
         /** Dialog title. Placeholders: %player% */
         public String title = "<gold><bold>Vault Scan</bold></gold>";
         /** Message when no results. */
-        public String noneFound = "<gray>No protected containers found in this region.</gray>";
+        public String noneFound = "<gray>No protected blocks found in this region.</gray>";
         /** Error when services missing. */
         public String servicesMissing = "<red>Scan unavailable: services not ready.</red>";
-        /** Error when target block is not a container. */
-        public String notAContainer = "<red>Target is not a container.</red>";
         /** Message after successful vault action for an entry. */
-        public String vaultedOk = "Container vaulted.";
-        /** Message when the target container is empty and nothing is persisted. */
-        public String emptyCaptureSkipped = "Container empty; nothing captured.";
+        public String vaultedOk = "Block vaulted.";
+        /** Message when the target resulted in no persisted vault (non-container or empty container). */
+        public String emptyCaptureSkipped = "Block has no contents; nothing captured.";
         /** Results header. Placeholders: %region% %count% */
         public String resultsHeader = "<gold><bold>Region %region%</bold></gold> <gray>(%count% results)</gray>";
-        /** Per-entry descriptive line. Placeholders: %x% %y% %z% %owner% */
-        public String entryLine = "<gray>- </gray><white>(%x%, %y%, %z%)</white> <gray>owner:</gray> <white>%owner%</white>";
+        /** Per-entry descriptive line. Placeholders: %x% %y% %z% %owner% %kind% %vaultable% */
+        public String entryLine = "<gray>- </gray><white>(%x%, %y%, %z%)</white> <gray>owner:</gray> <white>%owner%</white> <gray>|</gray> <white>%kind%</white> <gray>| vaultable:</gray> <white>%vaultable%</white>";
         /** Button label for vault action. */
         public String entryVaultButton = "<yellow>(vault)</yellow>";
         /** Button label for teleport action. */
@@ -83,7 +83,7 @@ public class VaultScanMenu extends ChildMenuImp {
         /** Message when Bolt has no owner and the player becomes the vault owner. */
         public String noBoltOwner = "<yellow>No Bolt owner found; you will be set as the vault owner.</yellow>";
         /** Message when actor not allowed to vault an entry (overlapping-region policy). */
-        public String notAllowed = "<red>Not allowed by region/container rules.</red>";
+        public String notAllowed = "<red>Not allowed by region/block rules.</red>";
         /** Optional per-entry vaultable flag yes. */
         public String vaultableYes = "yes";
         /** Optional per-entry vaultable flag no. */
@@ -227,9 +227,15 @@ public class VaultScanMenu extends ChildMenuImp {
             Block entryBlock = entries.get(i);
             UUID ownerUuid = boltService != null ? boltService.getOwner(entryBlock) : null;
             String ownerName = ownerUuid == null ? "unknown" : Optional.ofNullable(Bukkit.getOfflinePlayer(ownerUuid).getName()).orElse(ownerUuid.toString());
+            String kind = (entryBlock.getState() instanceof Container) ? "container" : "block";
+            // Evaluate current vaultability (should generally be allowed because of filtering, but compute for display)
+            var decision = VaultCapturePolicy.evaluate(getPlayer(), entryBlock);
+            String vaultable = decision.allowed() ? cfg().vaultableYes : cfg().vaultableNo;
             Map<String,String> placeholdersEntry = Map.of(
                     "%x%", String.valueOf(entryBlock.getX()), "%y%", String.valueOf(entryBlock.getY()), "%z%", String.valueOf(entryBlock.getZ()),
-                    "%owner%", ownerName
+                    "%owner%", ownerName,
+                    "%kind%", kind,
+                    "%vaultable%", vaultable
             );
             builder.addBody(DialogBody.plainMessage(MiniMessageUtil.parseOrPlain(config.entryLine, placeholdersEntry)));
             // Vault button for this entry
@@ -239,31 +245,22 @@ public class VaultScanMenu extends ChildMenuImp {
                 new BukkitRunnable() {
                     @Override public void run() {
                         Block targetBlock = ctx.player().getWorld().getBlockAt(entryBlock.getX(), entryBlock.getY(), entryBlock.getZ());
-                        if (!(targetBlock.getState() instanceof Container)) {
-                            ctx.player().sendMessage(MiniMessageUtil.parseOrPlain(config.notAContainer));
-                            return;
-                        }
                         BoltService boltSvc = VaultStoragePlugin.getInstance().getBoltService();
                         UUID originalOwner = null;
                         if (boltSvc != null) { try { originalOwner = boltSvc.getOwner(targetBlock); } catch (Throwable ignored) {} }
 
                         // Re-evaluate authorization via centralized policy (membership may have changed)
-                        VaultCapturePolicy.Decision decision = VaultCapturePolicy.evaluateWithLog(ctx.player(), targetBlock, "ScanEntryCheck");
+                        VaultCapturePolicy.Decision decision = VaultCapturePolicy.evaluate(ctx.player(), targetBlock);
                         if (!decision.allowed()) {
                             ctx.player().sendMessage(MiniMessageUtil.parseOrPlain(config.notAllowed));
                             return;
                         }
 
-                        if (boltSvc != null && originalOwner == null && decision.hasOverride()) {
-                            ctx.player().sendMessage(MiniMessageUtil.parseOrPlain(config.noBoltOwner));
-                        }
-                        if (boltSvc != null) { try { boltSvc.removeProtection(targetBlock); } catch (Throwable ignored) {} }
+                        // Centralized capture flow (handles bolt removal, emptiness, double chest re-protection, and non-containers)
+                        VaultCaptureService capSvc = VaultStoragePlugin.getInstance().getCaptureService();
+                        CaptureOutcome outcome = capSvc.captureWithDoubleChestSupport(ctx.player(), targetBlock, originalOwner, decision.hasOverride());
 
-                        VaultCaptureService vaultCaptureService = VaultStoragePlugin.getInstance().getCaptureService();
-                        // Pre-check emptiness: if empty, skip vaulting (do not remove block) and just refresh list.
-                        boolean empty;
-                        try { empty = vaultCaptureService.isContainerEmpty(targetBlock); } catch (IllegalArgumentException ex) { empty = true; }
-                        if (empty) {
+                        if (outcome.empty()) {
                             ctx.player().sendMessage(MiniMessageUtil.parseOrPlain(config.emptyCaptureSkipped));
                             List<Block> recomputed = computeEntries(ctx.player(), regionId, config);
                             if (recomputed == null) return;
@@ -273,25 +270,28 @@ public class VaultScanMenu extends ChildMenuImp {
                             return;
                         }
 
-                        VaultImp vault = vaultCaptureService.captureFromBlock(ctx.player(), targetBlock);
+                        if (originalOwner == null && decision.hasOverride()) {
+                            ctx.player().sendMessage(MiniMessageUtil.parseOrPlain(config.noBoltOwner));
+                        }
+
+                        VaultImp vault = outcome.vault();
+                        UUID finalOwner = outcome.finalOwner();
                         var plugin = VaultStoragePlugin.getInstance();
-                        UUID finalOwner = originalOwner != null ? originalOwner : ctx.player().getUniqueId();
+
                         new BukkitRunnable() {
                             @Override public void run() {
                                 var vaultService = plugin.getVaultService();
                                 UUID worldUuid = targetBlock.getWorld().getUID();
                                 UUID newId;
                                 {
-                                    var existing = vaultService.findByLocation(worldUuid, entryBlock.getX(), entryBlock.getY(), entryBlock.getZ());
-                                    if (existing != null) { vaultService.delete(existing.uuid); }
+                                    // Allow multiple vaults at same coordinates
                                     var created = vaultService.createVault(worldUuid, entryBlock.getX(), entryBlock.getY(), entryBlock.getZ(), finalOwner,
                                             vault.blockMaterial() == null ? null : vault.blockMaterial().name(),
                                             vault.blockDataString());
                                     newId = created.uuid;
                                 }
                                 List<ItemStack> items = vault.contents();
-                                // Batch persist items to minimize DB round-trips
-                                List<VaultItemEntity> batch = new java.util.ArrayList<>(items.size());
+                                List<VaultItemEntity> batch = new ArrayList<>(items.size());
                                 for (int idx = 0; idx < items.size(); idx++) {
                                     ItemStack itemStack = items.get(idx);
                                     if (itemStack == null) continue;
@@ -311,7 +311,6 @@ public class VaultScanMenu extends ChildMenuImp {
                                     if (recomputed == null) return;
                                     int newTotal = Math.max(1, (int) Math.ceil(recomputed.size() / (double) Math.max(1, config.pageSize)));
                                     int safePage = Math.min(currentPage, newTotal - 1);
-                                    // Include uiContext when re-opening results
                                     new VaultScanMenu(ctx.player(), getParentMenu(), uiContext, regionId, recomputed, safePage).open();
                                 } }.runTask(plugin);
                             }
@@ -355,18 +354,18 @@ public class VaultScanMenu extends ChildMenuImp {
 
     /**
      * Computes candidate blocks in the region that the actor is allowed to vault per capture policy.
-     * <p>Owner filter: If {@link VaultUIContext#filterOwner()} is non-null, only containers whose Bolt owner matches that UUID are considered.</p>
+     * <p>Owner filter: If {@link VaultUIContext#filterOwner()} is non-null, only blocks whose Bolt owner matches that UUID are considered.</p>
      * <p>Policy: Each protected block is evaluated with {@link net.democracycraft.vault.internal.security.VaultCapturePolicy#evaluate(Player, Block)}; only allowed decisions pass.</p>
-     * <p>Unprotected containers are only included when the policy returns allowed (e.g. override).</p>
+     * <p>Unprotected blocks are only included when the policy returns allowed (e.g. override).</p>
      *
      * <p><strong>Region-owner behavior:</strong> When the actor is an owner of the target region, the owner filter is disabled
      * (even if {@code filterOwner} is present) and the centralized policy fully determines visibility and eligibility.
-     * For non-owners, the owner filter remains enforced so they only see their own vaultable containers.</p>
+     * For non-owners, the owner filter remains enforced so they only see their own vaultable blocks.</p>
      *
      * @param player   actor performing the scan
      * @param regionId region identifier to scan within
      * @param config   active configuration snapshot
-     * @return list of vaultable container blocks (may be empty), or null if services missing / region not found
+     * @return list of vaultable blocks (may be empty), or null if services missing / region not found
      */
     private List<Block> computeEntries(Player player, String regionId, Config config) {
         World world = player.getWorld();

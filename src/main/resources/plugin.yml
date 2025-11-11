@@ -1,5 +1,5 @@
 name: VaultStorage
-version: '1.0.10-SNAPSHOT'
+version: '1.0.0'
 main: net.democracycraft.vault.VaultStoragePlugin
 api-version: '1.21'
 authors: [ Alepando ]
@@ -30,8 +30,8 @@ permissions:
   vaultstorage.action.place:
     description: Allows placing back the original block and restoring its contents
     default: op
-  vaultstorage.action.place.override:
-    description: Allows capturing/placing vault blocks even if not a region member
+  vaultstorage.admin.override:
+    description: Allows capturing/placing vault blocks even if not a region member or outside regions
     default: false
   vaultstorage.action.capture:
     description: Allows capturing a container into a vault (requires region ownership & container ownership unless override)

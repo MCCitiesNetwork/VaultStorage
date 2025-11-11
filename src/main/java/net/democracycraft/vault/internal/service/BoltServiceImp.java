@@ -5,9 +5,6 @@ import net.democracycraft.vault.api.service.BoltService;
 import org.bukkit.Chunk;
 import org.bukkit.World;
 import org.bukkit.block.Block;
-import org.bukkit.block.BlockFace;
-import org.bukkit.block.Chest;
-import org.bukkit.block.data.type.Chest.Type;
 import org.bukkit.util.BoundingBox;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -19,9 +16,7 @@ import java.util.*;
 
 /**
  * Service implementation that integrates with Bolt to query and manage block protections.
- * <p>
- * This implementation ensures that protections are consistently applied across both halves
- * of a double chest, maintaining ownership integrity.
+ * This implementation delegates double chest handling to higher-level services.
  */
 public class BoltServiceImp implements BoltService {
 
@@ -173,9 +168,6 @@ public class BoltServiceImp implements BoltService {
 
     /**
      * Creates a protection for the given block owned by the specified player.
-     * <p>
-     * If the block is part of a double chest, this method will automatically
-     * apply the same protection to the adjacent half of the chest.
      *
      * @param block     the block to protect (not null)
      * @param ownerUuid the UUID of the protection owner (not null)
@@ -184,51 +176,7 @@ public class BoltServiceImp implements BoltService {
     public void createProtection(@NotNull Block block, @NotNull UUID ownerUuid) {
         Objects.requireNonNull(block, "block");
         Objects.requireNonNull(ownerUuid, "ownerUuid");
-
-        // Create protection for the current block
         BlockProtection protection = api.createProtection(block, ownerUuid, "private");
         api.saveProtection(protection);
-
-        // If the block is part of a double chest, also protect the other half
-        if (block.getState() instanceof Chest chest) {
-            org.bukkit.block.data.type.Chest chestData = (org.bukkit.block.data.type.Chest) chest.getBlockData();
-            if (chestData.getType() != Type.SINGLE) {
-                BlockFace connectedFace = getConnectedChestFace(chestData);
-                Block otherHalf = block.getRelative(connectedFace);
-
-                // Only protect the other half if it isn't already protected
-                if (api.findProtection(otherHalf) == null) {
-                    BlockProtection secondProtection = api.createProtection(otherHalf, ownerUuid, "private");
-                    api.saveProtection(secondProtection);
-                }
-            }
-        }
-    }
-
-    /**
-     * Determines the facing direction of the other half of a double chest.
-     *
-     * @param chestData the chest block data (not null)
-     * @return the relative face pointing toward the other half of the chest
-     */
-    private @NotNull BlockFace getConnectedChestFace(@NotNull org.bukkit.block.data.type.Chest chestData) {
-        BlockFace facing = chestData.getFacing();
-        return switch (chestData.getType()) {
-            case LEFT -> switch (facing) {
-                case NORTH -> BlockFace.EAST;
-                case SOUTH -> BlockFace.WEST;
-                case WEST -> BlockFace.NORTH;
-                case EAST -> BlockFace.SOUTH;
-                default -> BlockFace.SELF;
-            };
-            case RIGHT -> switch (facing) {
-                case NORTH -> BlockFace.WEST;
-                case SOUTH -> BlockFace.EAST;
-                case WEST -> BlockFace.SOUTH;
-                case EAST -> BlockFace.NORTH;
-                default -> BlockFace.SELF;
-            };
-            default -> BlockFace.SELF;
-        };
     }
 }
