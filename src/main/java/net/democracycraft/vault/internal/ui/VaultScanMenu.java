@@ -8,30 +8,26 @@ import net.democracycraft.vault.VaultStoragePlugin;
 import net.democracycraft.vault.api.data.Dto;
 import net.democracycraft.vault.api.region.VaultRegion;
 import net.democracycraft.vault.api.service.BoltService;
+import net.democracycraft.vault.api.service.MojangService;
 import net.democracycraft.vault.api.service.WorldGuardService;
 import net.democracycraft.vault.api.ui.AutoDialog;
 import net.democracycraft.vault.api.ui.ParentMenu;
-import net.democracycraft.vault.internal.database.entity.VaultItemEntity;
-import net.democracycraft.vault.internal.mappable.VaultImp;
 import net.democracycraft.vault.internal.security.VaultCapturePolicy;
 import net.democracycraft.vault.internal.service.VaultCaptureService;
-import net.democracycraft.vault.internal.service.VaultCaptureService.CaptureOutcome;
 import net.democracycraft.vault.internal.util.config.DataFolder;
-import net.democracycraft.vault.internal.util.item.ItemSerialization;
 import net.democracycraft.vault.internal.util.minimessage.MiniMessageUtil;
 import net.democracycraft.vault.internal.util.yml.AutoYML;
-import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.block.Container;
 import org.bukkit.entity.Player;
-import org.bukkit.inventory.ItemStack;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.util.BoundingBox;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Child menu dedicated to initiating a scan flow: search regions by query or use the current location (Here).
@@ -59,10 +55,6 @@ public class VaultScanMenu extends ChildMenuImp {
         public String noneFound = "<gray>No protected blocks found in this region.</gray>";
         /** Error when services missing. */
         public String servicesMissing = "<red>Scan unavailable: services not ready.</red>";
-        /** Message after successful vault action for an entry. */
-        public String vaultedOk = "Block vaulted.";
-        /** Message when the target resulted in no persisted vault (non-container or empty container). */
-        public String emptyCaptureSkipped = "Block has no contents; nothing captured.";
         /** Results header. Placeholders: %region% %count% */
         public String resultsHeader = "<gold><bold>Region %region%</bold></gold> <gray>(%count% results)</gray>";
         /** Per-entry descriptive line. Placeholders: %x% %y% %z% %owner% %kind% %vaultable% */
@@ -121,6 +113,9 @@ public class VaultScanMenu extends ChildMenuImp {
     /** Zero-based current page index in results mode. */
     private final int pageIndex;
     private final VaultUIContext uiContext;
+
+    /** Local cache for UUID->username to avoid repeated lookups per page. */
+    private static final ConcurrentHashMap<UUID, String> NAME_CACHE = new ConcurrentHashMap<>();
 
     public VaultScanMenu(@NotNull Player player, @NotNull ParentMenu parent) {
         this(player, parent, new VaultUIContext(player.getUniqueId(), player.getUniqueId(), false));
@@ -223,12 +218,23 @@ public class VaultScanMenu extends ChildMenuImp {
         builder.addBody(DialogBody.plainMessage(MiniMessageUtil.parseOrPlain(config.pageLabel, phPage)));
 
         BoltService boltService = VaultStoragePlugin.getInstance().getBoltService();
+        Set<UUID> toResolve = new HashSet<>();
         for (int i = startIndex; i < endIndex; i++) {
             Block entryBlock = entries.get(i);
             UUID ownerUuid = boltService != null ? boltService.getOwner(entryBlock) : null;
-            String ownerName = ownerUuid == null ? "unknown" : Optional.ofNullable(Bukkit.getOfflinePlayer(ownerUuid).getName()).orElse(ownerUuid.toString());
+            String ownerName;
+            if (ownerUuid == null) {
+                ownerName = "unknown";
+            } else {
+                String cached = NAME_CACHE.get(ownerUuid);
+                if (cached == null) {
+                    ownerName = ownerUuid.toString().substring(0, 8);
+                    toResolve.add(ownerUuid);
+                } else {
+                    ownerName = cached;
+                }
+            }
             String kind = (entryBlock.getState() instanceof Container) ? "container" : "block";
-            // Evaluate current vaultability (should generally be allowed because of filtering, but compute for display)
             var decision = VaultCapturePolicy.evaluate(getPlayer(), entryBlock);
             String vaultable = decision.allowed() ? cfg().vaultableYes : cfg().vaultableNo;
             Map<String,String> placeholdersEntry = Map.of(
@@ -242,81 +248,17 @@ public class VaultScanMenu extends ChildMenuImp {
             builder.button(MiniMessageUtil.parseOrPlain(config.entryVaultButton, placeholdersEntry), ctx -> {
                 // Show a loading menu while we process DB work
                 new LoadingMenu(ctx.player(), getParentMenu(), Map.of("%player%", ctx.player().getName())).open();
-                new BukkitRunnable() {
-                    @Override public void run() {
-                        Block targetBlock = ctx.player().getWorld().getBlockAt(entryBlock.getX(), entryBlock.getY(), entryBlock.getZ());
-                        BoltService boltSvc = VaultStoragePlugin.getInstance().getBoltService();
-                        UUID originalOwner = null;
-                        if (boltSvc != null) { try { originalOwner = boltSvc.getOwner(targetBlock); } catch (Throwable ignored) {} }
-
-                        // Re-evaluate authorization via centralized policy (membership may have changed)
-                        VaultCapturePolicy.Decision decision = VaultCapturePolicy.evaluate(ctx.player(), targetBlock);
-                        if (!decision.allowed()) {
-                            ctx.player().sendMessage(MiniMessageUtil.parseOrPlain(config.notAllowed));
-                            return;
-                        }
-
-                        // Centralized capture flow (handles bolt removal, emptiness, double chest re-protection, and non-containers)
-                        VaultCaptureService capSvc = VaultStoragePlugin.getInstance().getCaptureService();
-                        CaptureOutcome outcome = capSvc.captureWithDoubleChestSupport(ctx.player(), targetBlock, originalOwner, decision.hasOverride());
-
-                        if (outcome.empty()) {
-                            ctx.player().sendMessage(MiniMessageUtil.parseOrPlain(config.emptyCaptureSkipped));
-                            List<Block> recomputed = computeEntries(ctx.player(), regionId, config);
-                            if (recomputed == null) return;
-                            int newTotal = Math.max(1, (int) Math.ceil(recomputed.size() / (double) Math.max(1, config.pageSize)));
-                            int safePage = Math.min(currentPage, newTotal - 1);
-                            new VaultScanMenu(ctx.player(), getParentMenu(), uiContext, regionId, recomputed, safePage).open();
-                            return;
-                        }
-
-                        if (originalOwner == null && decision.hasOverride()) {
-                            ctx.player().sendMessage(MiniMessageUtil.parseOrPlain(config.noBoltOwner));
-                        }
-
-                        VaultImp vault = outcome.vault();
-                        UUID finalOwner = outcome.finalOwner();
-                        var plugin = VaultStoragePlugin.getInstance();
-
-                        new BukkitRunnable() {
-                            @Override public void run() {
-                                var vaultService = plugin.getVaultService();
-                                UUID worldUuid = targetBlock.getWorld().getUID();
-                                UUID newId;
-                                {
-                                    // Allow multiple vaults at same coordinates
-                                    var created = vaultService.createVault(worldUuid, entryBlock.getX(), entryBlock.getY(), entryBlock.getZ(), finalOwner,
-                                            vault.blockMaterial() == null ? null : vault.blockMaterial().name(),
-                                            vault.blockDataString());
-                                    newId = created.uuid;
-                                }
-                                List<ItemStack> items = vault.contents();
-                                List<VaultItemEntity> batch = new ArrayList<>(items.size());
-                                for (int idx = 0; idx < items.size(); idx++) {
-                                    ItemStack itemStack = items.get(idx);
-                                    if (itemStack == null) continue;
-                                    VaultItemEntity vie = new VaultItemEntity();
-                                    vie.vaultUuid = newId;
-                                    vie.slot = idx;
-                                    vie.amount = itemStack.getAmount();
-                                    vie.item = ItemSerialization.toBytes(itemStack);
-                                    batch.add(vie);
-                                }
-                                if (!batch.isEmpty()) {
-                                    vaultService.putItems(newId, batch);
-                                }
-                                new BukkitRunnable() { @Override public void run() {
-                                    ctx.player().sendMessage(MiniMessageUtil.parseOrPlain(config.vaultedOk));
-                                    List<Block> recomputed = computeEntries(ctx.player(), regionId, config);
-                                    if (recomputed == null) return;
-                                    int newTotal = Math.max(1, (int) Math.ceil(recomputed.size() / (double) Math.max(1, config.pageSize)));
-                                    int safePage = Math.min(currentPage, newTotal - 1);
-                                    new VaultScanMenu(ctx.player(), getParentMenu(), uiContext, regionId, recomputed, safePage).open();
-                                } }.runTask(plugin);
-                            }
-                        }.runTaskAsynchronously(plugin);
-                    }
-                }.runTask(VaultStoragePlugin.getInstance());
+                Block targetBlock = ctx.player().getWorld().getBlockAt(entryBlock.getX(), entryBlock.getY(), entryBlock.getZ());
+                VaultCaptureService capSvc = VaultStoragePlugin.getInstance().getCaptureService();
+                VaultCaptureService.SessionTexts texts = capSvc.sessionTexts();
+                capSvc.captureDirectAsync(ctx.player(), targetBlock, texts, success -> {
+                    // Refresh results after capture attempt
+                    List<Block> recomputed = computeEntries(ctx.player(), regionId, config);
+                    if (recomputed == null) return;
+                    int newTotal = Math.max(1, (int) Math.ceil(recomputed.size() / (double) Math.max(1, config.pageSize)));
+                    int safePage = Math.min(currentPage, newTotal - 1);
+                    new VaultScanMenu(ctx.player(), getParentMenu(), uiContext, regionId, recomputed, safePage).open();
+                });
             });
             // Teleport button for this entry (literal coordinates with safe centering)
             builder.button(MiniMessageUtil.parseOrPlain(config.entryTeleportButton, placeholdersEntry), ctx -> {
@@ -325,6 +267,35 @@ public class VaultScanMenu extends ChildMenuImp {
                 Location destination = new Location(ctx.player().getWorld(), entryBlock.getX() + 0.5, destY, entryBlock.getZ() + 0.5, ctx.player().getLocation().getYaw(), ctx.player().getLocation().getPitch());
                 ctx.player().teleport(destination);
             });
+        }
+
+        // Async resolve missing owner names and refresh the page if any were resolved
+        if (!toResolve.isEmpty()) {
+            var plugin = VaultStoragePlugin.getInstance();
+            new BukkitRunnable(){
+                @Override public void run(){
+                    MojangService ms = plugin.getMojangService();
+                    boolean updated = false;
+                    if (ms != null) {
+                        for (UUID u : toResolve) {
+                            try {
+                                String name = ms.getUsername(u);
+                                if (name != null && !name.isBlank()) {
+                                    NAME_CACHE.put(u, name);
+                                    updated = true;
+                                }
+                            } catch (Throwable ignored) {}
+                        }
+                    }
+                    if (updated) {
+                        new org.bukkit.scheduler.BukkitRunnable(){
+                            @Override public void run(){
+                                new VaultScanMenu(getPlayer(), getParentMenu(), uiContext, regionId, entries, currentPage).open();
+                            }
+                        }.runTask(plugin);
+                    }
+                }
+            }.runTaskAsynchronously(plugin);
         }
 
         // Navigation buttons

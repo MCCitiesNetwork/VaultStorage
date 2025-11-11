@@ -33,45 +33,32 @@ public class MojangServiceImpl implements MojangService {
     private static final String NAME_HISTORY_URL = "https://api.mojang.com/user/profiles/%s/names";
 
     private static final int TIMEOUT_MS = (int) TimeUnit.SECONDS.toMillis(5);
-    private static final Gson GSON = new Gson();
 
-    private static final long USERNAME_CACHE_TTL_MS = TimeUnit.MINUTES.toMillis(10);
+    private final Map<UUID, String> usernameCache = new ConcurrentHashMap<>();
 
-    /** Simple cache entry holding value and expiry. */
-    private static final class CacheEntry {
-        final String value; final long expiresAt;
-        CacheEntry(String v, long e){this.value=v;this.expiresAt=e;}
-        boolean expired(){return System.currentTimeMillis()>expiresAt;}
-    }
-    /** In-memory cache for UUID->username resolution to avoid repeated API calls. */
-    private final ConcurrentHashMap<UUID, CacheEntry> usernameCache = new ConcurrentHashMap<>();
-
-    /**
-     * Resolves and caches the current username for the given player UUID.
-     * Reuses cached value if not expired. Network calls should be invoked off the main thread.
-     *
-     * @param playerUuid target player UUID
-     * @return username or null if not found
-     */
     @Override
     public String getUsername(UUID playerUuid) {
         if (playerUuid == null) return null;
-        CacheEntry cached = usernameCache.get(playerUuid);
-        if (cached != null && !cached.expired()) {
-            return cached.value;
-        }
+
+        // Check cache first
+        String cached = usernameCache.get(playerUuid);
+        if (cached != null) return cached;
+
         try {
             String url = UUID_TO_NAME_URL + playerUuid.toString().replace("-", "");
             JsonObject response = getJsonObject(url);
             String name = response != null && response.has("name") ? response.get("name").getAsString() : null;
+
             if (name != null) {
-                usernameCache.put(playerUuid, new CacheEntry(name, System.currentTimeMillis()+USERNAME_CACHE_TTL_MS));
+                usernameCache.put(playerUuid, name); // cache for full runtime
             }
             return name;
         } catch (Exception e) {
+            e.printStackTrace();
             return null;
         }
     }
+
 
     /**
      * Resolves the UUID for a given Minecraft username using Mojang's API.

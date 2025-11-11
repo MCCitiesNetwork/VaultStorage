@@ -16,14 +16,13 @@ import java.util.UUID;
 /**
  * Centralized policy to decide whether an actor can vault a target block.
  * <p>
- * Overlapping-region aware rules:
+ * Overlapping-region aware rules (owners and members are treated equally as "participants"):
  * <ul>
- *   <li>Region owner: if the actor is owner of ANY overlapping region at the block, they may vault only when the block has a Bolt owner
- *       that is not the actor and that owner is neither member nor owner of ANY overlapping region at that block.</li>
- *   <li>Region member (non-owner): if the actor is member of ANY overlapping region at the block (and not owner), they may not vault.</li>
- *   <li>Non-involved: if the actor is neither owner nor member in ALL overlapping regions at the block, they may vault only their own Bolt-owned blocks.</li>
- *   <li>Unprotected blocks (no Bolt owner) are never vaultable.</li>
- *   <li>Blocks outside of any region are vaultable only with override.</li>
+ *   <li>Participant (owner or member of any overlapping region): may vault only when the block has a Bolt owner
+ *       that is not the actor and that owner is not a participant of ANY overlapping region at that block.</li>
+ *   <li>Non-participant (not owner nor member in all overlapping regions): may vault only their own Bolt-owned blocks.</li>
+ *   <li>Unprotected blocks (no Bolt owner) are never vaultable unless override is present.</li>
+ *   <li>Blocks outside any region are vaultable only with override.</li>
  * </ul>
  * The method also returns detailed flags useful for logging and UI.
  */
@@ -31,8 +30,8 @@ public final class VaultCapturePolicy {
 
     private VaultCapturePolicy() {}
 
-    public record Decision(boolean allowed, boolean hasOverride, boolean actorOwnerAny, boolean actorMemberAny,
-                           boolean containerOwnerMemberOrOwnerAny, boolean actorIsContainerOwner,
+    public record Decision(boolean allowed, boolean hasOverride, boolean actorParticipantAny,
+                           boolean containerOwnerParticipantAny, boolean actorIsContainerOwner,
                            boolean disallowedOwnerSelf, boolean baseAllowed, UUID containerOwner, Reason reason,
                            List<RegionStatus> regionStatuses) implements Dto, Serializable {
         public enum Reason {
@@ -41,17 +40,13 @@ public final class VaultCapturePolicy {
              */
             ALLOWED,
             /**
-             * Actor is owner of an overlapping region and also container owner (self-disallow).
+             * Actor participates in an overlapping region and also is container owner (self-disallow).
              */
             OWNER_SELF_IN_REGION,
             /**
-             * Container owner (original owner) is member or owner of at least one overlapping region, blocking region-owner capture.
+             * Container owner (original owner) is participant of at least one overlapping region, blocking participant capture.
              */
             CONTAINER_OWNER_IN_OVERLAP,
-            /**
-             * Actor is member (non-owner) of an overlapping region; members cannot capture.
-             */
-            ACTOR_MEMBER_BLOCKED,
             /**
              * Actor not involved (no membership/ownership) and container is not owned by actor.
              */
@@ -67,8 +62,13 @@ public final class VaultCapturePolicy {
         }
     }
 
-    public record RegionStatus(String regionId, boolean actorOwner, boolean actorMember, boolean containerOwnerIsOwner,
-                               boolean containerOwnerIsMember) implements Dto, Serializable { }
+    public record RegionStatus(String regionId, boolean actorParticipant, boolean containerOwnerParticipates) implements Dto, Serializable {
+        /*
+         * Per-region participation snapshot.
+         * actorParticipant: true if the actor is owner or member of this specific region.
+         * containerOwnerParticipates: true if the container's Bolt owner is owner or member of this specific region.
+         */
+    }
 
     /**
      * Evaluate vaulting permission for the given actor and block.
@@ -83,9 +83,8 @@ public final class VaultCapturePolicy {
         }
         boolean actorIsContainerOwner = originalOwner != null && originalOwner.equals(actor.getUniqueId());
         WorldGuardService wgs = VaultStoragePlugin.getInstance().getWorldGuardService();
-        boolean actorOwnerAny = false;
-        boolean actorMemberAny = false;
-        boolean containerOwnerMemberOrOwnerAny = false;
+        boolean actorParticipantAny = false;
+        boolean containerOwnerParticipantAny = false;
         boolean inAnyRegion = false;
         List<RegionStatus> perRegionDebug = List.of();
         if (wgs != null) {
@@ -94,32 +93,27 @@ public final class VaultCapturePolicy {
             UUID actorUuid = actor.getUniqueId();
             List<RegionStatus> list = new ArrayList<>();
             for (var vaultRegion : regs) {
-                boolean aOwn = vaultRegion.isOwner(actorUuid);
-                boolean aMem = vaultRegion.isMember(actorUuid);
-                boolean cOwn = false;
-                boolean cMem = false;
+                boolean actorParticipant = vaultRegion.isPartOfRegion(actorUuid);
+                boolean containerOwnerIsParticipant = false;
                 if (originalOwner != null) {
-                    cOwn = vaultRegion.isOwner(originalOwner);
-                    cMem = vaultRegion.isMember(originalOwner);
+                    containerOwnerIsParticipant = vaultRegion.isPartOfRegion(originalOwner);
                 }
-                if (aOwn) actorOwnerAny = true;
-                if (aMem) actorMemberAny = true;
-                if (cOwn || cMem) containerOwnerMemberOrOwnerAny = true;
-                list.add(new RegionStatus(vaultRegion.id(), aOwn, aMem, cOwn, cMem));
+                if (actorParticipant) actorParticipantAny = true;
+                if (containerOwnerIsParticipant) containerOwnerParticipantAny = true;
+                // Store per-region booleans (not the accumulated ANY flags) for accurate debugging.
+                list.add(new RegionStatus(vaultRegion.id(), actorParticipant, containerOwnerIsParticipant));
             }
             perRegionDebug = Collections.unmodifiableList(list);
         }
 
-        boolean disallowedOwnerSelf = actorOwnerAny && actorIsContainerOwner;
+        boolean disallowedOwnerSelf = actorParticipantAny && actorIsContainerOwner;
         boolean baseAllowed;
-        if (actorOwnerAny) {
-            baseAllowed = (originalOwner != null) && !actorIsContainerOwner && !containerOwnerMemberOrOwnerAny;
-        } else if (actorMemberAny) {
-            baseAllowed = false;
+        if (actorParticipantAny) {
+            baseAllowed = (originalOwner != null) && !actorIsContainerOwner && !containerOwnerParticipantAny;
         } else {
-            baseAllowed = actorIsContainerOwner; // non-involved: only own owner blocks
+            baseAllowed = actorIsContainerOwner; // non-participant: only own blocks
         }
-        // Allowed when: has owner AND not owner-self disallowed AND (in region with base rules OR override bypasses region requirement)
+        // Allowed when: has owner AND not self-disallowed AND (in region with base rules OR override bypasses region requirement)
         boolean allowed = (originalOwner != null) && !disallowedOwnerSelf && ((inAnyRegion && baseAllowed) || hasOverride);
 
         Decision.Reason reason;
@@ -129,17 +123,15 @@ public final class VaultCapturePolicy {
             reason = Decision.Reason.NOT_IN_REGION;
         } else if (disallowedOwnerSelf) {
             reason = Decision.Reason.OWNER_SELF_IN_REGION;
-        } else if (actorMemberAny && !actorOwnerAny) {
-            reason = Decision.Reason.ACTOR_MEMBER_BLOCKED;
-        } else if (actorOwnerAny && containerOwnerMemberOrOwnerAny) {
+        } else if (actorParticipantAny && containerOwnerParticipantAny) {
             reason = Decision.Reason.CONTAINER_OWNER_IN_OVERLAP;
         } else if (originalOwner == null) {
             reason = Decision.Reason.UNPROTECTED_NO_OVERRIDE;
         } else {
             reason = Decision.Reason.NOT_INVOLVED_NOT_OWNER;
         }
-        return new Decision(allowed, hasOverride, actorOwnerAny, actorMemberAny,
-                containerOwnerMemberOrOwnerAny, actorIsContainerOwner, disallowedOwnerSelf, baseAllowed, originalOwner, reason, perRegionDebug);
+        return new Decision(allowed, hasOverride, actorParticipantAny,
+                containerOwnerParticipantAny, actorIsContainerOwner, disallowedOwnerSelf, baseAllowed, originalOwner, reason, perRegionDebug);
     }
 
 }

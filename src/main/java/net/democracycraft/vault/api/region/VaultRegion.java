@@ -37,6 +37,19 @@ public interface VaultRegion {
     boolean isOwner(@NotNull UUID playerUuid);
 
     /**
+     * Returns true when the given UUID participates in the region as either an owner or a member.
+     * <p>
+     * Important: in WorldGuard, owners are not necessarily members (and vice versa). This helper
+     * consolidates both roles for authorization logic that treats them equivalently.
+     * </p>
+     * @param playerUuid player unique id
+     * @return true if owner or member
+     */
+    default boolean isPartOfRegion(@NotNull UUID playerUuid) {
+        return isOwner(playerUuid) || isMember(playerUuid);
+    }
+
+    /**
      * Checks whether a point lies inside this region using its bounding box.
      * Note: This is an AABB check and may include points outside polygonal shapes
      * if the underlying region is non-rectangular; acceptable for fast filtering.

@@ -150,9 +150,9 @@ public class VaultPlacementMenu extends ChildMenuImp {
                 if (wgs != null) {
                     var regs = wgs.getRegionsAt(target);
                     UUID viewer = actor.getUniqueId();
-                    boolean isMemberOrOwner = regs.stream().anyMatch(r -> r.isMember(viewer) || r.isOwner(viewer));
+                    boolean isParticipant = regs.stream().anyMatch(r -> r.isPartOfRegion(viewer));
                     boolean hasOverride = VaultPermission.ACTION_PLACE_OVERRIDE.has(actor);
-                    allowed = isMemberOrOwner || hasOverride;
+                    allowed = isParticipant || hasOverride;
                 }
                 if (!allowed) {
                     actor.sendMessage(MiniMessageUtil.parseOrPlain(config.notAllowed));
@@ -210,14 +210,14 @@ public class VaultPlacementMenu extends ChildMenuImp {
                 Block target = actor.getTargetBlockExact(6);
                 if (target == null) { actor.sendActionBar(MiniMessageUtil.parseOrPlain(config.actionBarIdle)); return; }
                 WorldGuardService wgs = VaultStoragePlugin.getInstance().getWorldGuardService();
-                boolean isMember = false;
+                boolean isParticipant = false;
                 if (wgs != null) {
                     var regs = wgs.getRegionsAt(target);
                     UUID viewer = actor.getUniqueId();
-                    isMember = regs.stream().anyMatch(r -> r.isMember(viewer) || r.isOwner(viewer));
+                    isParticipant = regs.stream().anyMatch(r -> r.isPartOfRegion(viewer));
                 }
                 boolean hasOverride = VaultPermission.ACTION_PLACE_OVERRIDE.has(actor);
-                boolean allowed = isMember || hasOverride;
+                boolean allowed = isParticipant || hasOverride;
                 var ph = Map.of("%placeable%", allowed ? config.placeYes : config.placeNo);
                 actor.sendActionBar(MiniMessageUtil.parseOrPlain(config.actionBarTarget, ph));
             }

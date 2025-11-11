@@ -5,31 +5,21 @@ A Paper plugin that lets players convert container blocks into persistent “Vau
 This document is organized for three audiences: Players, Server Managers, and Developers.
 
 ## For Players (How to use it in‑game)
-Vaults are saved versions of container blocks (like chests) that you convert via a menu. The original block is removed and its items are stored safely in the database; you can open these Vaults later from anywhere.
+Vaults are saved versions of container blocks (like chests) that you convert via the in‑game menu. The original block is removed and its items are stored safely; you can open Vaults later from anywhere.
 
 What you can do:
 - Open the Vault menu: type /vault in chat.
-- Start capture mode from the menu, then right‑click any container block to convert it into a Vault.
-  - On‑screen guidance will appear. Left‑click to cancel capture at any time.
-  - While aiming a container, an action bar shows owner info and whether it’s vaultable.
+- Start capture mode from the menu, then right‑click a container block to convert it into a Vault.
+  - On‑screen guidance appears. Left‑click to cancel capture at any time.
+  - While aiming a container, an action bar shows owner info, whether it’s vaultable, and a human‑readable reason when it isn’t. If you have admin, the action bar shows an ADMIN tag.
 - Browse your saved Vaults and open one to view, copy, or edit its contents (depending on your permissions).
-- Region scan: find protected containers in a region (via the Scan menu) and vault them one by one, with teleport helpers.
+- Scan regions: find protected containers in a WorldGuard region and vault them one by one with teleport helpers.
 
-Command reference (in‑game):
-- /vault — opens the main menu.
-- /vault menu — same as /vault.
-- /vault list [mine|all] — shows your Vaults; admins may browse by world.
-- /vault open <vaultId> [view|copy|edit] — opens a specific Vault with a chosen action.
-- /vault capture — enters capture mode to vault a container by right‑clicking it.
+Command (in‑game):
+- /vault — opens the main menu (all actions flow through the menu).
 
-Capture rules (summary shown by the UI and enforced by the command):
-- With override permission, you can always capture.
-- Region owners can capture containers whose Bolt owner is NOT a member or owner of the region (and not themselves).
-- Non‑members of the region can capture their own containers (Bolt owner) only if they are NOT a member/owner at that location.
-- Members (who are not owners) cannot capture anything inside the region, not even their own containers.
-- “Vaultable: yes/no” in the action bar reflects these rules in real time.
-
-If a command says you don’t have permission, ask a server admin to enable it for you.
+Note on legacy commands:
+- As of 1.0.1, legacy subcommands (/vault list, /vault open, /vault place, /vault capture) were removed in favor of the unified menu flow via /vault.
 
 ## For Server Managers (Installation, Database, Permissions, Menus, Operations)
 
@@ -68,110 +58,60 @@ Best practices:
 Assign via your permissions plugin (examples: LuckPerms, PermissionsEx):
 - vaultstorage.user — basic usage (open menu, list, use common actions)
 - vaultstorage.admin — admin override for all plugin actions
-- vaultstorage.action.view — allow viewing a Vault’s contents in a virtual inventory (default: true)
-- vaultstorage.action.copy — allow copying items from a Vault to the player inventory (default: op)
-- vaultstorage.action.edit — allow editing Vault contents inside the virtual inventory (default: op)
-- vaultstorage.action.place — allow placing the stored block back into the world (default: op)
-- vaultstorage.action.place.override — bypass region/container checks when capturing/placing (default: op)
-- vaultstorage.action.capture — allow entering capture mode and vaulting containers (default: false)
+- vaultstorage.action.view — allow viewing a Vault’s contents in a virtual inventory
+- vaultstorage.action.copy — allow copying items from a Vault to the player inventory
+- vaultstorage.action.edit — allow editing Vault contents inside the virtual inventory
+- vaultstorage.action.place — allow placing the stored block back into the world
+- vaultstorage.admin.override — bypass region/container checks when capturing/placing
+- vaultstorage.action.capture — allow entering capture mode and vaulting containers
 
 Notes:
-- The capture/placement logic is enforced both by the menu and the /vault capture command.
-- “Override” permission bypasses region and container ownership checks.
+- The capture/placement logic is enforced by both the menu flows and internal policy.
+- “Admin override” lets you bypass region and container ownership checks; the UI will clearly indicate when override is active.
 
 ### Commands (admin view)
 - /vault — opens the main menu (requires vaultstorage.user)
-- /vault menu — explicit alias for the main menu (requires vaultstorage.user)
-- /vault list [mine|all] — list player vaults; with vaultstorage.admin, can browse per world
-- /vault open <vaultId> [view|copy|edit] — opens a Vault with the requested mode
-  - Access check: owners and admins
-- /vault place <vaultId> — attempts to place the original block back (requires vaultstorage.action.place)
-- /vault capture — enters capture mode to vault a container by right‑clicking it (requires vaultstorage.action.capture)
 
-Tab completion:
-- Subcommands complete for players with permission.
-- For /vault open, action suggestions filter by the player’s permissions.
 
-### Menu Configuration (YAML)
-Menu texts and labels are generated on first use and live under:
+### Menu and Text Configuration (YAML)
+All menu and session texts are generated on first use under:
 plugins/VaultStorage/menus/
 
 Most fields accept plain text or MiniMessage formatting (e.g., <gold>…</gold>). Changes take effect the next time a menu is opened.
 
-VaultCaptureMenu.yml
-- title — dialog title (supports %player%)
-- instruction — how to start capture (supports %player%)
-- cancelHint — how to cancel (supports %player%)
-- startBtn — button to start capture
-- browseBtn — button to browse vaults
-- closeBtn — button to close
-- captureCancelled — chat message on cancel (supports %player%)
-- notAContainer — when the target isn’t a container
+Key configuration groups:
+
+VaultCaptureSession.yml (capture session texts and action bar)
+- captureCancelled — chat message on cancel
+- notAllowed — when capture isn’t allowed by policy
+- emptyCaptureSkipped — when a non-container or empty container is “unlocked” (no vault)
 - capturedOk — after capturing successfully
-- openScanBtn — opens the scan menu
-- actionBarIdle — action bar while in capture mode
-- actionBarContainer — action bar when looking at a container; placeholders: %owner%, %vaultable%
-- actionBarUnprotectedOwner — text used when no Bolt protection is found
-- actionBarVaultableYes — shown when the container is vaultable
-- actionBarVaultableNo — shown when it isn’t
+- noBoltOwner — shown when no Bolt owner exists but override is active; the actor will become the vault owner
+- actionBarIdle — action bar while in capture mode but not looking at a valid target
+- actionBarContainer — action bar while looking at a block
+  - Placeholders: %owner%, %vaultable%, %reasonSegment%, %admin%
+- actionBarReasonSegmentTemplate — template that wraps the human‑readable reason
+- actionBarReasonAllowedBlank — empty or custom text when allowed
+- reasonOwnerSelfInRegion — text for OWNER_SELF_IN_REGION
+- reasonContainerOwnerInOverlap — text for CONTAINER_OWNER_IN_OVERLAP
+- reasonNotInvolvedNotOwner — text for NOT_INVOLVED_NOT_OWNER
+- reasonUnprotectedNoOverride — text for UNPROTECTED_NO_OVERRIDE
+- reasonNotInRegion — text for NOT_IN_REGION
+- reasonFallback — default text when no specific mapping is used
+- actionBarUnprotectedOwner — shown for unprotected containers
+- actionBarVaultableYes / actionBarVaultableNo — yes/no labels
+- adminModeEnabled — one‑time chat notification when the actor has admin override and starts capture mode
+- actionBarAdminModeTag — optional tag appended to the action bar when override is active (injected via %admin%)
 
-VaultListMenu.yml
-- title — dialog title (supports %query%)
-- searchLabel — label above the search text box (supports %query%)
-- searchBtn — search button label (supports %query%)
-- backBtn — back button label
-- noneFound — message for no results (supports %query%)
-- loading — message while loading
-- itemFormat — format per result; placeholders: %owner%, %index%
+Additional placeholders available to reason texts:
+- %owner% — resolved owner name (or short UUID) for display
+- %regions% — comma‑separated region ids at the target block
+- %reasonCode% — the policy reason code (e.g., OWNER_SELF_IN_REGION)
 
-VaultActionMenu.yml
-- title — dialog title
-- actionLabel — label for the action selector
-- openBtn — button to open inventory
-- placeBtn — button to place the block
-- backBtn — back button label
-- notFound — message when a vault doesn’t exist
-- noActions — message when no actions are available for the player
-- actionOptionFormat — label format per action; placeholder: %action%
-- inventoryTitle — title for the virtual inventory; placeholders: %id%, %action%
-- loading — loading message
-- saved — message after saving edits
-- placing — message when placing begins
-- placeOk — placement success prefix; placeholder: %msg%
-- placeFail — placement failure prefix; placeholder: %msg%
-
-VaultScanMenu.yml
-- title — dialog title (supports %player%)
-- noneFound — shown when no protected containers are found in a region
-- servicesMissing — shown when required services aren’t available
-- notAContainer — when the block isn’t a container
-- vaultedOk — after vaulting a scanned entry
-- resultsHeader — header for results view; placeholders: %region%, %count%
-- entryLine — per-entry line; placeholders: %x%, %y%, %z%, %owner%
-- entryVaultButton — label for the vault action
-- entryTeleportButton — label for teleport
-- searchLabel — label for region search
-- searchBtn — search button label
-- hereBtn — resolve regions at the player’s current position
-- regionNotFound — when a typed region doesn’t exist; placeholder: %region%
-
-VaultRegionListMenu.yml
-- title — dialog title; placeholders: %player%, %query%
-- header — above the list; placeholders: %count%, %page%, %pages%, %query%
-- regionBtn — per-region button label; placeholder: %region%
-- noneFound — when no regions match
-- prevPageBtn, nextPageBtn — pagination buttons
-- backBtn — back to scan menu
-- servicesMissing — when integration services aren’t ready
-- regionNotFound — placeholder: %region%
-
-Editing tips:
-- Use MiniMessage sparingly for readability.
-- Keep lines under ~120 characters for clean displays.
-- Reopen the menu to see changes instantly.
+Other menu YAMLs (when present in your build) follow a similar pattern and will include per‑menu placeholders and help texts.
 
 ### Integrations
-- WorldGuard: regions are resolved live from WG’s RegionManager; no internal caching is required.
+- WorldGuard: regions are resolved live from WG’s RegionManager; overlapping regions are supported.
 - Bolt: used to read owner of protected blocks and to remove/create protections when vaulting or placing blocks, as appropriate.
 
 ### Operations and troubleshooting
@@ -189,13 +129,6 @@ Common symptoms and checks:
 Backups:
 - Schedule periodic MySQL backups (full + binlogs if available).
 - For quick rollbacks, snapshot the DB before major updates.
-
-Updates:
-- Replace the JAR during maintenance windows.
-- Keep a DB backup and test on a staging server when possible.
-
-Uninstall:
-- Remove the JAR from plugins and restart. Database contents remain intact for archival or later reuse.
 
 ## For Developers (API and Examples)
 VaultStorage registers services with the Bukkit Services API and performs database work off the main thread where applicable. Acquire services and program against the interfaces below.
@@ -232,7 +165,7 @@ List<ItemStack> items = vault.contents();
 
 ### WorldGuardService (regions)
 Use to query regions for permissions or to guide UI:
-- List<VaultRegion> getRegionsAt(BoundingBox box, World world)
+- List<VaultRegion> getRegionsAt(Block block)
 - List<VaultRegion> getRegionsIn(World world)
 
 ### BoltService (protections)

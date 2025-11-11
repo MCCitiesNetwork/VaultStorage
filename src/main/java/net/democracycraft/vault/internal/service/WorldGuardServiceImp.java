@@ -68,7 +68,8 @@ public class WorldGuardServiceImp implements WorldGuardService {
 
         List<VaultRegion> regions = new ArrayList<>(manager.getRegions().size());
         for (Map.Entry<String, ProtectedRegion> entry : manager.getRegions().entrySet()) {
-            regions.add(buildVaultRegion(entry.getKey(), entry.getValue()));
+
+            regions.add(buildVaultRegion(entry.getValue().getId(), entry.getValue()));
         }
         return regions;
     }

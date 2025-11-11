@@ -7,13 +7,12 @@ import io.papermc.paper.registry.data.dialog.input.DialogInput;
 import net.democracycraft.vault.VaultStoragePlugin;
 import net.democracycraft.vault.api.data.Dto;
 import net.democracycraft.vault.api.service.VaultService;
+import net.democracycraft.vault.api.service.MojangService;
 import net.democracycraft.vault.api.ui.AutoDialog;
 import net.democracycraft.vault.internal.util.minimessage.MiniMessageUtil;
 import net.democracycraft.vault.internal.util.yml.AutoYML;
 import net.democracycraft.vault.internal.util.config.DataFolder;
 import net.kyori.adventure.text.Component;
-import org.bukkit.Bukkit;
-import org.bukkit.OfflinePlayer;
 import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitRunnable;
 
@@ -136,6 +135,7 @@ public class VaultListMenu extends ChildMenuImp {
         new BukkitRunnable() {
             @Override public void run() {
                 VaultService vs = plugin.getVaultService();
+                MojangService ms = plugin.getMojangService();
                 List<net.democracycraft.vault.internal.database.entity.VaultEntity> vaults;
                 if (uiContext.filterOwner() != null) {
                     // Strict filter by owner
@@ -145,8 +145,10 @@ public class VaultListMenu extends ChildMenuImp {
                     if (q == null || q.isBlank()) {
                         vaults = vs.listInWorld(p.getWorld().getUID());
                     } else {
-                        UUID owner = parseUuidOrName(q);
-                        if (owner != null) vaults = vs.listByOwner(owner); else vaults = List.of();
+                        UUID owner = null;
+                        try { owner = UUID.fromString(q); } catch (IllegalArgumentException ignore) {}
+                        if (owner == null && ms != null) owner = ms.getUUID(q);
+                        vaults = owner != null ? vs.listByOwner(owner) : List.of();
                     }
                 }
                 // Resolve owner names and index per owner
@@ -154,7 +156,11 @@ public class VaultListMenu extends ChildMenuImp {
                 List<Entry> out = new ArrayList<>();
                 for (var v : vaults) {
                     UUID ownerUuid = vs.getOwner(v.uuid);
-                    String name = ownerUuid == null ? "Unknown" : Optional.ofNullable(Bukkit.getOfflinePlayer(ownerUuid).getName()).orElse(ownerUuid.toString());
+                    String name = "Unknown";
+                    if (ownerUuid != null) {
+                        String resolved = (ms != null) ? ms.getUsername(ownerUuid) : null;
+                        name = (resolved != null && !resolved.isBlank()) ? resolved : ownerUuid.toString().substring(0,8);
+                    }
                     int idx = ownerCounts.merge(ownerUuid == null ? new UUID(0,0) : ownerUuid, 1, Integer::sum);
                     out.add(new Entry(v.uuid, name, idx));
                 }
@@ -165,12 +171,6 @@ public class VaultListMenu extends ChildMenuImp {
                 }.runTask(plugin);
             }
         }.runTaskAsynchronously(plugin);
-    }
-
-    private static UUID parseUuidOrName(String q) {
-        try { return UUID.fromString(q); } catch (IllegalArgumentException ignore) {}
-        OfflinePlayer op = Bukkit.getOfflinePlayer(q);
-        return op != null && op.getUniqueId() != null ? op.getUniqueId() : null;
     }
 
     @Override
