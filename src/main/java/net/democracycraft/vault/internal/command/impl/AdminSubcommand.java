@@ -18,14 +18,23 @@ import java.util.List;
  * Requires {@link VaultPermission#ADMIN}.
  */
 public class AdminSubcommand implements Subcommand {
-    @Override public List<String> names() { return List.of("admin"); }
-    @Override public @NotNull VaultPermission permission() { return VaultPermission.ADMIN; }
-    @Override public String usage() { return "admin"; }
+    @Override public List<String> names() {
+        return List.of("admin");
+    }
+    @Override public @NotNull VaultPermission permission() {
+        return VaultPermission.ADMIN;
+    }
+    @Override public String usage() {
+        return "admin";
+    }
 
     @Override
     public void execute(CommandContext ctx) {
         CommandSender sender = ctx.sender();
-        if (!(sender instanceof Player player)) { sender.sendMessage("Only players can use this."); return; }
+        if (!(sender instanceof Player player)) {
+            sender.sendMessage("Only players can use this.");
+            return;
+        }
         new VaultCaptureMenu(player, VaultUIContext.admin(player.getUniqueId())).open();
     }
 }

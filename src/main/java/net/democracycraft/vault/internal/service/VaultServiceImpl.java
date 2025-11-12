@@ -73,7 +73,11 @@ public record VaultServiceImpl(VaultDAO dao) implements VaultService {
     }
 
     private static Material safeMaterial(String name) {
-        try { return Material.valueOf(name); } catch (IllegalArgumentException ex) { return null; }
+        try {
+            return Material.valueOf(name);
+        } catch (IllegalArgumentException ex) {
+            return null;
+        }
     }
 
     @Override

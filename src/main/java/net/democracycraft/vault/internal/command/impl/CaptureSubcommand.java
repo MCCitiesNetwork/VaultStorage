@@ -14,9 +14,15 @@ import java.util.List;
  * Starts the centralized interactive capture session (action bar + dynamic listener) immediately.
  */
 public class CaptureSubcommand implements Subcommand {
-    @Override public List<String> names() { return List.of("capture", "cap"); }
-    @Override public @NotNull VaultPermission permission() { return VaultPermission.ACTION_CAPTURE; }
-    @Override public String usage() { return "capture"; }
+    @Override public List<String> names() {
+        return List.of("capture", "cap");
+    }
+    @Override public @NotNull VaultPermission permission() {
+        return VaultPermission.ACTION_CAPTURE;
+    }
+    @Override public String usage() {
+        return "capture";
+    }
 
     @Override
     public void execute(CommandContext ctx) {

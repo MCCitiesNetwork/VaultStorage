@@ -354,7 +354,9 @@ public class VaultCaptureService {
 
         actionbarTask[0] = new BukkitRunnable() {
             @Override public void run() {
-                if (!actor.isOnline()) { cancel(); return; }
+                if (!actor.isOnline()) {
+                    cancel(); return;
+                }
                 Block target = actor.getTargetBlockExact(6);
                 if (target == null) {
                     actor.sendActionBar(MiniMessageUtil.parseOrPlain(texts.actionBarIdle));

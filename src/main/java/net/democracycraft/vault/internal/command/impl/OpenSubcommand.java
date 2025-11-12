@@ -23,14 +23,27 @@ public class OpenSubcommand implements Subcommand {
 
     @Override
     public void execute(CommandContext ctx) {
-        if (!ctx.isPlayer()) { ctx.sender().sendMessage("Only players can use this."); return; }
+        if (!ctx.isPlayer()) {
+            ctx.sender().sendMessage("Only players can use this.");
+            return;
+        }
         String idStr = ctx.require(0, "vaultId");
         UUID id;
-        try { id = UUID.fromString(idStr); } catch (IllegalArgumentException ex) { ctx.sender().sendMessage("Invalid vault id."); return; }
+        try {
+            id = UUID.fromString(idStr);
+        } catch (IllegalArgumentException ex) {
+            ctx.sender().sendMessage("Invalid vault id.");
+            return;
+        }
         Player p = ctx.asPlayer();
         String mode = ctx.args().length >= 2 ? ctx.args()[1] : "view";
         VaultAction action;
-        try { action = VaultAction.valueOf(mode.toUpperCase(Locale.ROOT)); } catch (IllegalArgumentException ex) { ctx.sender().sendMessage("Unknown action. Use view|copy|edit."); return; }
+        try {
+            action = VaultAction.valueOf(mode.toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException ex) {
+            ctx.sender().sendMessage("Unknown action. Use view|copy|edit.");
+            return;
+        }
         if (!VaultPermission.has(p, VaultPermission.from(action))) { ctx.sender().sendMessage("You don't have permission for that action."); return; }
 
         var plugin = VaultStoragePlugin.getInstance();
@@ -39,19 +52,29 @@ public class OpenSubcommand implements Subcommand {
                 var vs = plugin.getVaultService();
                 var entityOpt = vs.get(id);
                 if (entityOpt.isEmpty()) {
-                    new BukkitRunnable() { @Override public void run() { ctx.sender().sendMessage("Vault not found."); } }.runTask(plugin);
+                    new BukkitRunnable() {
+                        @Override public void run() {
+                            ctx.sender().sendMessage("Vault not found.");
+                        }
+                    }.runTask(plugin);
                     return;
                 }
                 UUID owner = vs.getOwner(id);
                 boolean allowed = owner != null && owner.equals(p.getUniqueId()) || VaultPermission.ADMIN.has(ctx.sender());
                 if (!allowed) {
-                    new BukkitRunnable() { @Override public void run() { ctx.sender().sendMessage("You don't have access to that vault."); } }.runTask(plugin);
+                    new BukkitRunnable() {
+                        @Override public void run() {
+                            ctx.sender().sendMessage("You don't have access to that vault.");
+                        }
+                    }.runTask(plugin);
                     return;
                 }
-                new BukkitRunnable() { @Override public void run() {
-                    VaultInventoryService invSvc = plugin.getInventoryService();
-                    invSvc.openVirtualInventory(p, id, action);
-                }}.runTask(plugin);
+                new BukkitRunnable() {
+                    @Override public void run() {
+                        VaultInventoryService invSvc = plugin.getInventoryService();
+                        invSvc.openVirtualInventory(p, id, action);
+                    }
+                }.runTask(plugin);
             }
         }.runTaskAsynchronously(plugin);
     }

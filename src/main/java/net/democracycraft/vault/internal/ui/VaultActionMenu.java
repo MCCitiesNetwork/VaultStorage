@@ -84,8 +84,12 @@ public class VaultActionMenu extends ChildMenuImp {
 
     private static final AutoYML<Config> YML = AutoYML.create(Config.class, "VaultActionMenu", DataFolder.MENUS, HEADER);
     /** Ensures the YAML file for this menu exists by creating defaults if missing. */
-    public static void ensureConfig() { YML.loadOrCreate(Config::new); }
-    private static VaultActionMenu.Config cfg() { return YML.loadOrCreate(VaultActionMenu.Config::new); }
+    public static void ensureConfig() {
+        YML.loadOrCreate(Config::new);
+    }
+    private static VaultActionMenu.Config cfg() {
+        return YML.loadOrCreate(VaultActionMenu.Config::new);
+    }
 
     public VaultActionMenu(Player player, ParentMenuImp parent, VaultUIContext ctx, UUID vaultId) {
         super(player, parent, "vault_action");

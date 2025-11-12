@@ -61,7 +61,11 @@ public class VaultInventoryService {
                 MojangService ms = plugin.getMojangService();
                 var entityOpt = vs.get(vaultId);
                 if (entityOpt.isEmpty()) {
-                    new BukkitRunnable() { @Override public void run() { player.sendMessage("Vault not found."); } }.runTask(plugin);
+                    new BukkitRunnable() {
+                        @Override public void run() {
+                            player.sendMessage("Vault not found.");
+                        }
+                    }.runTask(plugin);
                     return;
                 }
                 UUID ownerUuid = vs.getOwner(vaultId);
@@ -79,7 +83,11 @@ public class VaultInventoryService {
                     if (it.slot >= 0 && it.slot < invSize) contents[it.slot] = ItemSerialization.fromBytes(it.item);
                 }
                 final String finalOwnerDisplay = ownerDisplay;
-                new BukkitRunnable() { @Override public void run() { openOnMain(player, vaultId, finalOwnerDisplay, action, contents, invSize, reopenCallback); } }.runTask(plugin);
+                new BukkitRunnable() {
+                    @Override public void run() {
+                        openOnMain(player, vaultId, finalOwnerDisplay, action, contents, invSize, reopenCallback);
+                    }
+                }.runTask(plugin);
             }
         }.runTaskAsynchronously(plugin);
     }
@@ -141,7 +149,11 @@ public class VaultInventoryService {
                 if (event.getInventory() != inv) return;
                 if (action == VaultAction.EDIT) {
                     ItemStack[] newContents = inv.getContents();
-                    new BukkitRunnable() { @Override public void run() { saveToDb(vaultId, newContents); } }.runTaskAsynchronously(VaultStoragePlugin.getInstance());
+                    new BukkitRunnable() {
+                        @Override public void run() {
+                            saveToDb(vaultId, newContents);
+                        }
+                    }.runTaskAsynchronously(VaultStoragePlugin.getInstance());
                 }
                 dyn.stop();
                 if (reopenCallback != null) {

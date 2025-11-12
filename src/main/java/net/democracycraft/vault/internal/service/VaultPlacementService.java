@@ -52,13 +52,23 @@ public class VaultPlacementService {
                 VaultService vs = plugin.getVaultService();
                 var opt = vs.get(vaultUuid);
                 if (opt.isEmpty()) {
-                    new BukkitRunnable(){@Override public void run(){ if (callback!=null) callback.accept(new Result(false, "Vault not found.")); }}.runTask(plugin);
+                    new BukkitRunnable(){
+                        @Override public void run()
+                        {
+                            if (callback!=null) callback.accept(new Result(false, "Vault not found."));
+                        }
+                    }.runTask(plugin);
                     return;
                 }
                 VaultEntity vaultEntity = opt.get();
                 World world = targetLoc.getWorld();
                 if (world == null) {
-                    new BukkitRunnable(){@Override public void run(){ if (callback!=null) callback.accept(new Result(false, "Target world not available.")); }}.runTask(plugin);
+                    new BukkitRunnable(){
+                        @Override public void run()
+                        {
+                            if (callback!=null) callback.accept(new Result(false, "Target world not available."));
+                        }
+                    }.runTask(plugin);
                     return;
                 }
                 Material mat = null;
@@ -100,8 +110,14 @@ public class VaultPlacementService {
                         // Delete vault record then callback on main
                         new BukkitRunnable(){
                             @Override public void run(){
-                                try { vs.delete(vaultUuid);} catch(Throwable ignored){}
-                                new BukkitRunnable(){ @Override public void run(){ if (callback!=null) callback.accept(res); } }.runTask(plugin);
+                                try {
+                                    vs.delete(vaultUuid);
+                                } catch(Throwable ignored){}
+                                new BukkitRunnable(){
+                                    @Override public void run() {
+                                        if (callback!=null) callback.accept(res);
+                                    }
+                                }.runTask(plugin);
                             }
                         }.runTaskAsynchronously(plugin);
                     }

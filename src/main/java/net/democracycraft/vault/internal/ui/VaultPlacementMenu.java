@@ -206,9 +206,15 @@ public class VaultPlacementMenu extends ChildMenuImp {
         // Actionbar updater registered in session for cleanup when switching modes
         actionbarTask[0] = new BukkitRunnable() {
             @Override public void run() {
-                if (!actor.isOnline()) { cancel(); return; }
+                if (!actor.isOnline()) {
+                    cancel();
+                    return;
+                }
                 Block target = actor.getTargetBlockExact(6);
-                if (target == null) { actor.sendActionBar(MiniMessageUtil.parseOrPlain(config.actionBarIdle)); return; }
+                if (target == null) {
+                    actor.sendActionBar(MiniMessageUtil.parseOrPlain(config.actionBarIdle));
+                    return;
+                }
                 WorldGuardService wgs = VaultStoragePlugin.getInstance().getWorldGuardService();
                 boolean isParticipant = false;
                 if (wgs != null) {

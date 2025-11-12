@@ -209,7 +209,10 @@ public class AutoTable<T> extends AbstractTable {
     public List<T> findAllBy(String field, Object value, String orderBy) {
         ensureFieldExists(field);
         StringBuilder sql = new StringBuilder("SELECT * FROM `" + tableName + "` WHERE `" + field + "` = ?");
-        if (orderBy != null) { ensureFieldExists(orderBy); sql.append(" ORDER BY `").append(orderBy).append("`"); }
+        if (orderBy != null) {
+            ensureFieldExists(orderBy);
+            sql.append(" ORDER BY `").append(orderBy).append("`");
+        }
         sql.append(";");
         return mysql.withConnection(conn -> {
             List<T> out = new ArrayList<>();
@@ -235,7 +238,10 @@ public class AutoTable<T> extends AbstractTable {
             }
             sql.append(String.join(" AND ", conds));
         }
-        if (orderBy != null) { ensureFieldExists(orderBy); sql.append(" ORDER BY `").append(orderBy).append("`"); }
+        if (orderBy != null) {
+            ensureFieldExists(orderBy);
+            sql.append(" ORDER BY `").append(orderBy).append("`");
+        }
         sql.append(";");
         return mysql.withConnection(conn -> {
             List<T> out = new ArrayList<>();
@@ -345,12 +351,14 @@ public class AutoTable<T> extends AbstractTable {
     private T buildFromResultSet(ResultSet rs) throws SQLException {
         try {
             T instance = clazz.getDeclaredConstructor().newInstance();
-            for (Field f : modelFields()) {
-                f.setAccessible(true);
-                String name = f.getName();
+            for (Field field : modelFields()) {
+                field.setAccessible(true);
+                String name = field.getName();
                 Object raw = rs.getObject(name);
-                if (raw == null) { f.set(instance, null); continue; }
-                Class<?> target = f.getType();
+                if (raw == null) {
+                    field.set(instance, null); continue;
+                }
+                Class<?> target = field.getType();
 
                 Object value;
                 if (target == UUID.class) {
@@ -365,10 +373,10 @@ public class AutoTable<T> extends AbstractTable {
                 } else {
                     // JSON-backed field
                     String json = rs.getString(name);
-                    Type t = f.getGenericType();
+                    Type t = field.getGenericType();
                     value = gson.fromJson(json, t);
                 }
-                f.set(instance, value);
+                field.set(instance, value);
             }
             return instance;
         } catch (ReflectiveOperationException e) {

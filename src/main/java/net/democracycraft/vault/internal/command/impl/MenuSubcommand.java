@@ -25,7 +25,10 @@ public class MenuSubcommand implements Subcommand {
     @Override
     public void execute(CommandContext ctx) {
         CommandSender sender = ctx.sender();
-        if (!(sender instanceof Player player)) { sender.sendMessage("Only players can use this."); return; }
+        if (!(sender instanceof Player player)) {
+            sender.sendMessage("Only players can use this.");
+            return;
+        }
 
         // Optional username parameter -> open filtered by that owner's UUID (requires ADMIN if not self)
         if (ctx.args().length >= 1) {
@@ -47,8 +50,14 @@ public class MenuSubcommand implements Subcommand {
                 Bukkit.getScheduler().runTask(plugin, () -> {
                     Player current = Bukkit.getPlayer(player.getUniqueId());
                     if (current == null || !current.isOnline()) return;
-                    if (!serviceAvailable) { current.sendMessage("Mojang service unavailable."); return; }
-                    if (resolved == null) { current.sendMessage("Player not found."); return; }
+                    if (!serviceAvailable) {
+                        current.sendMessage("Mojang service unavailable.");
+                        return;
+                    }
+                    if (resolved == null) {
+                        current.sendMessage("Player not found.");
+                        return;
+                    }
                     if (resolved.equals(current.getUniqueId())) {
                         new VaultCaptureMenu(current).open();
                     } else {

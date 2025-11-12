@@ -403,32 +403,56 @@ public class AutoYML<T extends Serializable> {
 
     private static Integer toInteger(Object raw) {
         if (raw instanceof Number) return ((Number) raw).intValue();
-        try { return Integer.parseInt(String.valueOf(raw).trim()); } catch (Exception ignored) { return null; }
+        try {
+            return Integer.parseInt(String.valueOf(raw).trim());
+        } catch (Exception ignored) {
+            return null;
+        }
     }
 
     private static Long toLong(Object raw) {
         if (raw instanceof Number) return ((Number) raw).longValue();
-        try { return Long.parseLong(String.valueOf(raw).trim()); } catch (Exception ignored) { return null; }
+        try {
+            return Long.parseLong(String.valueOf(raw).trim());
+        } catch (Exception ignored) {
+            return null;
+        }
     }
 
     private static Double toDouble(Object raw) {
         if (raw instanceof Number) return ((Number) raw).doubleValue();
-        try { return Double.parseDouble(String.valueOf(raw).trim()); } catch (Exception ignored) { return null; }
+        try {
+            return Double.parseDouble(String.valueOf(raw).trim());
+        } catch (Exception ignored) {
+            return null;
+        }
     }
 
     private static Float toFloat(Object raw) {
         if (raw instanceof Number) return ((Number) raw).floatValue();
-        try { return Float.parseFloat(String.valueOf(raw).trim()); } catch (Exception ignored) { return null; }
+        try {
+            return Float.parseFloat(String.valueOf(raw).trim());
+        } catch (Exception ignored) {
+            return null;
+        }
     }
 
     private static Short toShort(Object raw) {
         if (raw instanceof Number) return ((Number) raw).shortValue();
-        try { return Short.parseShort(String.valueOf(raw).trim()); } catch (Exception ignored) { return null; }
+        try {
+            return Short.parseShort(String.valueOf(raw).trim());
+        } catch (Exception ignored) {
+            return null;
+        }
     }
 
     private static Byte toByte(Object raw) {
         if (raw instanceof Number) return ((Number) raw).byteValue();
-        try { return Byte.parseByte(String.valueOf(raw).trim()); } catch (Exception ignored) { return null; }
+        try {
+            return Byte.parseByte(String.valueOf(raw).trim());
+        } catch (Exception ignored) {
+            return null;
+        }
     }
 
     private static Character toChar(Object raw) {

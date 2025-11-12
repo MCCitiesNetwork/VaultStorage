@@ -6,6 +6,7 @@ import net.democracycraft.vault.api.service.BoltService;
 import net.democracycraft.vault.api.service.WorldGuardService;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
+import org.bukkit.util.BoundingBox;
 
 import java.io.Serializable;
 import java.util.ArrayList;
@@ -81,40 +82,65 @@ public final class VaultCapturePolicy {
         if (bolt != null) {
             try { originalOwner = bolt.getOwner(block); } catch (Throwable ignored) {}
         }
+
         boolean actorIsContainerOwner = originalOwner != null && originalOwner.equals(actor.getUniqueId());
         WorldGuardService wgs = VaultStoragePlugin.getInstance().getWorldGuardService();
+
         boolean actorParticipantAny = false;
         boolean containerOwnerParticipantAny = false;
         boolean inAnyRegion = false;
+
         List<RegionStatus> perRegionDebug = List.of();
+
         if (wgs != null) {
-            var regs = wgs.getRegionsAt(block);
-            inAnyRegion = !regs.isEmpty();
+            var regions = wgs.getRegionsAt(block);
+            inAnyRegion = !regions.isEmpty();
             UUID actorUuid = actor.getUniqueId();
-            List<RegionStatus> list = new ArrayList<>();
-            for (var vaultRegion : regs) {
-                boolean actorParticipant = vaultRegion.isPartOfRegion(actorUuid);
-                boolean containerOwnerIsParticipant = false;
+            List<RegionStatus> debugList = new ArrayList<>();
+
+            for (var region : regions) {
+                boolean actorParticipant = region.isPartOfRegion(actorUuid);
+                boolean containerOwnerParticipates = false;
                 if (originalOwner != null) {
-                    containerOwnerIsParticipant = vaultRegion.isPartOfRegion(originalOwner);
+                    containerOwnerParticipates = region.isPartOfRegion(originalOwner);
                 }
-                if (actorParticipant) actorParticipantAny = true;
-                if (containerOwnerIsParticipant) containerOwnerParticipantAny = true;
-                // Store per-region booleans (not the accumulated ANY flags) for accurate debugging.
-                list.add(new RegionStatus(vaultRegion.id(), actorParticipant, containerOwnerIsParticipant));
+
+                BoundingBox box = region.boundingBox();
+
+                // Determine if this region contains or is contained by another region
+                boolean isParent = regions.stream().anyMatch(r -> r != region && box.contains(r.boundingBox()));
+                boolean isChild  = regions.stream().anyMatch(r -> r != region && r.boundingBox().contains(box));
+
+                // Only mark as participant if:
+                //  - actor participates in this region
+                //  - AND this region is NOT a parent of another overlapping one
+                // (Prevents parent region membership from granting access to child regions)
+                if (actorParticipant && !isParent) {
+                    actorParticipantAny = true;
+                }
+
+                if (containerOwnerParticipates) {
+                    containerOwnerParticipantAny = true;
+                }
+
+                debugList.add(new RegionStatus(region.id(), actorParticipant, containerOwnerParticipates));
             }
-            perRegionDebug = Collections.unmodifiableList(list);
+
+            perRegionDebug = Collections.unmodifiableList(debugList);
         }
 
         boolean disallowedOwnerSelf = actorParticipantAny && actorIsContainerOwner;
         boolean baseAllowed;
+
         if (actorParticipantAny) {
             baseAllowed = (originalOwner != null) && !actorIsContainerOwner && !containerOwnerParticipantAny;
         } else {
             baseAllowed = actorIsContainerOwner; // non-participant: only own blocks
         }
-        // Allowed when: has owner AND not self-disallowed AND (in region with base rules OR override bypasses region requirement)
-        boolean allowed = (originalOwner != null) && !disallowedOwnerSelf && ((inAnyRegion && baseAllowed) || hasOverride);
+
+        boolean allowed = (originalOwner != null)
+                && !disallowedOwnerSelf
+                && ((inAnyRegion && baseAllowed) || hasOverride);
 
         Decision.Reason reason;
         if (allowed) {
@@ -130,8 +156,20 @@ public final class VaultCapturePolicy {
         } else {
             reason = Decision.Reason.NOT_INVOLVED_NOT_OWNER;
         }
-        return new Decision(allowed, hasOverride, actorParticipantAny,
-                containerOwnerParticipantAny, actorIsContainerOwner, disallowedOwnerSelf, baseAllowed, originalOwner, reason, perRegionDebug);
+
+        return new Decision(
+                allowed,
+                hasOverride,
+                actorParticipantAny,
+                containerOwnerParticipantAny,
+                actorIsContainerOwner,
+                disallowedOwnerSelf,
+                baseAllowed,
+                originalOwner,
+                reason,
+                perRegionDebug
+        );
     }
+
 
 }
