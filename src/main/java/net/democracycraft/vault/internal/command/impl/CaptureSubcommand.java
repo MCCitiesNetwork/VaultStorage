@@ -27,7 +27,9 @@ public class CaptureSubcommand implements Subcommand {
 
     @Override
     public void execute(CommandContext ctx) {
-        if (!ctx.isPlayer()) { ctx.sender().sendMessage("Only players can use this."); return; }
+        if (!ctx.isPlayer()) {
+            ctx.sender().sendMessage("Only players can use this."); return;
+        }
         Player player = ctx.asPlayer();
         if (!VaultPermission.ACTION_CAPTURE.has(player)) {
             player.sendMessage("You don't have permission to capture blocks.");

@@ -191,3 +191,9 @@ Concurrency and threading:
 - Add your own UI flows by implementing dialogs and calling VaultService.
 - Build region‑aware rules using WorldGuardService (e.g., owners/memberships with VaultRegion.isOwner/isMember).
 - Compose with Bolt protections when transforming blocks.
+
+### Credits
+
+Developed and maintained by **Alepando**  
+for **[DemocracyCraft.net](https://democracycraft.net)**  
+as the **Lead Developer** of the Vault plugin.

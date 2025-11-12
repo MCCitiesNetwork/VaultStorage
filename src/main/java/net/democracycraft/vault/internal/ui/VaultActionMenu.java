@@ -188,7 +188,11 @@ public class VaultActionMenu extends ChildMenuImp {
     }
 
     private static VaultAction parseAction(String s) {
-        try { return VaultAction.valueOf(s.toUpperCase(Locale.ROOT)); } catch (IllegalArgumentException ex) { return VaultAction.VIEW; }
+        try {
+            return VaultAction.valueOf(s.toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException ex) {
+            return VaultAction.VIEW;
+        }
     }
 
     private static String cap(String s) { return s.substring(0,1).toUpperCase(Locale.ROOT) + s.substring(1).toLowerCase(Locale.ROOT); }

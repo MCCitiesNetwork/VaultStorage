@@ -17,9 +17,15 @@ import org.jetbrains.annotations.NotNull;
 
 /** /vault open <vaultId> [view|copy|edit] */
 public class OpenSubcommand implements Subcommand {
-    @Override public List<String> names() { return List.of("open", "inv"); }
-    @Override public @NotNull VaultPermission permission() { return VaultPermission.USER; }
-    @Override public String usage() { return "open <vaultId> [view|copy|edit]"; }
+    @Override public List<String> names() {
+        return List.of("open", "inv");
+    }
+    @Override public @NotNull VaultPermission permission() {
+        return VaultPermission.USER;
+    }
+    @Override public String usage() {
+        return "open <vaultId> [view|copy|edit]";
+    }
 
     @Override
     public void execute(CommandContext ctx) {
@@ -44,7 +50,10 @@ public class OpenSubcommand implements Subcommand {
             ctx.sender().sendMessage("Unknown action. Use view|copy|edit.");
             return;
         }
-        if (!VaultPermission.has(p, VaultPermission.from(action))) { ctx.sender().sendMessage("You don't have permission for that action."); return; }
+        if (!VaultPermission.has(p, VaultPermission.from(action))) {
+            ctx.sender().sendMessage("You don't have permission for that action.");
+            return;
+        }
 
         var plugin = VaultStoragePlugin.getInstance();
         new BukkitRunnable() {
