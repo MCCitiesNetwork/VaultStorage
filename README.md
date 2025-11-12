@@ -1,4 +1,8 @@
-# VaultStorage
+# VaultStorage 
+
+[![CodeFactor](https://www.codefactor.io/repository/github/alepandocr/vault/badge)](https://www.codefactor.io/repository/github/alepandocr/vault)
+[![wakatime](https://wakatime.com/badge/user/5ae9efd4-fd6c-4bd2-be4f-597085021e3e/project/d2f0ee34-bb7a-457f-83d4-98455ac8a8b8.svg)](https://wakatime.com/badge/user/5ae9efd4-fd6c-4bd2-be4f-597085021e3e/project/d2f0ee34-bb7a-457f-83d4-98455ac8a8b8)
+
 
 A Paper plugin that lets players convert container blocks into persistent “Vaults,” store their contents safely, and browse or open them later via intuitive in‑game menus.
 
