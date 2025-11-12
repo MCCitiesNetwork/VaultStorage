@@ -356,7 +356,8 @@ public class AutoTable<T> extends AbstractTable {
                 String name = field.getName();
                 Object raw = rs.getObject(name);
                 if (raw == null) {
-                    field.set(instance, null); continue;
+                    field.set(instance, null);
+                    continue;
                 }
                 Class<?> target = field.getType();
 

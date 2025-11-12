@@ -9,8 +9,7 @@ import com.sk89q.worldguard.protection.regions.RegionContainer;
 import net.democracycraft.vault.api.region.VaultRegion;
 import net.democracycraft.vault.api.service.WorldGuardService;
 import net.democracycraft.vault.internal.region.VaultRegionImp;
-import org.bukkit.Bukkit;
-import org.bukkit.OfflinePlayer;
+import org.bukkit.util.Vector;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.util.BoundingBox;
@@ -43,11 +42,20 @@ public class WorldGuardServiceImp implements WorldGuardService {
     @Override
     public @NotNull List<VaultRegion> getRegionsAt(@NotNull Block block) {
         Objects.requireNonNull(block, "block");
-        World world = block.getWorld();
-        return getRegionsIn(world).stream()
-                .filter(region -> region.boundingBox().contains(block.getLocation().toVector()))
+        Vector pos = block.getLocation().toVector();
+
+        return getRegionsIn(block.getWorld()).stream()
+                .filter(region -> containsInclusive(region.boundingBox(), pos))
                 .toList();
     }
+
+    private boolean containsInclusive(@NotNull BoundingBox box, @NotNull Vector pos) {
+        double x = pos.getX(), y = pos.getY(), z = pos.getZ();
+        return x >= box.getMinX() && x <= box.getMaxX()
+                && y >= box.getMinY() && y <= box.getMaxY()
+                && z >= box.getMinZ() && z <= box.getMaxZ();
+    }
+
 
     /**
      * Returns all regions in the given world. This method queries WorldGuard's RegionManager

@@ -61,37 +61,47 @@ public class AutoDialog {
         private final List<ActionButton> buttons = new ArrayList<>();
 
         public Builder title(Component title) {
-            this.title = title; return this;
+            this.title = title;
+            return this;
         }
         public Builder externalTitle(Component externalTitle) {
-            this.externalTitle = externalTitle; return this;
+            this.externalTitle = externalTitle;
+            return this;
         }
         public Builder canCloseWithEscape(boolean value) {
-            this.canCloseWithEscape = value; return this;
+            this.canCloseWithEscape = value;
+            return this;
         }
         public Builder pause(boolean value) {
-            this.pause = value; return this;
+            this.pause = value;
+            return this;
         }
         public Builder afterAction(DialogBase.DialogAfterAction value) {
-            this.afterAction = value; return this;
+            this.afterAction = value;
+            return this;
         }
 
         public Builder body(List<DialogBody> elements) {
-            this.body.addAll(elements); return this;
+            this.body.addAll(elements);
+            return this;
         }
         public Builder addBody(DialogBody element) {
-            this.body.add(element); return this;
+            this.body.add(element);
+            return this;
         }
 
         public Builder inputs(List<DialogInput> elements) {
-            this.inputs.addAll(elements); return this;
+            this.inputs.addAll(elements);
+            return this;
         }
         public Builder addInput(DialogInput element) {
-            this.inputs.add(element); return this;
+            this.inputs.add(element);
+            return this;
         }
 
         public Builder addButton(ActionButton button) {
-            this.buttons.add(button); return this;
+            this.buttons.add(button);
+            return this;
         }
 
         public ParentMenu getParentMenu() {

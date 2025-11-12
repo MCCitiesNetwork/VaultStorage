@@ -1,5 +1,6 @@
 package net.democracycraft.vault.internal.command.impl;
 
+import net.democracycraft.vault.VaultStoragePlugin;
 import net.democracycraft.vault.internal.command.framework.CommandContext;
 import net.democracycraft.vault.internal.command.framework.Subcommand;
 import net.democracycraft.vault.internal.security.VaultPermission;
@@ -32,7 +33,7 @@ public class CaptureSubcommand implements Subcommand {
             player.sendMessage("You don't have permission to capture blocks.");
             return;
         }
-        VaultCaptureService captureService = net.democracycraft.vault.VaultStoragePlugin.getInstance().getCaptureService();
+        VaultCaptureService captureService = VaultStoragePlugin.getInstance().getCaptureService();
         captureService.startCaptureSession(player); // opens session directly
         player.sendMessage("Capture session started. Left-click to cancel.");
     }

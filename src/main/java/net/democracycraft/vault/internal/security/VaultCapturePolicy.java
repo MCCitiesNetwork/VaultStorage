@@ -24,6 +24,8 @@ import java.util.UUID;
  *   <li>Non-participant (not owner nor member in all overlapping regions): may vault only their own Bolt-owned blocks.</li>
  *   <li>Unprotected blocks (no Bolt owner) are never vaultable unless override is present.</li>
  *   <li>Blocks outside any region are vaultable only with override.</li>
+ *   <li>Parent region membership does NOT grant access to child regions - participation must be in the specific
+ *       region(s) containing the block, not inherited from parent regions.</li>
  * </ul>
  * The method also returns detailed flags useful for logging and UI.
  */
@@ -74,6 +76,11 @@ public final class VaultCapturePolicy {
     /**
      * Evaluate vaulting permission for the given actor and block.
      * Rules recap: requires Bolt owner; requires region participation unless override is present.
+     *
+     * Key fix: Participation is only counted for the INNERMOST (child) regions, not parent regions.
+     * If Region A contains Region B, and the block is in Region B:
+     *  - A member of Region A who is NOT a member of Region B cannot vault blocks in Region B
+     *  - A member of Region B CAN vault blocks in Region B (regardless of Region A membership)
      */
     public static Decision evaluate(Player actor, Block block) {
         boolean hasOverride = VaultPermission.ACTION_PLACE_OVERRIDE.has(actor);
@@ -111,14 +118,27 @@ public final class VaultCapturePolicy {
                 boolean isParent = regions.stream().anyMatch(r -> r != region && box.contains(r.boundingBox()));
                 boolean isChild  = regions.stream().anyMatch(r -> r != region && r.boundingBox().contains(box));
 
-                // Only mark as participant if:
-                //  - actor participates in this region
-                //  - AND this region is NOT a parent of another overlapping one
-                // (Prevents parent region membership from granting access to child regions)
-                if (actorParticipant && !isParent) {
+                // CRITICAL FIX: Different logic for actor vs container owner
+                //
+                // FOR ACTOR: Only count participation in NON-PARENT regions
+                // Prevents parent region membership from granting access to child regions.
+                // Example: Region A (parent) contains Region B (child)
+                //  - Block is in Region B
+                //  - Actor is member of Region A but NOT Region B
+                //  - Region A: isParent = true → actorParticipant && !isParent = FALSE
+                //  - Region B: actorParticipant = false → FALSE
+                //  - Result: Actor is NOT counted as participant (CORRECT)
+                boolean actorCountedHere = actorParticipant && !isParent;
+                if (actorCountedHere) {
                     actorParticipantAny = true;
                 }
 
+                // FOR CONTAINER OWNER: Count participation in ALL regions (including parent regions)
+                // If the container owner participates in ANY region containing the block,
+                // they should block other participants from vaulting.
+                // Example: Container in Region B, owner is member of Region B
+                //  - Region B: containerOwnerParticipates = true → TRUE
+                //  - Result: Owner IS counted as participant, blocks vaulting (CORRECT)
                 if (containerOwnerParticipates) {
                     containerOwnerParticipantAny = true;
                 }
@@ -127,16 +147,22 @@ public final class VaultCapturePolicy {
             }
 
             perRegionDebug = Collections.unmodifiableList(debugList);
+
         }
 
         boolean disallowedOwnerSelf = actorParticipantAny && actorIsContainerOwner;
         boolean baseAllowed;
 
         if (actorParticipantAny) {
+            // Actor is a participant of at least one relevant (non-parent) region
+            // Can vault if: block has owner, actor is not the owner, and owner is not participant of any relevant region
             baseAllowed = (originalOwner != null) && !actorIsContainerOwner && !containerOwnerParticipantAny;
         } else {
-            baseAllowed = actorIsContainerOwner; // non-participant: only own blocks
+            // Actor is not a participant of any relevant region
+            // Can only vault their own blocks
+            baseAllowed = actorIsContainerOwner;
         }
+
 
         boolean allowed = (originalOwner != null)
                 && !disallowedOwnerSelf
@@ -170,6 +196,4 @@ public final class VaultCapturePolicy {
                 perRegionDebug
         );
     }
-
-
 }

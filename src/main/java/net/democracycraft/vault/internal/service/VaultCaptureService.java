@@ -9,6 +9,7 @@ import net.democracycraft.vault.internal.util.item.ItemSerialization;
 import org.bukkit.Material;
 import org.bukkit.block.*;
 import org.bukkit.entity.Player;
+import org.bukkit.event.block.Action;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
@@ -263,7 +264,7 @@ public class VaultCaptureService {
             }
         }
 
-        final BukkitTask[] actionbarTask = new org.bukkit.scheduler.BukkitTask[1];
+        final BukkitTask[] actionbarTask = new BukkitTask[1];
         final boolean[] busy = new boolean[]{false};
 
         session.getDynamicListener().setListener(new org.bukkit.event.Listener() {
@@ -273,7 +274,7 @@ public class VaultCaptureService {
                 org.bukkit.event.block.Action action = event.getAction();
                 event.setCancelled(true);
 
-                if (action == org.bukkit.event.block.Action.LEFT_CLICK_AIR || action == org.bukkit.event.block.Action.LEFT_CLICK_BLOCK) {
+                if (action == Action.LEFT_CLICK_AIR || action == Action.LEFT_CLICK_BLOCK) {
                     session.getDynamicListener().stop();
                     if (actionbarTask[0] != null) actionbarTask[0].cancel();
                     session.clearActionBarTask();
@@ -282,7 +283,7 @@ public class VaultCaptureService {
                     return;
                 }
 
-                if (action != org.bukkit.event.block.Action.RIGHT_CLICK_BLOCK) return;
+                if (action != Action.RIGHT_CLICK_BLOCK) return;
                 Block block = event.getClickedBlock();
                 if (block == null) return;
                 if (busy[0]) return;
@@ -355,7 +356,8 @@ public class VaultCaptureService {
         actionbarTask[0] = new BukkitRunnable() {
             @Override public void run() {
                 if (!actor.isOnline()) {
-                    cancel(); return;
+                    cancel();
+                    return;
                 }
                 Block target = actor.getTargetBlockExact(6);
                 if (target == null) {
