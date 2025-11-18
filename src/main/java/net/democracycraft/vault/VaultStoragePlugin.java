@@ -1,5 +1,6 @@
 package net.democracycraft.vault;
 
+import com.earth2me.essentials.Essentials;
 import net.democracycraft.vault.api.dao.VaultDAO;
 import net.democracycraft.vault.api.service.BoltService;
 import net.democracycraft.vault.api.service.MojangService;
@@ -21,9 +22,11 @@ import net.democracycraft.vault.internal.ui.VaultRegionListMenu;
 import net.democracycraft.vault.internal.ui.VaultPlacementMenu;
 import net.democracycraft.vault.internal.ui.LoadingMenu;
 import net.democracycraft.vault.internal.security.VaultPermission;
+import net.essentialsx.api.v2.services.mail.MailService;
 import org.bukkit.Bukkit;
 import org.bukkit.World;
 import org.bukkit.permissions.Permission;
+import org.bukkit.plugin.RegisteredServiceProvider;
 import org.bukkit.plugin.ServicePriority;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -46,6 +49,8 @@ public final class VaultStoragePlugin extends JavaPlugin {
     private VaultService vaultService;
     private WorldGuardService worldGuardService;
     private BoltService boltService;
+    private MailService mailService;
+    private Essentials essentials;
 
     // Database wiring
     private MySQLManager mysql;
@@ -101,6 +106,16 @@ public final class VaultStoragePlugin extends JavaPlugin {
         getServer().getServicesManager().register(WorldGuardService.class, this.worldGuardService, this, ServicePriority.Normal);
         this.boltService = new BoltServiceImp(this);
         getServer().getServicesManager().register(BoltService.class, this.boltService, this, ServicePriority.Normal);
+
+        RegisteredServiceProvider<MailService> mailService = getServer().getServicesManager().getRegistration(MailService.class);
+        if(mailService != null) {
+            this.mailService = mailService.getProvider();
+        }
+
+        var essentials = getServer().getPluginManager().getPlugin("Essentials");
+        if (essentials instanceof Essentials ess) {
+            this.essentials = ess;
+        }
 
         // Domain services
         this.captureService = new VaultCaptureService();
@@ -172,4 +187,13 @@ public final class VaultStoragePlugin extends JavaPlugin {
     public void onDisable() {
         if (this.mysql != null) this.mysql.disconnect();
     }
+
+    public MailService getMailService() {
+        return mailService;
+    }
+
+    public Essentials getEssentials() {
+        return essentials;
+    }
+
 }

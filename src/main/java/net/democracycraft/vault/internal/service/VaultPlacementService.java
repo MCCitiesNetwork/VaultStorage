@@ -2,6 +2,7 @@ package net.democracycraft.vault.internal.service;
 
 import net.democracycraft.vault.VaultStoragePlugin;
 import net.democracycraft.vault.api.convertible.Vault;
+import net.democracycraft.vault.api.event.PlayerPlaceVaultEvent;
 import net.democracycraft.vault.api.service.VaultService;
 import net.democracycraft.vault.api.service.BoltService;
 import net.democracycraft.vault.internal.database.entity.VaultEntity;
@@ -49,8 +50,8 @@ public class VaultPlacementService {
         var plugin = VaultStoragePlugin.getInstance();
         new BukkitRunnable() {
             @Override public void run() {
-                VaultService vs = plugin.getVaultService();
-                var opt = vs.get(vaultUuid);
+                VaultService vaultService = plugin.getVaultService();
+                var opt = vaultService.get(vaultUuid);
                 if (opt.isEmpty()) {
                     new BukkitRunnable(){
                         @Override public void run()
@@ -79,8 +80,8 @@ public class VaultPlacementService {
                     // safe default
                     mat = Material.CHEST;
                 }
-                UUID ownerUuid = vs.getOwner(vaultUuid);
-                List<VaultItemEntity> rows = vs.listItems(vaultUuid);
+                UUID ownerUuid = vaultService.getOwner(vaultUuid);
+                List<VaultItemEntity> rows = vaultService.listItems(vaultUuid);
                 List<ItemStack> contents = new ArrayList<>();
                 int maxSlot = -1;
                 for (VaultItemEntity row : rows) maxSlot = Math.max(maxSlot, row.slot);
@@ -96,9 +97,9 @@ public class VaultPlacementService {
                 List<ItemStack> finalContents = contents.stream().map(it -> it == null ? null : it.clone()).toList();
                 new BukkitRunnable(){
                     @Override public void run() {
-                        Result res = placeAt(finalMat, finalContents, targetLoc, blockDataString);
-                        if (!res.success()) {
-                            if (callback!=null) callback.accept(res);
+                        Result result = placeAt(finalMat, finalContents, targetLoc, blockDataString);
+                        if (!result.success()) {
+                            if (callback!=null) callback.accept(result);
                             return;
                         }
                         // Recreate Bolt protection with original owner if present
@@ -111,11 +112,14 @@ public class VaultPlacementService {
                         new BukkitRunnable(){
                             @Override public void run(){
                                 try {
-                                    vs.delete(vaultUuid);
+                                    vaultService.delete(vaultUuid);
                                 } catch(Throwable ignored){}
                                 new BukkitRunnable(){
                                     @Override public void run() {
-                                        if (callback!=null) callback.accept(res);
+                                        if (callback!=null) {
+
+                                            callback.accept(result);
+                                        }
                                     }
                                 }.runTask(plugin);
                             }

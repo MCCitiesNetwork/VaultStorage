@@ -1,7 +1,8 @@
 package net.democracycraft.vault.internal.util.config;
 
 public enum DataFolder {
-    MENUS("menus");
+    MENUS("menus"),
+    MAIL("mail");
 
 
     private final String path;

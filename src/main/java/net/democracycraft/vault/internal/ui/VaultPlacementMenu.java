@@ -5,6 +5,7 @@ import io.papermc.paper.registry.data.dialog.DialogBase;
 import io.papermc.paper.registry.data.dialog.body.DialogBody;
 import net.democracycraft.vault.VaultStoragePlugin;
 import net.democracycraft.vault.api.data.Dto;
+import net.democracycraft.vault.api.event.PlayerPlaceVaultEvent;
 import net.democracycraft.vault.api.service.WorldGuardService;
 import net.democracycraft.vault.api.ui.AutoDialog;
 import net.democracycraft.vault.internal.security.VaultPermission;
@@ -169,36 +170,56 @@ public class VaultPlacementMenu extends ChildMenuImp {
 
                 placement.placeFromDatabaseRelativeAsync(vaultId, targetLoc, result -> {
                     var plugin = VaultStoragePlugin.getInstance();
-                    new BukkitRunnable() { @Override public void run() {
-                        Map<String,String> ph = java.util.Map.of("%msg%", result.message());
-                        actor.sendMessage(MiniMessageUtil.parseOrPlain(result.success() ? config.placeOk : config.placeFail, ph));
-                        if (result.success()) {
-                            // Re-query vaults synchronously to determine if any remain
-                            try {
-                                var vs = plugin.getVaultService();
-                                UUID worldId = actor.getWorld().getUID();
-                                boolean anyLeft;
-                                if (context.filterOwner() != null) {
-                                    var owned = vs.listByOwner(context.filterOwner());
-                                    anyLeft = owned.stream().anyMatch(v -> worldId.equals(v.worldUuid));
-                                } else {
-                                    anyLeft = !vs.listInWorld(worldId).isEmpty();
-                                }
-                                if (anyLeft) {
+                    new BukkitRunnable() {
+                        @Override public void run() {
+                            Map<String,String> placeHolders = Map.of("%msg%", result.message());
+                            actor.sendMessage(MiniMessageUtil.parseOrPlain(result.success() ? config.placeOk : config.placeFail, placeHolders));
+                            if (result.success()) {
+                                // Fire Vault placed event
+                                new PlayerPlaceVaultEvent(actor, targetLoc).callEvent();
+
+                                try {
+                                    var vaultService = plugin.getVaultService();
+                                    UUID worldId = actor.getWorld().getUID();
+
+
+                                    new BukkitRunnable() {
+                                        boolean anyLeft;
+                                        @Override
+                                        public void run() {
+                                            if (context.filterOwner() != null) {
+                                                var owned = vaultService.listByOwner(context.filterOwner());
+                                                anyLeft = owned.stream().anyMatch(v -> worldId.equals(v.worldUuid));
+                                            } else {
+                                                anyLeft = !vaultService.listInWorld(worldId).isEmpty();
+                                            }
+
+                                            new BukkitRunnable() {
+                                                @Override
+                                                public void run() {
+                                                    if (anyLeft) {
+                                                        new VaultListMenu(actor, (ParentMenuImp) getParentMenu(), context, "").open();
+                                                    } else {
+                                                        actor.sendMessage("You have no more vaults to place in this world.");
+                                                        actor.closeDialog();
+                                                    }
+                                                }
+                                            }.runTask(plugin);
+
+
+                                        }
+                                    }.runTaskAsynchronously(plugin);
+
+                                } catch (Throwable t) {
+                                    // On error, fallback to list menu for recovery
                                     new VaultListMenu(actor, (ParentMenuImp) getParentMenu(), context, "").open();
-                                } else {
-                                    actor.sendMessage("You have no more vaults to place in this world.");
-                                    actor.closeDialog();
                                 }
-                            } catch (Throwable t) {
-                                // On error, fallback to list menu for recovery
+                            } else {
+                                // Failure: return to list for retry
                                 new VaultListMenu(actor, (ParentMenuImp) getParentMenu(), context, "").open();
                             }
-                        } else {
-                            // Failure: return to list for retry
-                            new VaultListMenu(actor, (ParentMenuImp) getParentMenu(), context, "").open();
                         }
-                    }}.runTask(plugin);
+                    }.runTask(plugin);
                 });
             }
         });

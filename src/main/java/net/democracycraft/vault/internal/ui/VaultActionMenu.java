@@ -7,6 +7,7 @@ import io.papermc.paper.registry.data.dialog.input.DialogInput;
 import io.papermc.paper.registry.data.dialog.input.SingleOptionDialogInput;
 import net.democracycraft.vault.VaultStoragePlugin;
 import net.democracycraft.vault.api.data.Dto;
+import net.democracycraft.vault.api.event.PlayerDeleteVaultEvent;
 import net.democracycraft.vault.api.ui.AutoDialog;
 import net.democracycraft.vault.internal.security.VaultPermission;
 import net.democracycraft.vault.internal.service.VaultInventoryService;
@@ -140,34 +141,19 @@ public class VaultActionMenu extends ChildMenuImp {
         });
 
         // Admin-only delete button
-        /**
-         * Admin delete operation:
-         * Visible only if actor has ADMIN permission. On click it re-validates permission,
-         * sends a loading message, performs asynchronous deletion (with existence check),
-         * then returns to the vault list (or closes dialog if parent missing).
-         */
+
         if (VaultPermission.ADMIN.has(player)) {
             builder.buttonWithPlayer(MiniMessageUtil.parseOrPlain(cfg.deleteBtn), null, Duration.ofMinutes(2), 1, (actor, response) -> {
-                if (!net.democracycraft.vault.internal.security.VaultPermission.ADMIN.has(actor)) {
+                if (!VaultPermission.ADMIN.has(actor)) {
                     actor.sendMessage("You don't have permission.");
                     return;
                 }
                 actor.sendMessage(MiniMessageUtil.parseOrPlain(cfg.deleteLoading));
-                var plugin = net.democracycraft.vault.VaultStoragePlugin.getInstance();
+                var plugin = VaultStoragePlugin.getInstance();
                 new BukkitRunnable() {
                     @Override public void run() {
-                        boolean success;
-                        try {
-                            var vaultService = plugin.getVaultService();
-                            var exists = vaultService.get(vaultId).isPresent();
-                            if (!exists) {
-                                success = false;
-                            } else {
-                                vaultService.delete(vaultId);
-                                success = true;
-                            }
-                        } catch (Throwable t) { success = false; }
-                        final boolean ok = success;
+                        final boolean ok = deleteVault(plugin);
+
                         new BukkitRunnable() {
                             @Override public void run() {
                                 actor.sendMessage(MiniMessageUtil.parseOrPlain(ok ? cfg.deleteOk : cfg.deleteFail));
@@ -185,6 +171,26 @@ public class VaultActionMenu extends ChildMenuImp {
 
         builder.button(MiniMessageUtil.parseOrPlain(cfg.backBtn), ctx -> new VaultListMenu(ctx.player(), (ParentMenuImp) getParentMenu(), uiContext, "").open());
         return builder.build();
+    }
+
+    private boolean deleteVault(VaultStoragePlugin plugin) {
+        boolean success;
+        try {
+            var vaultService = plugin.getVaultService();
+            var exists = vaultService.get(vaultId).isPresent();
+            if (!exists) {
+                success = false;
+            } else {
+                // Fire event
+                var vault = vaultService.get(vaultId).get();
+                new PlayerDeleteVaultEvent(getPlayer(), vault).callEvent();
+
+
+                vaultService.delete(vaultId);
+                success = true;
+            }
+        } catch (Throwable t) { success = false; }
+        return success;
     }
 
     private static VaultAction parseAction(String s) {

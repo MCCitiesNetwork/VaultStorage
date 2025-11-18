@@ -1,9 +1,7 @@
 package net.democracycraft.vault.api.service;
 
-import net.democracycraft.vault.api.convertible.Vault;
 import net.democracycraft.vault.internal.database.entity.VaultEntity;
 import net.democracycraft.vault.internal.database.entity.VaultItemEntity;
-import org.bukkit.inventory.ItemStack;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -19,15 +17,8 @@ public interface VaultService extends Service {
      * Creates a vault record at the given world coordinates.
      * @return the persisted entity (never null)
      */
-    @NotNull VaultEntity createVault(@NotNull UUID worldUuid, int x, int y, int z, @NotNull UUID ownerUuid,
+    @NotNull VaultEntity createVault(@NotNull UUID worldUuid, @NotNull UUID actor, int x, int y, int z, @NotNull UUID ownerUuid,
                               @Nullable String material, @Nullable String blockData);
-
-    /**
-     * Creates a vault and persists its contents in a single operation.
-     */
-    @NotNull Vault createVault(@NotNull UUID worldUuid, int x, int y, int z, @NotNull UUID ownerUuid,
-                               @Nullable String material, @Nullable String blockData,
-                               @NotNull List<ItemStack> contents);
 
     @NotNull Optional<VaultEntity> get(@NotNull UUID vaultUuid);
     @Nullable VaultEntity findByLocation(@NotNull UUID worldUuid, int x, int y, int z);

@@ -1,22 +1,26 @@
 package net.democracycraft.vault.internal.service;
 
-import net.democracycraft.vault.api.convertible.Vault;
+import com.earth2me.essentials.Essentials;
+import com.earth2me.essentials.User;
+import net.democracycraft.vault.VaultStoragePlugin;
 import net.democracycraft.vault.api.dao.VaultDAO;
+import net.democracycraft.vault.api.region.VaultRegion;
 import net.democracycraft.vault.api.service.VaultService;
 import net.democracycraft.vault.internal.database.entity.VaultEntity;
 import net.democracycraft.vault.internal.database.entity.VaultItemEntity;
-import net.democracycraft.vault.internal.mappable.VaultImp;
-import net.democracycraft.vault.internal.util.item.ItemSerialization;
+import net.democracycraft.vault.internal.util.minimessage.MiniMessageUtil;
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
-import org.bukkit.inventory.ItemStack;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.time.Instant;
 import java.util.*;
+import net.democracycraft.vault.internal.util.yml.AutoYML;
+import net.democracycraft.vault.internal.util.config.DataFolder;
+import net.democracycraft.vault.internal.config.MailConfig;
 
 public record VaultServiceImpl(VaultDAO dao) implements VaultService {
 
@@ -25,7 +29,7 @@ public record VaultServiceImpl(VaultDAO dao) implements VaultService {
     }
 
     @Override
-    public @NotNull VaultEntity createVault(@NotNull UUID worldUuid, int x, int y, int z, @NotNull UUID ownerUuid,
+    public @NotNull VaultEntity createVault(@NotNull UUID worldUuid, @NotNull UUID actor, int x, int y, int z, @NotNull UUID ownerUuid,
                                      @Nullable String material, @Nullable String blockData) {
         Objects.requireNonNull(worldUuid, "worldUuid");
         Objects.requireNonNull(ownerUuid, "ownerUuid");
@@ -41,35 +45,46 @@ public record VaultServiceImpl(VaultDAO dao) implements VaultService {
         vaultEntity.createdAtEpochMillis = now;
         vaultEntity.updatedAtEpochMillis = now;
         dao.createVault(vaultEntity, ownerUuid);
+
+        Essentials essentials = VaultStoragePlugin.getInstance().getEssentials();
+        User sender = essentials.getUser(actor);
+
+
+
+        User recipient = essentials.getUser(ownerUuid);
+        if(sender == null || recipient == null) {
+            return vaultEntity;
+        }
+        String senderName = sender.getName();
+        String recipientName = recipient.getName();
+
+        // Load configurable MiniMessage template and apply placeholders
+        AutoYML<MailConfig> yml = AutoYML.create(MailConfig.class, "mail", DataFolder.MAIL, MailConfig.HEADER);
+        MailConfig cfg = yml.loadOrCreate(MailConfig::new);
+        Map<String, String> placeholders = new HashMap<>();
+        placeholders.put("%sender%", senderName);
+        placeholders.put("%recipient%", recipientName);
+        addRegionPlaceHolder(worldUuid, x, y, z, placeholders);
+
+        String message = LegacyComponentSerializer.legacySection()
+                .serialize(MiniMessageUtil.parseOrPlain(cfg.vaultCreatedMessage, placeholders));
+
+        VaultStoragePlugin.getInstance().getMailService().sendMail(recipient, sender, message);
+
         return vaultEntity;
     }
 
-    @Override
-    public @NotNull Vault createVault(@NotNull UUID worldUuid, int x, int y, int z, @NotNull UUID ownerUuid,
-                                      @Nullable String material, @Nullable String blockData,
-                                      @NotNull List<ItemStack> contents) {
-        VaultEntity entity = createVault(worldUuid, x, y, z, ownerUuid, material, blockData);
-        // Persist items using batch to reduce round-trips.
-        if (!contents.isEmpty()) {
-            List<VaultItemEntity> batch = new ArrayList<>(contents.size());
-            for (int i = 0; i < contents.size(); i++) {
-                ItemStack it = contents.get(i);
-                if (it == null || it.getAmount() <= 0) continue;
-                VaultItemEntity ve = new VaultItemEntity();
-                ve.vaultUuid = entity.uuid; // ensured by putItems but set for clarity
-                ve.slot = i;
-                ve.amount = it.getAmount();
-                ve.item = ItemSerialization.toBytes(it);
-                batch.add(ve);
-            }
-            if (!batch.isEmpty()) dao.putItems(entity.uuid, batch);
-        }
+    private void addRegionPlaceHolder(@NotNull UUID worldUuid, int x, int y, int z, Map<String, String> placeholders) {
         World world = Bukkit.getWorld(worldUuid);
-        Location loc = world == null ? null : new Location(world, x, y, z);
-        Material mat = material == null ? null : safeMaterial(material);
-        return new VaultImp(ownerUuid, entity.uuid, contents, mat, loc,
-                entity.createdAtEpochMillis == null ? Instant.now() : Instant.ofEpochMilli(entity.createdAtEpochMillis),
-                blockData);
+        if(world != null) {
+            Location location = new Location(world, x, y, z);
+            List<VaultRegion> regions = VaultStoragePlugin.getInstance().getWorldGuardService().getRegionsAt(location.getBlock());
+            String regionName = "N/A";
+            if(!regions.isEmpty()) {
+                regionName = regions.getFirst().id();
+            }
+            placeholders.put("%region%", regionName);
+        }
     }
 
     private static Material safeMaterial(String name) {

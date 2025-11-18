@@ -2,14 +2,19 @@ package net.democracycraft.vault.internal.service;
 
 import net.democracycraft.vault.VaultStoragePlugin;
 import net.democracycraft.vault.api.data.Dto;
+import net.democracycraft.vault.api.event.PlayerVaultEvent;
 import net.democracycraft.vault.api.service.BoltService;
 import net.democracycraft.vault.api.service.MojangService;
+import net.democracycraft.vault.internal.data.VaultDtoImp;
 import net.democracycraft.vault.internal.mappable.VaultImp;
 import net.democracycraft.vault.internal.util.item.ItemSerialization;
+import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.block.*;
 import org.bukkit.entity.Player;
+import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
+import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
@@ -20,6 +25,7 @@ import org.jetbrains.annotations.NotNull;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import net.democracycraft.vault.internal.database.entity.VaultItemEntity;
 import net.democracycraft.vault.internal.security.VaultCapturePolicy;
@@ -267,9 +273,9 @@ public class VaultCaptureService {
         final BukkitTask[] actionbarTask = new BukkitTask[1];
         final boolean[] busy = new boolean[]{false};
 
-        session.getDynamicListener().setListener(new org.bukkit.event.Listener() {
+        session.getDynamicListener().setListener(new Listener() {
             @org.bukkit.event.EventHandler
-            public void onInteract(org.bukkit.event.player.PlayerInteractEvent event) {
+            public void onInteract(PlayerInteractEvent event) {
                 if (!event.getPlayer().getUniqueId().equals(actor.getUniqueId())) return;
                 org.bukkit.event.block.Action action = event.getAction();
                 event.setCancelled(true);
@@ -314,11 +320,11 @@ public class VaultCaptureService {
 
                 new BukkitRunnable() {
                     @Override public void run() {
-                        var vs = plugin.getVaultService();
+                        var vaultService = plugin.getVaultService();
                         UUID worldId = block.getWorld().getUID();
                         UUID newId;
                         {
-                            var created = vs.createVault(worldId, block.getX(), block.getY(), block.getZ(), finalOwner,
+                            var created = vaultService.createVault(worldId, actor.getUniqueId(), block.getX(), block.getY(), block.getZ(), finalOwner,
                                     vault.blockMaterial() == null ? null : vault.blockMaterial().name(),
                                     vault.blockDataString());
                             newId = created.uuid;
@@ -336,15 +342,18 @@ public class VaultCaptureService {
                             batch.add(vie);
                         }
                         if (!batch.isEmpty()) {
-                            vs.putItems(newId, batch);
+                            vaultService.putItems(newId, batch);
                         }
                         new BukkitRunnable() {
                             @Override public void run() {
-                                var dto = new net.democracycraft.vault.internal.data.VaultDtoImp(newId, finalOwner, List.of(),
+                                var dto = new VaultDtoImp(newId, finalOwner, List.of(),
                                         vault.blockMaterial() == null ? null : vault.blockMaterial().name(),
                                         null, System.currentTimeMillis());
                                 VaultStoragePlugin.getInstance().getSessionManager().getOrCreate(actor.getUniqueId()).setLastVaultDto(dto);
                                 actor.sendMessage(MiniMessageUtil.parseOrPlain(texts.capturedOk));
+
+                                new PlayerVaultEvent(actor, vault).callEvent();
+
                                 busy[0] = false;
                             }
                         }.runTask(plugin);
@@ -441,7 +450,7 @@ public class VaultCaptureService {
      * Applies policy, captures/removes the block, persists items when applicable, and sends user feedback.
      * The callback is invoked on the main thread with true when a vault was persisted (non-empty container), false otherwise.
      */
-    public void captureDirectAsync(@NotNull Player actor, @NotNull Block block, @NotNull SessionTexts texts, @NotNull java.util.function.Consumer<Boolean> onDoneMain) {
+    public void captureDirectAsync(@NotNull Player actor, @NotNull Block block, @NotNull SessionTexts texts, @NotNull Consumer<Boolean> onDoneMain) {
         VaultCapturePolicy.Decision decision = VaultCapturePolicy.evaluate(actor, block);
         UUID originalOwner = decision.containerOwner();
         if (!decision.allowed()) {
@@ -463,11 +472,11 @@ public class VaultCaptureService {
         var plugin = VaultStoragePlugin.getInstance();
         new BukkitRunnable(){
             @Override public void run() {
-                var vs = plugin.getVaultService();
+                var vaultService = plugin.getVaultService();
                 UUID worldId = block.getWorld().getUID();
                 UUID newId;
                 {
-                    var created = vs.createVault(worldId, block.getX(), block.getY(), block.getZ(), finalOwner,
+                    var created = vaultService.createVault(worldId, actor.getUniqueId(), block.getX(), block.getY(), block.getZ(), finalOwner,
                             vault.blockMaterial() == null ? null : vault.blockMaterial().name(),
                             vault.blockDataString());
                     newId = created.uuid;
@@ -481,17 +490,23 @@ public class VaultCaptureService {
                     vie.vaultUuid = newId;
                     vie.slot = idx;
                     vie.amount = itemStack.getAmount();
-                    vie.item = net.democracycraft.vault.internal.util.item.ItemSerialization.toBytes(itemStack);
+                    vie.item = ItemSerialization.toBytes(itemStack);
                     batch.add(vie);
                 }
-                if (!batch.isEmpty()) vs.putItems(newId, batch);
-                new BukkitRunnable(){ @Override public void run() {
-                    VaultStoragePlugin.getInstance().getSessionManager().getOrCreate(actor.getUniqueId())
-                            .setLastVaultDto(new net.democracycraft.vault.internal.data.VaultDtoImp(newId, finalOwner, List.of(),
-                                    vault.blockMaterial() == null ? null : vault.blockMaterial().name(), null, System.currentTimeMillis()));
-                    actor.sendMessage(MiniMessageUtil.parseOrPlain(texts.capturedOk));
-                    onDoneMain.accept(true);
-                }}.runTask(plugin);
+                if (!batch.isEmpty()) vaultService.putItems(newId, batch);
+
+                new BukkitRunnable(){
+                    @Override public void run() {
+                        VaultStoragePlugin.getInstance().getSessionManager().getOrCreate(actor.getUniqueId())
+                                .setLastVaultDto(new VaultDtoImp(newId, finalOwner, List.of(),
+                                        vault.blockMaterial() == null ? null : vault.blockMaterial().name(), null, System.currentTimeMillis()));
+                        actor.sendMessage(MiniMessageUtil.parseOrPlain(texts.capturedOk));
+
+                        new PlayerVaultEvent(actor, vault).callEvent();
+
+                        onDoneMain.accept(true);
+                }
+                }.runTask(plugin);
             }
         }.runTaskAsynchronously(plugin);
     }
