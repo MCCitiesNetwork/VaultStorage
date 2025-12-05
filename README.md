@@ -22,9 +22,6 @@ What you can do:
 Command (in‑game):
 - /vault — opens the main menu (all actions flow through the menu).
 
-Note on legacy commands:
-- As of 1.0.1, legacy subcommands (/vault list, /vault open, /vault place, /vault capture) were removed in favor of the unified menu flow via /vault.
-
 ## For Server Managers (Installation, Database, Permissions, Menus, Operations)
 
 ### Requirements
@@ -68,14 +65,6 @@ Assign via your permissions plugin (examples: LuckPerms, PermissionsEx):
 - vaultstorage.action.place — allow placing the stored block back into the world
 - vaultstorage.admin.override — bypass region/container checks when capturing/placing
 - vaultstorage.action.capture — allow entering capture mode and vaulting containers
-
-Notes:
-- The capture/placement logic is enforced by both the menu flows and internal policy.
-- “Admin override” lets you bypass region and container ownership checks; the UI will clearly indicate when override is active.
-
-### Commands (admin view)
-- /vault — opens the main menu (requires vaultstorage.user)
-
 
 ### Menu and Text Configuration (YAML)
 All menu and session texts are generated on first use under:
