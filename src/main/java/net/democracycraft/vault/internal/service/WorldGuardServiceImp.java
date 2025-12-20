@@ -14,6 +14,7 @@ import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.util.BoundingBox;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
 
@@ -80,6 +81,17 @@ public class WorldGuardServiceImp implements WorldGuardService {
             regions.add(buildVaultRegion(entry.getValue().getId(), entry.getValue()));
         }
         return regions;
+    }
+
+    @Override
+    @Nullable
+    public VaultRegion getRegionById(@NotNull String id, @NotNull World world) {
+        Objects.requireNonNull(id, "id");
+        Objects.requireNonNull(world, "world");
+
+        List<VaultRegion> regions = getRegionsIn(world);
+
+        return regions.stream().filter(region -> region.id().equals(id)).toList().getFirst();
     }
 
     private VaultRegion buildVaultRegion(String id, @NotNull ProtectedRegion protectedRegion) {

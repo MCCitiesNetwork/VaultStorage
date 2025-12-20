@@ -4,12 +4,13 @@ import net.democracycraft.vault.api.region.VaultRegion;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
 
 /**
  * Service for accessing WorldGuard regions.
- *
+ *<p>
  * This API performs live lookups against WorldGuard's RegionManager on every call
  * and does not maintain any internal cache.
  */
@@ -25,5 +26,7 @@ public interface WorldGuardService extends Service {
      * The result is fetched live from WorldGuard.
      */
     @NotNull List<VaultRegion> getRegionsIn(@NotNull World world);
+
+    @Nullable VaultRegion getRegionById(@NotNull String id, @NotNull World world);
 
 }

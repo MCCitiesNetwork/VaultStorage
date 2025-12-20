@@ -77,7 +77,7 @@ public class VaultRegionListMenu extends ChildMenuImp {
     /** Browse mode: filter by query across all regions in world. */
     public VaultRegionListMenu(@NotNull Player player, @NotNull ParentMenu parent, @NotNull String query, int page) {
         super(player, parent, "vault_region_list");
-        this.query = query == null ? "" : query.trim();
+        this.query = query.trim();
         this.page = Math.max(0, page);
         this.subsetIds = null;
         setDialog(build());
@@ -89,7 +89,7 @@ public class VaultRegionListMenu extends ChildMenuImp {
         this.query = "";
         this.page = Math.max(0, page);
         // normalize: copy and sort case-insensitively
-        List<String> ids = new ArrayList<>(regionIds == null ? List.of() : regionIds);
+        List<String> ids = new ArrayList<>(regionIds);
         ids.sort(String.CASE_INSENSITIVE_ORDER);
         this.subsetIds = ids;
         setDialog(build());
@@ -237,7 +237,6 @@ public class VaultRegionListMenu extends ChildMenuImp {
         boolean admin = VaultPermission.ADMIN.has(player);
         boolean actorOwnsRegion = region.isOwner(player.getUniqueId());
         UUID filterOwner = admin ? null : (actorOwnsRegion ? null : player.getUniqueId());
-        // When actor is owner of the region, do NOT apply self-filter; rely solely on the centralized policy decision per block.
         for (Block b : protectedBlocks) {
             var decision = VaultCapturePolicy.evaluate(player, b);
             if (!decision.allowed()) continue;
@@ -249,4 +248,6 @@ public class VaultRegionListMenu extends ChildMenuImp {
         }
         return out;
     }
+
+    // computeEntries(Player, String) antiguo puede delegar a ALL si aún existe alguna referencia
 }

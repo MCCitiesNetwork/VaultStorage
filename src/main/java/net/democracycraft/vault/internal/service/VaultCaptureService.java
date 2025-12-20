@@ -11,6 +11,7 @@ import net.democracycraft.vault.internal.util.item.ItemSerialization;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.block.*;
+import org.bukkit.entity.Painting;
 import org.bukkit.entity.Player;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
@@ -125,7 +126,6 @@ public class VaultCaptureService {
     public CaptureOutcome captureWithDoubleChestSupport(Player actor, Block block, UUID originalOwner) {
         BoltService bolt = VaultStoragePlugin.getInstance().getBoltService();
         UUID finalOwner = originalOwner != null ? originalOwner : actor.getUniqueId();
-
         // Non-container path: treat as empty
         if (!(block.getState() instanceof Container container)) {
             if (bolt != null) {

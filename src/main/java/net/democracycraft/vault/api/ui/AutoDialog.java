@@ -15,6 +15,8 @@ import net.kyori.adventure.audience.Audience;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickCallback;
 import org.bukkit.entity.Player;
+import org.jetbrains.annotations.Contract;
+import org.jetbrains.annotations.Range;
 
 import java.time.Duration;
 import java.util.ArrayList;
@@ -131,6 +133,36 @@ public class AutoDialog {
 
             this.buttons.add(btn);
             return this;
+        }
+
+        public Builder sizableButton(Component label, Component tooltip, Duration expireAfter, int maxUses, Consumer<Context> handler, @Range(from = 1, to = 1024) int width) {
+            Objects.requireNonNull(label);
+            ClickCallback.Options options = ClickCallback.Options.builder()
+                    .lifetime(expireAfter)
+                    .uses(maxUses)
+                    .build();
+
+            DialogActionCallback callback = (response, audience) -> {
+                Player player = (audience instanceof Player) ? (Player) audience : null;
+                if (player == null) return;
+                Context ctx = new Context(player, audience, response);
+                handler.accept(ctx);
+            };
+
+            DialogAction action = DialogInstancesProvider.instance().register(callback, options);
+
+            ActionButton btn = ActionButton.builder(label)
+                    .tooltip(tooltip)
+                    .action(action)
+                    .width(width)
+                    .build();
+
+            this.buttons.add(btn);
+            return this;
+        }
+
+        public Builder sizableButton(Component label, Consumer<Context> handler, @Range(from = 1, to = 1024) int width) {
+            return sizableButton(label, null, Duration.ofMinutes(5), 10, handler, width);
         }
 
         public Builder button(Component label, Consumer<Context> handler) {

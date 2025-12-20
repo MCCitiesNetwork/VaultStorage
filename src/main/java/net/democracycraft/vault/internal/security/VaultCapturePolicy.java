@@ -2,6 +2,7 @@ package net.democracycraft.vault.internal.security;
 
 import net.democracycraft.vault.VaultStoragePlugin;
 import net.democracycraft.vault.api.data.Dto;
+import net.democracycraft.vault.api.region.VaultRegion;
 import net.democracycraft.vault.api.service.BoltService;
 import net.democracycraft.vault.api.service.WorldGuardService;
 import org.bukkit.block.Block;
@@ -15,19 +16,9 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Centralized policy to decide whether an actor can vault a target block.
+ * Policy evaluator for vault capture (placement) actions.
  * <p>
- * Overlapping-region aware rules (owners and members are treated equally as "participants"):
- * <ul>
- *   <li>Participant (owner or member of any overlapping region): may vault only when the block has a Bolt owner
- *       that is not the actor and that owner is not a participant of ANY overlapping region at that block.</li>
- *   <li>Non-participant (not owner nor member in all overlapping regions): may vault only their own Bolt-owned blocks.</li>
- *   <li>Unprotected blocks (no Bolt owner) are never vaultable unless override is present.</li>
- *   <li>Blocks outside any region are vaultable only with override.</li>
- *   <li>Parent region membership does NOT grant access to child regions - participation must be in the specific
- *       region(s) containing the block, not inherited from parent regions.</li>
- * </ul>
- * The method also returns detailed flags useful for logging and UI.
+ * Enforces rules based on Bolt ownership and WorldGuard region participation.
  */
 public final class VaultCapturePolicy {
 
@@ -77,17 +68,18 @@ public final class VaultCapturePolicy {
      * Evaluate vaulting permission for the given actor and block.
      * Rules recap: requires Bolt owner; requires region participation unless override is present.
      *
-     * Key fix: Participation is only counted for the INNERMOST (child) regions, not parent regions.
-     * If Region A contains Region B, and the block is in Region B:
-     *  - A member of Region A who is NOT a member of Region B cannot vault blocks in Region B
-     *  - A member of Region B CAN vault blocks in Region B (regardless of Region A membership)
      */
     public static Decision evaluate(Player actor, Block block) {
         boolean hasOverride = VaultPermission.ACTION_PLACE_OVERRIDE.has(actor);
         BoltService bolt = VaultStoragePlugin.getInstance().getBoltService();
         UUID originalOwner = null;
         if (bolt != null) {
-            try { originalOwner = bolt.getOwner(block); } catch (Throwable ignored) {}
+            try {
+                originalOwner = bolt.getOwner(block);
+            } catch (Throwable t) {
+                VaultStoragePlugin.getInstance().getLogger().warning("[VaultCapturePolicy] Error obtaining Bolt owner for block in "
+                        + formatBlock(block) + ": " + t.getClass().getSimpleName() + " - " + t.getMessage());
+            }
         }
 
         boolean actorIsContainerOwner = originalOwner != null && originalOwner.equals(actor.getUniqueId());
@@ -100,45 +92,59 @@ public final class VaultCapturePolicy {
         List<RegionStatus> perRegionDebug = List.of();
 
         if (wgs != null) {
-            var regions = wgs.getRegionsAt(block);
+            List<VaultRegion> regions = List.of();
+            try {
+                regions = wgs.getRegionsAt(block);
+            } catch (Throwable t) {
+                VaultStoragePlugin.getInstance().getLogger().warning("[VaultCapturePolicy] Error obtaining WorldGuard regions for block in "
+                        + formatBlock(block) + ": " + t.getClass().getSimpleName() + " - " + t.getMessage());
+            }
+
             inAnyRegion = !regions.isEmpty();
             UUID actorUuid = actor.getUniqueId();
             List<RegionStatus> debugList = new ArrayList<>();
 
             for (var region : regions) {
-                boolean actorParticipant = region.isPartOfRegion(actorUuid);
+                boolean actorParticipant = false;
                 boolean containerOwnerParticipates = false;
-                if (originalOwner != null) {
-                    containerOwnerParticipates = region.isPartOfRegion(originalOwner);
+                try {
+                    actorParticipant = region.isPartOfRegion(actorUuid);
+                    if (originalOwner != null) {
+                        containerOwnerParticipates = region.isPartOfRegion(originalOwner);
+                    }
+                } catch (Throwable t) {
+                    VaultStoragePlugin.getInstance().getLogger().warning("[VaultCapturePolicy] Error evaluating participation for region "
+                            + region.id() + " para bloque en " + formatBlock(block) + ": " + t.getClass().getSimpleName() + " - " + t.getMessage());
                 }
 
-                BoundingBox box = region.boundingBox();
+                BoundingBox box;
+                try {
+                    box = region.boundingBox();
+                } catch (Throwable t) {
+                    VaultStoragePlugin.getInstance().getLogger().warning("[VaultCapturePolicy] Error obtaining boundingBox for region "
+                            + region.id() + ": " + t.getClass().getSimpleName() + " - " + t.getMessage());
+                    debugList.add(new RegionStatus(region.id(), actorParticipant, containerOwnerParticipates));
+                    if (actorParticipant) actorParticipantAny = true;
+                    if (containerOwnerParticipates) containerOwnerParticipantAny = true;
+                    continue;
+                }
 
-                // Determine if this region contains or is contained by another region
-                boolean isParent = regions.stream().anyMatch(r -> r != region && box.contains(r.boundingBox()));
-                boolean isChild  = regions.stream().anyMatch(r -> r != region && r.boundingBox().contains(box));
+                final BoundingBox currentBox = box;
+                boolean isParent = false;
+                boolean isChild = false;
+                try {
+                    isParent = regions.stream().anyMatch(r -> r != region && safeContains(currentBox, r));
+                    isChild = regions.stream().anyMatch(r -> r != region && safeContains(r.boundingBox(), region));
+                } catch (Throwable t) {
+                    VaultStoragePlugin.getInstance().getLogger().warning("[VaultCapturePolicy] Error evaluating parent/child for region "
+                            + region.id() + ": " + t.getClass().getSimpleName() + " - " + t.getMessage());
+                }
 
-                // CRITICAL FIX: Different logic for actor vs container owner
-                //
-                // FOR ACTOR: Only count participation in NON-PARENT regions
-                // Prevents parent region membership from granting access to child regions.
-                // Example: Region A (parent) contains Region B (child)
-                //  - Block is in Region B
-                //  - Actor is member of Region A but NOT Region B
-                //  - Region A: isParent = true → actorParticipant && !isParent = FALSE
-                //  - Region B: actorParticipant = false → FALSE
-                //  - Result: Actor is NOT counted as participant (CORRECT)
                 boolean actorCountedHere = actorParticipant && !isParent;
                 if (actorCountedHere) {
                     actorParticipantAny = true;
                 }
 
-                // FOR CONTAINER OWNER: Count participation in ALL regions (including parent regions)
-                // If the container owner participates in ANY region containing the block,
-                // they should block other participants from vaulting.
-                // Example: Container in Region B, owner is member of Region B
-                //  - Region B: containerOwnerParticipates = true → TRUE
-                //  - Result: Owner IS counted as participant, blocks vaulting (CORRECT)
                 if (containerOwnerParticipates) {
                     containerOwnerParticipantAny = true;
                 }
@@ -147,7 +153,6 @@ public final class VaultCapturePolicy {
             }
 
             perRegionDebug = Collections.unmodifiableList(debugList);
-
         }
 
         boolean disallowedOwnerSelf = actorParticipantAny && actorIsContainerOwner;
@@ -195,5 +200,25 @@ public final class VaultCapturePolicy {
                 reason,
                 perRegionDebug
         );
+    }
+
+    private static String formatBlock(Block block) {
+        if (block == null) {
+            return "<null>";
+        } else {
+            block.getWorld();
+        }
+        return block.getWorld().getName() + "@" + block.getX() + "," + block.getY() + "," + block.getZ() + "[" + block.getType() + "]";
+    }
+
+    private static boolean safeContains(BoundingBox outer, VaultRegion innerRegion) {
+        try {
+            BoundingBox inner = innerRegion.boundingBox();
+            return outer.contains(inner);
+        } catch (Throwable t) {
+            VaultStoragePlugin.getInstance().getLogger().warning("[VaultCapturePolicy] Error in safeContains for region "
+                    + innerRegion.id() + ": " + t.getClass().getSimpleName() + " - " + t.getMessage());
+            return false;
+        }
     }
 }

@@ -69,4 +69,9 @@ public record VaultImp(
     public UUID getUniqueIdentifier() {
         return uniqueIdentifier;
     }
+
+    @Override
+    public boolean isContainer() {
+        return false;
+    }
 }

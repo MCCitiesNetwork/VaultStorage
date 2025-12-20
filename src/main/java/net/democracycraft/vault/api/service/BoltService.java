@@ -2,9 +2,14 @@ package net.democracycraft.vault.api.service;
 
 import org.bukkit.World;
 import org.bukkit.block.Block;
+import org.bukkit.entity.Entity;
 import org.bukkit.util.BoundingBox;
+import org.jetbrains.annotations.NotNull;
+import org.popcraft.bolt.protection.EntityProtection;
+import org.popcraft.bolt.protection.Protection;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 public interface BoltService extends Service {
@@ -27,6 +32,12 @@ public interface BoltService extends Service {
      */
     void removeProtection(Block block);
 
+
+    List<EntityProtection> getEntityProtections(@NotNull World world, @NotNull BoundingBox boundingBox);
+
+
+    Map<EntityProtection, Entity> getProtectedEntities(@NotNull World world, @NotNull BoundingBox boundingBox);
+
     /**
      * Creates a Bolt protection for the given block owned by the specified player.
      * Implementations should be safe to call on the main thread.
@@ -34,5 +45,7 @@ public interface BoltService extends Service {
      * @param ownerUuid owner of the protection
      */
     void createProtection(Block block, UUID ownerUuid);
+
+    void removeProtection(Protection protection);
 
 }
