@@ -27,4 +27,6 @@ public interface Vault extends DTOConvertible<VaultDto> {
 
     /** Timestamp when the block was vaulted. */
     Instant vaultedAt();
+
+    boolean isContainer();
 }

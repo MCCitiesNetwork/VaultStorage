@@ -181,4 +181,48 @@ public class MojangServiceImpl implements MojangService {
         connection.setDoInput(true);
         return connection;
     }
+
+    /**
+     * Fetches the skin texture and signature for a given player UUID.
+     *
+     * @param playerUuid The UUID of the player
+     * @return SkinData object containing value and signature, or null if not found.
+     */
+    public SkinData getSkin(UUID playerUuid) {
+        if (playerUuid == null) return null;
+
+        try {
+            String url = UUID_TO_NAME_URL + playerUuid.toString().replace("-", "") + "?unsigned=false";
+
+            JsonObject response = getJsonObject(url);
+
+            if (response != null && response.has("properties")) {
+                JsonArray properties = response.getAsJsonArray("properties");
+
+                for (JsonElement element : properties) {
+                    JsonObject prop = element.getAsJsonObject();
+                    if (prop.has("name") && prop.get("name").getAsString().equals("textures")) {
+
+                        String value = prop.get("value").getAsString();
+                        String signature = prop.has("signature") ? prop.get("signature").getAsString() : null;
+
+                        return new SkinData(value, signature);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return null;
+    }
+
+    public static class SkinData {
+        public final String value;
+        public final String signature;
+
+        public SkinData(String value, String signature) {
+            this.value = value;
+            this.signature = signature;
+        }
+    }
 }

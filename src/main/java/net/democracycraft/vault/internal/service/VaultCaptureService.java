@@ -8,7 +8,6 @@ import net.democracycraft.vault.api.service.MojangService;
 import net.democracycraft.vault.internal.data.VaultDtoImp;
 import net.democracycraft.vault.internal.mappable.VaultImp;
 import net.democracycraft.vault.internal.util.item.ItemSerialization;
-import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.block.*;
 import org.bukkit.entity.Player;
@@ -125,7 +124,6 @@ public class VaultCaptureService {
     public CaptureOutcome captureWithDoubleChestSupport(Player actor, Block block, UUID originalOwner) {
         BoltService bolt = VaultStoragePlugin.getInstance().getBoltService();
         UUID finalOwner = originalOwner != null ? originalOwner : actor.getUniqueId();
-
         // Non-container path: treat as empty
         if (!(block.getState() instanceof Container container)) {
             if (bolt != null) {
@@ -194,7 +192,7 @@ public class VaultCaptureService {
     public static class SessionTexts implements Dto {
         public String captureCancelled = "Capture cancelled.";
         public String notAllowed = "<red>Not allowed: region/block rules.</red>";
-        public String emptyCaptureSkipped = "Entity unlocked";
+        public String emptyCaptureSkipped = "Protection removed.";
         public String capturedOk = "Vault captured.";
         public String noBoltOwner = "<yellow>No Bolt owner found; you will be set as the vault owner.</yellow>";
         public String actionBarIdle = "<yellow>Capture mode</yellow> - Right-click a block. <gray>Left-click to cancel.</gray>";
@@ -206,6 +204,7 @@ public class VaultCaptureService {
         public String reasonNotInvolvedNotOwner = "not involved and not block owner";
         public String reasonUnprotectedNoOverride = "unprotected block and no override";
         public String reasonNotInRegion = "block not in a region";
+        public String reasonHangableRequiresAdmin = "requires admin to unlock entities";
         public String reasonFallback = "cannot";
         public String actionBarUnprotectedOwner = "unprotected";
         public String actionBarVaultableYes = "yes";
@@ -431,6 +430,7 @@ public class VaultCaptureService {
                 case NOT_INVOLVED_NOT_OWNER -> reasonText = cfg.reasonNotInvolvedNotOwner;
                 case UNPROTECTED_NO_OVERRIDE -> reasonText = cfg.reasonUnprotectedNoOverride;
                 case NOT_IN_REGION -> reasonText = cfg.reasonNotInRegion;
+                case ENTITIES_REQUIRE_ADMIN -> reasonText = cfg.reasonHangableRequiresAdmin;
                 default -> reasonText = cfg.reasonFallback;
             }
             Map<String,String> reasonPh = Map.of(
@@ -499,15 +499,15 @@ public class VaultCaptureService {
                     @Override public void run() {
                         VaultStoragePlugin.getInstance().getSessionManager().getOrCreate(actor.getUniqueId())
                                 .setLastVaultDto(new VaultDtoImp(newId, finalOwner, List.of(),
-                                        vault.blockMaterial() == null ? null : vault.blockMaterial().name(), null, System.currentTimeMillis()));
+                                        vault.blockMaterial() == null ? null : vault.blockMaterial().name(),
+                                        null, System.currentTimeMillis()));
                         actor.sendMessage(MiniMessageUtil.parseOrPlain(texts.capturedOk));
-
                         new PlayerVaultEvent(actor, vault).callEvent();
-
                         onDoneMain.accept(true);
-                }
+                    }
                 }.runTask(plugin);
             }
         }.runTaskAsynchronously(plugin);
     }
 }
+

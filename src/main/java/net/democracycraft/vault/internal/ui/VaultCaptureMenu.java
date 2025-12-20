@@ -30,7 +30,7 @@ import java.util.*;
 public class VaultCaptureMenu extends ParentMenuImp {
 
     /** Configurable menu texts. */
-    public static class Config implements Dto, java.io.Serializable {
+    public static class Config implements Dto {
         /** Dialog title. Supports %player% placeholder. */
         public String title = "<gold><bold>Vault Capture</bold></gold>";
         /** Instruction line explaining how to start capture. Supports %player%. */
@@ -44,7 +44,7 @@ public class VaultCaptureMenu extends ParentMenuImp {
         /** Button to close dialog. Supports %player%. */
         public String closeBtn = "<red><bold>Close</bold></red>";
 
-        public String emptyCaptureSkipped = "Entity unlocked";
+        public String emptyCaptureSkipped = "Protection removed.";
         /** Button to open the scan menu. */
         public String openScanBtn = "<yellow>Scan Region</yellow>";
     }

@@ -1,15 +1,19 @@
 package net.democracycraft.vault.internal.service;
 
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import net.democracycraft.vault.VaultStoragePlugin;
 import net.democracycraft.vault.api.service.BoltService;
 import org.bukkit.Chunk;
 import org.bukkit.World;
 import org.bukkit.block.Block;
+import org.bukkit.entity.Entity;
 import org.bukkit.util.BoundingBox;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.popcraft.bolt.BoltAPI;
 import org.popcraft.bolt.protection.BlockProtection;
+import org.popcraft.bolt.protection.EntityProtection;
 import org.popcraft.bolt.protection.Protection;
 
 import java.util.*;
@@ -116,6 +120,52 @@ public class BoltServiceImp implements BoltService {
     }
 
     /**
+     * Checks if any entities within the given bounding box and world are protected.
+     *
+     * @param world       the world (not null)
+     * @param boundingBox the search area (not null)
+     * @return list of protected entities (never null)
+     */
+
+    @Override
+    public List<EntityProtection> getEntityProtections(@NotNull World world, @NotNull BoundingBox boundingBox) {
+        Objects.requireNonNull(world, "world");
+        Objects.requireNonNull(boundingBox, "boundingBox");
+
+        Collection<Protection> protections = api.findProtections(world, boundingBox);
+
+        return protections.stream()
+                 .filter(protection -> protection instanceof EntityProtection)
+                 .map(protection -> (EntityProtection) protection)
+                 .toList();
+    }
+
+    @Override
+    public Map<EntityProtection, Entity> getProtectedEntities(@NotNull World world, @NotNull BoundingBox boundingBox) {
+        Objects.requireNonNull(world, "world");
+        Objects.requireNonNull(boundingBox, "boundingBox");
+
+        Collection<Protection> protections = api.findProtections(world, boundingBox);
+        Map<EntityProtection, Entity> protectedEntities = new HashMap<>();
+
+        for (Protection protection : protections) {
+            if (protection instanceof EntityProtection entityProtection) {
+
+
+                UUID entityUUID = entityProtection.getId();
+
+                Entity entity = world.getEntity(entityUUID);
+                if (entity != null) {
+                    protectedEntities.put(entityProtection, entity);
+                }
+            }
+        }
+
+        return protectedEntities;
+    }
+
+
+    /**
      * Returns all protected blocks within the given bounding box and world, regardless of owner.
      *
      * @param boundingBox the search area (not null)
@@ -178,5 +228,10 @@ public class BoltServiceImp implements BoltService {
         Objects.requireNonNull(ownerUuid, "ownerUuid");
         BlockProtection protection = api.createProtection(block, ownerUuid, "private");
         api.saveProtection(protection);
+    }
+
+    @Override
+    public void removeProtection(Protection protection) {
+        api.removeProtection(protection);
     }
 }
