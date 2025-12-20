@@ -44,7 +44,7 @@ public class VaultCaptureMenu extends ParentMenuImp {
         /** Button to close dialog. Supports %player%. */
         public String closeBtn = "<red><bold>Close</bold></red>";
 
-        public String emptyCaptureSkipped = "Entity unlocked";
+        public String emptyCaptureSkipped = "Protection removed.";
         /** Button to open the scan menu. */
         public String openScanBtn = "<yellow>Scan Region</yellow>";
     }

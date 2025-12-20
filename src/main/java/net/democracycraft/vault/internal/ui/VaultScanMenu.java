@@ -286,6 +286,9 @@ public class VaultScanMenu extends ChildMenuImp {
 
                 String entityName = protections.get(protection).getType().name();
 
+                var decision = VaultCapturePolicy.evaluate(getPlayer(), protections.get(protection));
+                String vaultable = decision.allowed() ? cfg().vaultableYes : cfg().vaultableNo;
+
                 Map<String,String> placeholdersEntry = Map.of(
                         "%x%", String.valueOf(entityLoc.getBlockX()),
                         "%y%", String.valueOf(entityLoc.getBlockY()),
@@ -293,11 +296,17 @@ public class VaultScanMenu extends ChildMenuImp {
                         "%index%", index,
                         "%kind%", entityName,
                         "%owner%", ownerName,
-                        "%vaultable%", cfg().vaultableYes
+                        "%vaultable%", vaultable
                 );
                 builder.addBody(DialogBody.plainMessage(MiniMessageUtil.parseOrPlain(config.entryLine, placeholdersEntry)));
                 // Remove protection button for entity (calls BoltService#removeProtection with the EntityProtection instance)
                 builder.sizableButton(MiniMessageUtil.parseOrPlain(config.entryVaultButton, placeholdersEntry), ctx -> {
+                    var check = VaultCapturePolicy.evaluate(ctx.player(), protections.get(protection));
+                    if (!check.allowed()) {
+                        ctx.player().sendMessage(MiniMessageUtil.parseOrPlain(cfg().notAllowed));
+                        return;
+                    }
+
                     BoltService svc = VaultStoragePlugin.getInstance().getBoltService();
                     if (svc == null) return;
                     svc.removeProtection(protection);
@@ -462,7 +471,7 @@ public class VaultScanMenu extends ChildMenuImp {
         builder.sizableButton(MiniMessageUtil.parseOrPlain(config.filterBtn, phFilter), ctx -> {
             FilterMode next = filterMode.next();
             new VaultScanMenu(ctx.player(), getParentMenu(), uiContext, regionId, entries, currentPage, next).open();
-        }, 70);
+        }, 100);
     }
 
     private List<Block> applyTypeFilter(List<Block> source, FilterMode mode) {

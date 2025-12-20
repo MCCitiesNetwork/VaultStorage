@@ -6,6 +6,8 @@ import net.democracycraft.vault.api.region.VaultRegion;
 import net.democracycraft.vault.api.service.BoltService;
 import net.democracycraft.vault.api.service.WorldGuardService;
 import org.bukkit.block.Block;
+import org.bukkit.entity.Entity;
+import org.bukkit.entity.Hanging;
 import org.bukkit.entity.Player;
 import org.bukkit.util.BoundingBox;
 
@@ -52,7 +54,11 @@ public final class VaultCapturePolicy {
             /**
              * The block is outside of any region.
              */
-            NOT_IN_REGION
+            NOT_IN_REGION,
+            /**
+             * The block involves a Hangable entity (ItemFrame, Painting) and the actor lacks admin permission.
+             */
+            ENTITIES_REQUIRE_ADMIN
         }
     }
 
@@ -80,6 +86,22 @@ public final class VaultCapturePolicy {
                 VaultStoragePlugin.getInstance().getLogger().warning("[VaultCapturePolicy] Error obtaining Bolt owner for block in "
                         + formatBlock(block) + ": " + t.getClass().getSimpleName() + " - " + t.getMessage());
             }
+        }
+
+        // Check for Hanging (ItemFrames, Paintings) attached to or intersecting the block
+        // Non-admins are not allowed to unlock/vault Hanging.
+        boolean hangableRestricted = false;
+        if (originalOwner != null && !VaultPermission.ADMIN.has(actor)) {
+            try {
+                // Expand slightly to catch entities on the face of the block
+                var nearby = block.getWorld().getNearbyEntities(block.getBoundingBox().expand(0.2));
+                for (Entity entity : nearby) {
+                    if (entity instanceof Hanging) {
+                        hangableRestricted = true;
+                        break;
+                    }
+                }
+            } catch (Throwable ignored) {}
         }
 
         boolean actorIsContainerOwner = originalOwner != null && originalOwner.equals(actor.getUniqueId());
@@ -171,11 +193,14 @@ public final class VaultCapturePolicy {
 
         boolean allowed = (originalOwner != null)
                 && !disallowedOwnerSelf
+                && !hangableRestricted
                 && ((inAnyRegion && baseAllowed) || hasOverride);
 
         Decision.Reason reason;
         if (allowed) {
             reason = Decision.Reason.ALLOWED;
+        } else if (hangableRestricted) {
+            reason = Decision.Reason.ENTITIES_REQUIRE_ADMIN;
         } else if (!inAnyRegion) {
             reason = Decision.Reason.NOT_IN_REGION;
         } else if (disallowedOwnerSelf) {
@@ -202,6 +227,25 @@ public final class VaultCapturePolicy {
         );
     }
 
+    /**
+     * Evaluate vaulting permission for a specific entity (e.g. from Scan Menu).
+     */
+    public static Decision evaluate(Player actor, Entity entity) {
+        boolean hasOverride = VaultPermission.ACTION_PLACE_OVERRIDE.has(actor);
+        boolean isAdmin = VaultPermission.ADMIN.has(actor);
+
+        if (entity instanceof Hanging && !isAdmin) {
+             return new Decision(false, hasOverride, false, false, false, false, false, null, Decision.Reason.ENTITIES_REQUIRE_ADMIN, List.of());
+        }
+
+        if(!isAdmin) {
+            return new Decision(false, hasOverride, false, false, false, false, false, null, Decision.Reason.ENTITIES_REQUIRE_ADMIN, List.of());
+        }
+
+
+        return new Decision(true, hasOverride, false, false, false, false, true, null, Decision.Reason.ALLOWED, List.of());
+    }
+
     private static String formatBlock(Block block) {
         if (block == null) {
             return "<null>";
@@ -222,3 +266,4 @@ public final class VaultCapturePolicy {
         }
     }
 }
+
