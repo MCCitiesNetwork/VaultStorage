@@ -27,6 +27,7 @@ public class VaultSessionManager {
         private VaultDto lastVaultDto;
         private BukkitTask actionBarTask;
         private Mode mode = Mode.NONE;
+        private long lastScanTime = 0;
 
         /** Returns the dynamic listener holder for this session. */
         public DynamicListener getDynamicListener() { return dynamicListener; }
@@ -62,6 +63,9 @@ public class VaultSessionManager {
                 this.actionBarTask = null;
             }
         }
+
+        public long getLastScanTime() { return lastScanTime; }
+        public void setLastScanTime(long time) { this.lastScanTime = time; }
     }
 
     private final Map<UUID, Session> sessions = new HashMap<>();

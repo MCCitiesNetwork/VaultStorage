@@ -1,5 +1,5 @@
 name: VaultStorage
-version: '1.0.7'
+version: '1.0.8'
 main: net.democracycraft.vault.VaultStoragePlugin
 api-version: '1.21'
 authors: [ Alepando ]

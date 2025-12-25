@@ -2,10 +2,7 @@ package net.democracycraft.vault;
 
 import com.earth2me.essentials.Essentials;
 import net.democracycraft.vault.api.dao.VaultDAO;
-import net.democracycraft.vault.api.service.BoltService;
-import net.democracycraft.vault.api.service.MojangService;
-import net.democracycraft.vault.api.service.VaultService;
-import net.democracycraft.vault.api.service.WorldGuardService;
+import net.democracycraft.vault.api.service.*;
 import net.democracycraft.vault.internal.command.VaultCommand;
 import net.democracycraft.vault.internal.database.DatabaseSchema;
 import net.democracycraft.vault.internal.database.MySQLManager;
@@ -42,6 +39,7 @@ public final class VaultStoragePlugin extends JavaPlugin {
     private VaultCaptureService captureService;
     private VaultPlacementService placementService;
     private VaultInventoryService inventoryService;
+    private VaultScanService scanService;
 
 
     // Integration services
@@ -77,6 +75,9 @@ public final class VaultStoragePlugin extends JavaPlugin {
 
     /** Reusable inventory domain service. */
     public VaultInventoryService getInventoryService() { return inventoryService; }
+
+    /** Reusable scan domain service. */
+    public VaultScanService getScanService() { return scanService; }
 
     public MojangService getMojangService() { return mojangService; }
 
@@ -121,6 +122,7 @@ public final class VaultStoragePlugin extends JavaPlugin {
         this.captureService = new VaultCaptureService();
         this.placementService = new VaultPlacementService();
         this.inventoryService = new VaultInventoryService();
+        this.scanService = new VaultScanServiceImpl();
 
         // External lookup services
         this.mojangService = new MojangServiceImpl();

@@ -5,9 +5,13 @@ import net.democracycraft.vault.api.data.Dto;
 import net.democracycraft.vault.api.event.PlayerVaultEvent;
 import net.democracycraft.vault.api.service.BoltService;
 import net.democracycraft.vault.api.service.MojangService;
+import net.democracycraft.vault.api.service.VaultService;
 import net.democracycraft.vault.internal.data.VaultDtoImp;
 import net.democracycraft.vault.internal.mappable.VaultImp;
 import net.democracycraft.vault.internal.util.item.ItemSerialization;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.format.TextColor;
 import org.bukkit.Material;
 import org.bukkit.block.*;
 import org.bukkit.entity.Player;
@@ -34,6 +38,7 @@ import net.democracycraft.vault.internal.session.VaultSessionManager.Mode;
 import net.democracycraft.vault.internal.util.minimessage.MiniMessageUtil;
 import net.democracycraft.vault.internal.util.yml.AutoYML;
 import net.democracycraft.vault.internal.util.config.DataFolder;
+import org.jspecify.annotations.NonNull;
 
 /**
  * Service responsible for capturing a block into a Vault model.
@@ -58,6 +63,8 @@ public class VaultCaptureService {
             // Non-container: treat as empty so capture logic will produce no vault
             return true;
         }
+        // Note: checking getBlockInventory() on a Double Chest returns ONLY the half belonging to this block,
+        // which is exactly what we need for split-logic.
         Inventory inv = (c instanceof Chest chest) ? chest.getBlockInventory() : c.getInventory();
         for (ItemStack stack : inv.getContents()) {
             if (stack == null) continue;
@@ -104,51 +111,78 @@ public class VaultCaptureService {
      * Immutable outcome produced by {@link #captureWithDoubleChestSupport(Player, Block, UUID)}.
      * Contract:
      * <ul>
-     *   <li>If {@code empty} is true: no block removed (original block remains), no vault created, bolt protection removed, other halves not re-protected.</li>
-     *   <li>If {@code empty} is false (container with contents): block removed & vaulted, remaining halves (if any) re-protected under {@code finalOwner}.</li>
+     * <li>If {@code empty} is true: no block removed, no vault created.</li>
+     * <li>{@code protectionRemoved}: true if Bolt protection was stripped, false if action was canceled/warned.</li>
      * </ul>
-     * For non-container blocks {@code empty} will always be true.
      */
-    public record CaptureOutcome(boolean empty, VaultImp vault, UUID originalOwner, UUID finalOwner, List<Block> reProtectedHalves) {}
+    public record CaptureOutcome(boolean empty, boolean protectionRemoved, VaultImp vault, UUID originalOwner, UUID finalOwner, List<Block> reProtectedHalves) {}
 
     /**
      * Captures a block into a vault while preserving protection rules.
      * <p>Behavior:</p>
      * <ul>
-     *   <li>Non-container blocks: treated as empty capture (protection removed, block kept, no vault).</li>
-     *   <li>Container blocks: if inventory empty -> same as non-container (no vault). If non-empty -> items persisted, block removed.</li>
-     *   <li>Double chests: remaining half(s) re-protected when vault created.</li>
+     * <li>Target Empty & Other Half Full: Warns user, does nothing.</li>
+     * <li>Both Empty: Removes protection from BOTH halves.</li>
+     * <li>Single Empty: Removes protection.</li>
+     * <li>Target Full: Captures vault, re-protects other half.</li>
      * </ul>
-     * Ownership transfer: final owner is originalOwner if present else actor.
      */
-    public CaptureOutcome captureWithDoubleChestSupport(Player actor, Block block, UUID originalOwner) {
+    public CaptureOutcome captureWithDoubleChestSupport(Player actor, @NonNull Block block, UUID originalOwner) {
         BoltService bolt = VaultStoragePlugin.getInstance().getBoltService();
         UUID finalOwner = originalOwner != null ? originalOwner : actor.getUniqueId();
-        // Non-container path: treat as empty
+
+        // 1. Non-container path: treat as empty capture (remove protection)
         if (!(block.getState() instanceof Container container)) {
             if (bolt != null) {
                 try { bolt.removeProtection(block); } catch (Throwable ignored) {}
             }
-            return new CaptureOutcome(true, null, originalOwner, finalOwner, List.of());
+            return new CaptureOutcome(true, true, null, originalOwner, finalOwner, List.of());
         }
 
         List<Block> otherHalves = getHalves(block, container);
+        boolean targetIsEmpty = isContainerEmpty(block);
 
-        boolean empty = isContainerEmpty(block);
+        // Double Chest Logic: Check the state of the other half if it exists
+        if (!otherHalves.isEmpty()) {
+            Block otherHalf = otherHalves.get(0); // Standard double chests only have one other half
+            boolean otherHalfIsEmpty = isContainerEmpty(otherHalf);
 
-        // Always remove protection from clicked block
+            // If the target half is empty but the other half contains items, we abort the operation
+            // to prevent accidental unprotection of the full chest. The user is guided to vault the non-empty side.
+            if (targetIsEmpty && !otherHalfIsEmpty) {
+                actor.sendMessage(Component.text("[Vault Capture Service] You should vault the non-empty side first.").color(NamedTextColor.YELLOW));
+                // Return empty=true so no vault is made, but protectionRemoved=false so we don't spam "Protection Removed".
+                return new CaptureOutcome(true, false, null, originalOwner, finalOwner, List.of());
+            }
+
+            // If both halves of the double chest are empty, we proceed to remove the protection
+            // from both blocks to fully unprotect the empty container.
+            if (targetIsEmpty) {
+                if (bolt != null) {
+                    try {
+                        bolt.removeProtection(block); // bolt handles 1 protection for double chests
+                    } catch (Throwable ignored) {}
+                }
+                return new CaptureOutcome(true, true, null, originalOwner, finalOwner, List.of());
+            }
+        }
+
+        // If we are here, either it's a single chest, or the target is not empty.
+
+        if (targetIsEmpty) {
+            // Single chest that is empty -> Just remove protection
+            if (bolt != null) {
+                try { bolt.removeProtection(block); } catch (Throwable ignored) {}
+            }
+            return new CaptureOutcome(true, true, null, originalOwner, finalOwner, List.of());
+        }
+
+        // Always remove protection from clicked block before capturing
         if (bolt != null) {
             try { bolt.removeProtection(block); } catch (Throwable ignored) {}
         }
 
-        if (empty) {
-            return new CaptureOutcome(true, null, originalOwner, finalOwner, List.of());
-        }
-
-        // Capture block contents into vault (removes block)
-        VaultImp vault = captureFromBlock(actor, block);
-
-        // Re-protect other half(s) after removal
+        // Re-protect other half(s) immediately if they exist
         List<Block> reProtected = new ArrayList<>();
         if (bolt != null && !otherHalves.isEmpty()) {
             for (Block half : otherHalves) {
@@ -159,7 +193,10 @@ public class VaultCaptureService {
             }
         }
 
-        return new CaptureOutcome(false, vault, originalOwner, finalOwner, List.copyOf(reProtected));
+        // Capture block contents into vault (removes block)
+        VaultImp vault = captureFromBlock(actor, block);
+
+        return new CaptureOutcome(false, true, vault, originalOwner, finalOwner, List.copyOf(reProtected));
     }
 
     private static @NotNull List<Block> getHalves(Block block, Container container) {
@@ -251,7 +288,7 @@ public class VaultCaptureService {
      * - Installs a per-player dynamic listener listening for left/right clicks.
      * - Shows an action bar with live vaultability.
      * - Applies VaultCapturePolicy on right-click; performs capture & DB persistence.
-     * - Session stays active for multiple captures until cancelled with left-click.
+     * - Session stays active for multiple captures until canceled with left-click.
      */
     public void startCaptureSession(@NotNull Player actor, @NotNull SessionTexts texts) {
         if (!VaultPermission.ACTION_CAPTURE.has(actor)) {
@@ -304,7 +341,11 @@ public class VaultCaptureService {
 
                 CaptureOutcome outcome = captureWithDoubleChestSupport(actor, block, originalOwner);
                 if (outcome.empty()) {
-                    actor.sendMessage(MiniMessageUtil.parseOrPlain(texts.emptyCaptureSkipped));
+                    // Only send "Protection removed" if we actually removed protection.
+                    // If protectionRemoved is false, it means we sent a warning (e.g., "Vault the other side first").
+                    if (outcome.protectionRemoved()) {
+                        actor.sendMessage(MiniMessageUtil.parseOrPlain(texts.emptyCaptureSkipped));
+                    }
                     busy[0] = false;
                     return;
                 }
@@ -419,7 +460,7 @@ public class VaultCaptureService {
         return fallback;
     }
 
-    private static String getReasonSegment(VaultCapturePolicy.Decision decision, String ownerName, String regionsList, SessionTexts cfg) {
+    private static String getReasonSegment(VaultCapturePolicy.@NonNull Decision decision, String ownerName, String regionsList, SessionTexts cfg) {
         String reasonText;
         if (decision.allowed()) {
             reasonText = cfg.actionBarReasonAllowedBlank;
@@ -460,7 +501,10 @@ public class VaultCaptureService {
         }
         CaptureOutcome outcome = captureWithDoubleChestSupport(actor, block, originalOwner);
         if (outcome.empty()) {
-            actor.sendMessage(MiniMessageUtil.parseOrPlain(texts.emptyCaptureSkipped));
+            // Update to respect the protectionRemoved flag
+            if (outcome.protectionRemoved()) {
+                actor.sendMessage(MiniMessageUtil.parseOrPlain(texts.emptyCaptureSkipped));
+            }
             onDoneMain.accept(false);
             return;
         }
@@ -472,7 +516,7 @@ public class VaultCaptureService {
         var plugin = VaultStoragePlugin.getInstance();
         new BukkitRunnable(){
             @Override public void run() {
-                var vaultService = plugin.getVaultService();
+                VaultService vaultService = plugin.getVaultService();
                 UUID worldId = block.getWorld().getUID();
                 UUID newId;
                 {
@@ -510,4 +554,3 @@ public class VaultCaptureService {
         }.runTaskAsynchronously(plugin);
     }
 }
-

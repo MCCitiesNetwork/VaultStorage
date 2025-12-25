@@ -6,7 +6,10 @@ public enum ConfigPaths {
     MYSQL_DATABASE("mysql.database"),
     MYSQL_USER("mysql.user"),
     MYSQL_PASSWORD("mysql.password"),
-    MYSQL_USE_SSL("mysql.useSSL");
+    MYSQL_USE_SSL("mysql.useSSL"),
+    SCAN_BATCH_SIZE("scan.batch-size"),
+    SCAN_CACHE_TTL_SECONDS("scan.cache-ttl-seconds"),
+    SCAN_COOLDOWN_SECONDS("scan.cooldown-seconds");
 
     private final String path;
 

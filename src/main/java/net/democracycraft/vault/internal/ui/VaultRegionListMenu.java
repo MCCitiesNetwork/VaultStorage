@@ -6,19 +6,16 @@ import io.papermc.paper.registry.data.dialog.body.DialogBody;
 import net.democracycraft.vault.VaultStoragePlugin;
 import net.democracycraft.vault.api.data.Dto;
 import net.democracycraft.vault.api.region.VaultRegion;
-import net.democracycraft.vault.api.service.BoltService;
 import net.democracycraft.vault.api.service.WorldGuardService;
 import net.democracycraft.vault.api.ui.AutoDialog;
 import net.democracycraft.vault.api.ui.ParentMenu;
-import net.democracycraft.vault.internal.security.VaultCapturePolicy;
 import net.democracycraft.vault.internal.security.VaultPermission;
+import net.democracycraft.vault.internal.util.config.ConfigPaths;
 import net.democracycraft.vault.internal.util.config.DataFolder;
 import net.democracycraft.vault.internal.util.minimessage.MiniMessageUtil;
 import net.democracycraft.vault.internal.util.yml.AutoYML;
 import org.bukkit.World;
-import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
-import org.bukkit.util.BoundingBox;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.*;
@@ -48,6 +45,8 @@ public class VaultRegionListMenu extends ChildMenuImp {
         public String servicesMissing = "<red>Services not ready.</red>";
         /** Error when region not found (race condition). */
         public String regionNotFound = "<red>Region not found: %region%</red>";
+        /** Message when scan is on cooldown. Placeholders: %time% */
+        public String scanCooldown = "<red>Please wait %time%s before scanning again.</red>";
     }
 
     /**
@@ -202,10 +201,28 @@ public class VaultRegionListMenu extends ChildMenuImp {
      * @param regionId target region identifier
      */
     private void openResultsFor(Player player, String regionId) {
-        List<Block> blocks = computeEntries(player, regionId);
-        if (blocks == null) return; // message already shown
+        if (!checkCooldown(player)) return;
         VaultUIContext context = VaultPermission.ADMIN.has(player) ? VaultUIContext.admin(player.getUniqueId()) : VaultUIContext.self(player.getUniqueId());
-        new VaultScanMenu(player, getParentMenu(), context, regionId, blocks).open();
+        new LoadingMenu(player, getParentMenu(), Map.of("%player%", player.getName())).open();
+        VaultStoragePlugin.getInstance().getScanService().scan(player, regionId, context, VaultScanMenu.getConfig(), results -> {
+            if (results == null) return;
+            new VaultScanMenu(player, getParentMenu(), context, regionId, results).open();
+        });
+    }
+
+    private boolean checkCooldown(Player player) {
+        if (VaultPermission.ADMIN.has(player)) return true;
+        var session = VaultStoragePlugin.getInstance().getSessionManager().getOrCreate(player.getUniqueId());
+        long now = System.currentTimeMillis();
+        long last = session.getLastScanTime();
+        long cooldownMs = VaultStoragePlugin.getInstance().getConfig().getLong(ConfigPaths.SCAN_COOLDOWN_SECONDS.getPath(), 20) * 1000;
+        if (now - last < cooldownMs) {
+            long remaining = (cooldownMs - (now - last)) / 1000;
+            player.sendMessage(MiniMessageUtil.parseOrPlain(cfg().scanCooldown, Map.of("%time%", String.valueOf(remaining))));
+            return false;
+        }
+        session.setLastScanTime(now);
+        return true;
     }
 
     private List<VaultRegion> filterAndSort(List<VaultRegion> all, String filter) {
@@ -216,38 +233,5 @@ public class VaultRegionListMenu extends ChildMenuImp {
                 .sorted(Comparator.comparing(VaultRegion::id, String.CASE_INSENSITIVE_ORDER))
                 .toList();
     }
-
-    private List<Block> computeEntries(Player player, String regionId) {
-        WorldGuardService wgs = VaultStoragePlugin.getInstance().getWorldGuardService();
-        BoltService bolt = VaultStoragePlugin.getInstance().getBoltService();
-        if (wgs == null || bolt == null) {
-            player.sendMessage(MiniMessageUtil.parseOrPlain(cfg().servicesMissing));
-            return null;
-        }
-        List<VaultRegion> regions = wgs.getRegionsIn(player.getWorld());
-        Optional<VaultRegion> target = regions.stream().filter(r -> r.id().equalsIgnoreCase(regionId)).findFirst();
-        if (target.isEmpty()) {
-            player.sendMessage(MiniMessageUtil.parseOrPlain(cfg().regionNotFound, Map.of("%region%", regionId)));
-            return null;
-        }
-        VaultRegion region = target.get();
-        BoundingBox box = region.boundingBox();
-        List<Block> protectedBlocks = bolt.getProtectedBlocksIn(box, player.getWorld());
-        List<Block> out = new ArrayList<>();
-        boolean admin = VaultPermission.ADMIN.has(player);
-        boolean actorOwnsRegion = region.isOwner(player.getUniqueId());
-        UUID filterOwner = admin ? null : (actorOwnsRegion ? null : player.getUniqueId());
-        for (Block b : protectedBlocks) {
-            var decision = VaultCapturePolicy.evaluate(player, b);
-            if (!decision.allowed()) continue;
-            if (filterOwner != null) {
-                UUID owner = bolt.getOwner(b);
-                if (owner == null || !owner.equals(filterOwner)) continue;
-            }
-            out.add(b);
-        }
-        return out;
-    }
-
-    // computeEntries(Player, String) antiguo puede delegar a ALL si aún existe alguna referencia
 }
+

@@ -37,6 +37,9 @@ public final class ConfigInitializer {
         setIfMissing(cfg, ConfigPaths.MYSQL_USER.getPath(), "root");
         setIfMissing(cfg, ConfigPaths.MYSQL_PASSWORD.getPath(), "");
         setIfMissing(cfg, ConfigPaths.MYSQL_USE_SSL.getPath(), false);
+        setIfMissing(cfg, ConfigPaths.SCAN_BATCH_SIZE.getPath(), 20);
+        setIfMissing(cfg, ConfigPaths.SCAN_CACHE_TTL_SECONDS.getPath(), 60);
+        setIfMissing(cfg, ConfigPaths.SCAN_COOLDOWN_SECONDS.getPath(), 20);
 
         plugin.saveConfig();
     }
@@ -47,4 +50,3 @@ public final class ConfigInitializer {
         }
     }
 }
-

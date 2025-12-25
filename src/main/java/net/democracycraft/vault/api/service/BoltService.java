@@ -8,6 +8,7 @@ import org.jetbrains.annotations.NotNull;
 import org.popcraft.bolt.protection.EntityProtection;
 import org.popcraft.bolt.protection.Protection;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -47,5 +48,7 @@ public interface BoltService extends Service {
     void createProtection(Block block, UUID ownerUuid);
 
     void removeProtection(Protection protection);
+
+    Collection<Protection> getProtections(BoundingBox boundingBox, World world);
 
 }

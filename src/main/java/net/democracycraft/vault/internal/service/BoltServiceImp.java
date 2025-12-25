@@ -234,4 +234,9 @@ public class BoltServiceImp implements BoltService {
     public void removeProtection(Protection protection) {
         api.removeProtection(protection);
     }
+
+    @Override
+    public Collection<Protection> getProtections(BoundingBox boundingBox, World world) {
+        return api.findProtections(world, boundingBox);
+    }
 }
