@@ -1,6 +1,8 @@
 package net.democracycraft.vault;
 
 import com.earth2me.essentials.Essentials;
+import net.democracycraft.democracyLib.api.DemocracyLibApi;
+import net.democracycraft.democracyLib.api.service.mojang.MojangService;
 import net.democracycraft.vault.api.dao.VaultDAO;
 import net.democracycraft.vault.api.service.*;
 import net.democracycraft.vault.internal.command.VaultCommand;
@@ -43,12 +45,13 @@ public final class VaultStoragePlugin extends JavaPlugin {
 
 
     // Integration services
-    private MojangService mojangService;
+    private MojangService<VaultStoragePlugin> mojangService;
     private VaultService vaultService;
     private WorldGuardService worldGuardService;
     private BoltService boltService;
     private MailService mailService;
     private Essentials essentials;
+    private DemocracyLibApi democracyLibApi;
 
     // Database wiring
     private MySQLManager mysql;
@@ -79,11 +82,12 @@ public final class VaultStoragePlugin extends JavaPlugin {
     /** Reusable scan domain service. */
     public VaultScanService getScanService() { return scanService; }
 
-    public MojangService getMojangService() { return mojangService; }
+    public MojangService<VaultStoragePlugin> getMojangService() { return mojangService; }
 
     @Override
     public void onEnable() {
         instance = this;
+        democracyLibApi = DemocracyLibApi.instance(this, true);
         // Ensure config exists and has defaults
         ConfigInitializer.ensureMysqlDefaults(this);
 
@@ -125,8 +129,7 @@ public final class VaultStoragePlugin extends JavaPlugin {
         this.scanService = new VaultScanServiceImpl();
 
         // External lookup services
-        this.mojangService = new MojangServiceImpl();
-        getServer().getServicesManager().register(MojangService.class, this.mojangService, this, ServicePriority.Normal);
+        this.mojangService = democracyLibApi.getMojangService(this);
 
         // Ensure menu YAMLs exist at startup
         VaultCaptureMenu.ensureConfig();

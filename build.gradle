@@ -24,9 +24,16 @@ repositories {
         name = "essentialsx"
         url = "https://repo.essentialsx.net/releases/"
     }
+    maven {
+        name = "jitpack"
+        url = "https://jitpack.io"
+    }
 }
 
 dependencies {
+    String democracyLibVersion = "3f0213ee92"
+    String democracyLib = "com.github.MCCitiesNetwork:DemocracyLib:$democracyLibVersion"
+    implementation(democracyLib)
     compileOnly("io.papermc.paper:paper-api:1.21.8-R0.1-SNAPSHOT")
     compileOnly("org.popcraft:bolt-bukkit:1.1.33")
     compileOnly("org.popcraft:bolt-common:1.1.33")

@@ -4,20 +4,19 @@ import net.democracycraft.vault.VaultStoragePlugin;
 import net.democracycraft.vault.api.data.Dto;
 import net.democracycraft.vault.api.event.PlayerVaultEvent;
 import net.democracycraft.vault.api.service.BoltService;
-import net.democracycraft.vault.api.service.MojangService;
 import net.democracycraft.vault.api.service.VaultService;
 import net.democracycraft.vault.internal.data.VaultDtoImp;
 import net.democracycraft.vault.internal.mappable.VaultImp;
 import net.democracycraft.vault.internal.util.item.ItemSerialization;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
-import net.kyori.adventure.text.format.TextColor;
 import org.bukkit.Material;
 import org.bukkit.block.*;
 import org.bukkit.entity.Player;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
@@ -313,10 +312,17 @@ public class VaultCaptureService {
             @org.bukkit.event.EventHandler
             public void onInteract(PlayerInteractEvent event) {
                 if (!event.getPlayer().getUniqueId().equals(actor.getUniqueId())) return;
+
+                // Ignore off-hand events to prevent duplicate processing
+                if (event.getHand() == EquipmentSlot.OFF_HAND) return;
+
+                // Verify session is still in CAPTURE mode (may have been changed externally)
+                if (session.getMode() != Mode.CAPTURE) return;
+
                 org.bukkit.event.block.Action action = event.getAction();
-                event.setCancelled(true);
 
                 if (action == Action.LEFT_CLICK_AIR || action == Action.LEFT_CLICK_BLOCK) {
+                    event.setCancelled(true);
                     session.getDynamicListener().stop();
                     if (actionbarTask[0] != null) actionbarTask[0].cancel();
                     session.clearActionBarTask();
@@ -326,6 +332,7 @@ public class VaultCaptureService {
                 }
 
                 if (action != Action.RIGHT_CLICK_BLOCK) return;
+                event.setCancelled(true);
                 Block block = event.getClickedBlock();
                 if (block == null) return;
                 if (busy[0]) return;
@@ -448,15 +455,13 @@ public class VaultCaptureService {
         String cached = NAME_CACHE.get(uuid);
         if (cached != null) return cached;
         String fallback = uuid.toString().substring(0, 8);
-        // Async resolve and cache
-        new BukkitRunnable(){
-            @Override public void run(){
-                MojangService ms = VaultStoragePlugin.getInstance().getMojangService();
-                if (ms == null) return;
-                String name = ms.getUsername(uuid);
+        // Async resolve and cache using CompletableFuture API
+        var mojangService = VaultStoragePlugin.getInstance().getMojangService();
+        if (mojangService != null) {
+            mojangService.getName(uuid).thenAccept(name -> {
                 if (name != null && !name.isBlank()) NAME_CACHE.put(uuid, name);
-            }
-        }.runTaskAsynchronously(VaultStoragePlugin.getInstance());
+            });
+        }
         return fallback;
     }
 

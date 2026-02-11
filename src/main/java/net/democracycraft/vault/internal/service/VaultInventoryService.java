@@ -1,7 +1,6 @@
 package net.democracycraft.vault.internal.service;
 
 import net.democracycraft.vault.VaultStoragePlugin;
-import net.democracycraft.vault.api.service.MojangService;
 import net.democracycraft.vault.api.service.VaultService;
 import net.democracycraft.vault.api.ui.ParentMenu;
 import net.democracycraft.vault.internal.ui.LoadingMenu;
@@ -11,7 +10,6 @@ import net.democracycraft.vault.internal.util.listener.DynamicListener;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
-import org.bukkit.ChatColor;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -57,9 +55,9 @@ public class VaultInventoryService {
         }
         new BukkitRunnable() {
             @Override public void run() {
-                VaultService vs = plugin.getVaultService();
-                MojangService ms = plugin.getMojangService();
-                var entityOpt = vs.get(vaultId);
+                VaultService vaultService = plugin.getVaultService();
+                var mojangService = plugin.getMojangService();
+                var entityOpt = vaultService.get(vaultId);
                 if (entityOpt.isEmpty()) {
                     new BukkitRunnable() {
                         @Override public void run() {
@@ -68,13 +66,8 @@ public class VaultInventoryService {
                     }.runTask(plugin);
                     return;
                 }
-                UUID ownerUuid = vs.getOwner(vaultId);
-                String ownerName = null;
-                if (ownerUuid != null && ms != null) {
-                    ownerName = ms.getUsername(ownerUuid); // network + cached (async thread)
-                }
-                String ownerDisplay = ownerName != null ? ownerName : (ownerUuid != null ? ownerUuid.toString() : "Unknown");
-                var items = vs.listItems(vaultId);
+                UUID ownerUuid = vaultService.getOwner(vaultId);
+                var items = vaultService.listItems(vaultId);
                 int maxSlot = items.stream().mapToInt(it -> it.slot).max().orElse(-1);
                 int invSize = Math.min(54, Math.max(9, ((Math.max(maxSlot + 1, 9) + 8) / 9) * 9));
                 ItemStack[] contents = new ItemStack[invSize];
@@ -82,12 +75,21 @@ public class VaultInventoryService {
                 for (var it : items) {
                     if (it.slot >= 0 && it.slot < invSize) contents[it.slot] = ItemSerialization.fromBytes(it.item);
                 }
-                final String finalOwnerDisplay = ownerDisplay;
-                new BukkitRunnable() {
-                    @Override public void run() {
-                        openOnMain(player, vaultId, finalOwnerDisplay, action, contents, invSize, reopenCallback);
-                    }
-                }.runTask(plugin);
+
+                // Resolve owner name asynchronously using CompletableFuture, then open inventory on main thread
+                if (ownerUuid != null && mojangService != null) {
+                    mojangService.getName(ownerUuid).thenAccept(resolvedName -> {
+                        String ownerDisplay = (resolvedName != null && !resolvedName.isBlank())
+                                ? resolvedName
+                                : ownerUuid.toString();
+                        Bukkit.getScheduler().runTask(plugin, () ->
+                                openOnMain(player, vaultId, ownerDisplay, action, contents, invSize, reopenCallback));
+                    });
+                } else {
+                    String ownerDisplay = ownerUuid != null ? ownerUuid.toString() : "Unknown";
+                    Bukkit.getScheduler().runTask(plugin, () ->
+                            openOnMain(player, vaultId, ownerDisplay, action, contents, invSize, reopenCallback));
+                }
             }
         }.runTaskAsynchronously(plugin);
     }
@@ -103,7 +105,9 @@ public class VaultInventoryService {
             if (it != null) inv.setItem(i, it.clone());
         }
 
-        DynamicListener dyn = VaultStoragePlugin.getInstance().getSessionManager().getOrCreate(player.getUniqueId()).getDynamicListener();
+        // Use a standalone DynamicListener to avoid overwriting the session's listener
+        // (which may be in use by capture/placement modes).
+        DynamicListener dyn = new DynamicListener();
 
         Listener listener = new Listener() {
             @EventHandler
@@ -155,7 +159,7 @@ public class VaultInventoryService {
                         }
                     }.runTaskAsynchronously(VaultStoragePlugin.getInstance());
                 }
-                dyn.stop();
+                dyn.close();  // Use close() to fully clean up the standalone listener
                 if (reopenCallback != null) {
                     Bukkit.getScheduler().runTask(VaultStoragePlugin.getInstance(), reopenCallback);
                 }

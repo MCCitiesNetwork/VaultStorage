@@ -10,11 +10,11 @@ import java.util.List;
 import net.democracycraft.vault.internal.security.VaultPermission;
 import org.jetbrains.annotations.NotNull;
 import net.democracycraft.vault.VaultStoragePlugin;
-import net.democracycraft.vault.api.service.MojangService;
 import net.democracycraft.vault.internal.ui.VaultUIContext;
 import org.bukkit.Bukkit;
+import org.jspecify.annotations.NonNull;
+
 import java.util.ArrayList;
-import java.util.UUID;
 
 /** /vault menu: opens the capture UI dialog. Supports optional username filter. */
 public class MenuSubcommand implements Subcommand {
@@ -23,7 +23,7 @@ public class MenuSubcommand implements Subcommand {
     @Override public String usage() { return "menu [username]"; }
 
     @Override
-    public void execute(CommandContext ctx) {
+    public void execute(@NonNull CommandContext ctx) {
         CommandSender sender = ctx.sender();
         if (!(sender instanceof Player player)) {
             sender.sendMessage("Only players can use this.");
@@ -34,26 +34,18 @@ public class MenuSubcommand implements Subcommand {
         if (ctx.args().length >= 1) {
             String username = ctx.args()[0];
             var plugin = VaultStoragePlugin.getInstance();
+            var mojangService = plugin.getMojangService();
+
+            if (mojangService == null) {
+                player.sendMessage("Mojang service unavailable.");
+                return;
+            }
+
             player.sendMessage("Resolving player...");
-            Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
-                MojangService ms = plugin.getMojangService();
-                UUID target = null;
-                boolean serviceAvailable = ms != null;
-                if (serviceAvailable) {
-                    try {
-                        target = ms.getUUID(username);
-                    } catch (Throwable ignored) {
-                        // Swallow and handle as not found below
-                    }
-                }
-                UUID resolved = target;
+            mojangService.getUUID(username).thenAccept(resolved -> {
                 Bukkit.getScheduler().runTask(plugin, () -> {
                     Player current = Bukkit.getPlayer(player.getUniqueId());
                     if (current == null || !current.isOnline()) return;
-                    if (!serviceAvailable) {
-                        current.sendMessage("Mojang service unavailable.");
-                        return;
-                    }
                     if (resolved == null) {
                         current.sendMessage("Player not found.");
                         return;
@@ -77,7 +69,7 @@ public class MenuSubcommand implements Subcommand {
     }
 
     @Override
-    public List<String> complete(CommandContext ctx) {
+    public List<String> complete(@NonNull CommandContext ctx) {
         // Suggest online player names for the optional username parameter
         if (ctx.args().length == 1) {
             String prefix = ctx.args()[0];

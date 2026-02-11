@@ -9,7 +9,6 @@ import net.democracycraft.vault.api.data.Dto;
 import net.democracycraft.vault.api.data.ScanResult;
 import net.democracycraft.vault.api.region.VaultRegion;
 import net.democracycraft.vault.api.service.BoltService;
-import net.democracycraft.vault.api.service.MojangService;
 import net.democracycraft.vault.api.service.WorldGuardService;
 import net.democracycraft.vault.api.ui.AutoDialog;
 import net.democracycraft.vault.api.ui.ParentMenu;
@@ -19,18 +18,19 @@ import net.democracycraft.vault.internal.util.config.ConfigPaths;
 import net.democracycraft.vault.internal.util.config.DataFolder;
 import net.democracycraft.vault.internal.util.minimessage.MiniMessageUtil;
 import net.democracycraft.vault.internal.util.yml.AutoYML;
+import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
-import org.bukkit.scheduler.BukkitRunnable;
 import org.jetbrains.annotations.NotNull;
 import org.popcraft.bolt.protection.EntityProtection;
 
 import java.time.Duration;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -337,30 +337,27 @@ public class VaultScanMenu extends ChildMenuImp {
             // Resolve names asynchronously if needed and refresh
             if (!toResolve.isEmpty()) {
                 var plugin = VaultStoragePlugin.getInstance();
-                new BukkitRunnable(){
-                    @Override public void run(){
-                        MojangService ms = plugin.getMojangService();
-                        boolean updated = false;
-                        if (ms != null) {
-                            for (UUID u : toResolve) {
-                                try {
-                                    String name = ms.getUsername(u);
-                                    if (name != null && !name.isBlank()) {
-                                        NAME_CACHE.put(u, name);
-                                        updated = true;
-                                    }
-                                } catch (Throwable ignored) {}
+                var mojangService = plugin.getMojangService();
+                if (mojangService != null) {
+                    List<CompletableFuture<Void>> futures = new ArrayList<>();
+                    for (UUID u : toResolve) {
+                        var future = mojangService.getName(u).thenAccept(name -> {
+                            if (name != null && !name.isBlank()) {
+                                NAME_CACHE.put(u, name);
                             }
-                        }
-                        if (updated) {
-                            new org.bukkit.scheduler.BukkitRunnable(){
-                                @Override public void run(){
-                                    new VaultScanMenu(getPlayer(), getParentMenu(), uiContext, regionId, entries, eCurrentPage, FilterMode.ENTITY).open();
-                                }
-                            }.runTask(plugin);
-                        }
+                        });
+                        futures.add(future);
                     }
-                }.runTaskAsynchronously(plugin);
+                   CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
+                            .thenRun(() -> {
+                                // Check if any names were resolved
+                                boolean anyResolved = toResolve.stream().anyMatch(NAME_CACHE::containsKey);
+                                if (anyResolved) {
+                                    Bukkit.getScheduler().runTask(plugin, () ->
+                                            new VaultScanMenu(getPlayer(), getParentMenu(), uiContext, regionId, entries, eCurrentPage, FilterMode.ENTITY).open());
+                                }
+                            });
+                }
             }
 
             // Navigation for entity pages
@@ -442,30 +439,26 @@ public class VaultScanMenu extends ChildMenuImp {
         // Async resolve missing owner names and refresh the page if any were resolved
         if (!toResolve.isEmpty()) {
             var plugin = VaultStoragePlugin.getInstance();
-            new BukkitRunnable(){
-                @Override public void run(){
-                    MojangService ms = plugin.getMojangService();
-                    boolean updated = false;
-                    if (ms != null) {
-                        for (UUID u : toResolve) {
-                            try {
-                                String name = ms.getUsername(u);
-                                if (name != null && !name.isBlank()) {
-                                    NAME_CACHE.put(u, name);
-                                    updated = true;
-                                }
-                            } catch (Throwable ignored) {}
+            var mojangService = plugin.getMojangService();
+            if (mojangService != null) {
+                List<CompletableFuture<Void>> futures = new ArrayList<>();
+                for (UUID uuid : toResolve) {
+                    var future = mojangService.getName(uuid).thenAccept(name -> {
+                        if (name != null && !name.isBlank()) {
+                            NAME_CACHE.put(uuid, name);
                         }
-                    }
-                    if (updated) {
-                        new org.bukkit.scheduler.BukkitRunnable(){
-                            @Override public void run(){
-                                new VaultScanMenu(getPlayer(), getParentMenu(), uiContext, regionId, entries, currentPage).open();
-                            }
-                        }.runTask(plugin);
-                    }
+                    });
+                    futures.add(future);
                 }
-            }.runTaskAsynchronously(plugin);
+                CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
+                        .thenRun(() -> {
+                            boolean anyResolved = toResolve.stream().anyMatch(NAME_CACHE::containsKey);
+                            if (anyResolved) {
+                                Bukkit.getScheduler().runTask(plugin, () ->
+                                        new VaultScanMenu(getPlayer(), getParentMenu(), uiContext, regionId, entries, currentPage).open());
+                            }
+                        });
+            }
         }
 
         // Navigation buttons

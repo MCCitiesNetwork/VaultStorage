@@ -23,7 +23,9 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.scheduler.BukkitRunnable;
+import org.bukkit.scheduler.BukkitTask;
 
 import java.util.Map;
 import java.util.UUID;
@@ -122,15 +124,22 @@ public class VaultPlacementMenu extends ChildMenuImp {
         VaultSessionManager.Session session = VaultStoragePlugin.getInstance().getSessionManager().getOrCreate(actor.getUniqueId());
         // Switch to PLACEMENT mode, cancelling any prior capture/placement state
         session.switchTo(Mode.PLACEMENT);
-        final org.bukkit.scheduler.BukkitTask[] actionbarTask = new org.bukkit.scheduler.BukkitTask[1];
+        final BukkitTask[] actionbarTask = new BukkitTask[1];
 
         session.getDynamicListener().setListener(new Listener() {
             @EventHandler
             public void onInteract(PlayerInteractEvent event) {
                 if (!event.getPlayer().getUniqueId().equals(actor.getUniqueId())) return;
+
+                // Ignore off-hand events to prevent duplicate processing
+                if (event.getHand() == EquipmentSlot.OFF_HAND) return;
+
+                // Verify session is still in PLACEMENT mode
+                if (session.getMode() != Mode.PLACEMENT) return;
+
                 Action action = event.getAction();
-                event.setCancelled(true);
                 if (action == Action.LEFT_CLICK_AIR || action == Action.LEFT_CLICK_BLOCK) {
+                    event.setCancelled(true);
                     session.getDynamicListener().stop();
                     if (actionbarTask[0] != null) actionbarTask[0].cancel();
                     session.clearActionBarTask();
@@ -139,6 +148,7 @@ public class VaultPlacementMenu extends ChildMenuImp {
                     return; // Do NOT reopen menu
                 }
                 if (action != Action.RIGHT_CLICK_BLOCK) return;
+                event.setCancelled(true);
                 Block clicked = event.getClickedBlock();
                 if (clicked == null) return;
                 BlockFace face = event.getBlockFace();
