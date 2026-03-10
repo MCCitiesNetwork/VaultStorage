@@ -307,6 +307,8 @@ public class VaultCaptureService {
 
         final BukkitTask[] actionbarTask = new BukkitTask[1];
         final boolean[] busy = new boolean[]{false};
+        // Cooldown: block cancellation for a short period after capture to prevent phantom events from other plugins
+        final long[] cancelCooldownUntil = new long[]{0L};
 
         session.getDynamicListener().setListener(new Listener() {
             @org.bukkit.event.EventHandler
@@ -322,6 +324,12 @@ public class VaultCaptureService {
                 org.bukkit.event.block.Action action = event.getAction();
 
                 if (action == Action.LEFT_CLICK_AIR || action == Action.LEFT_CLICK_BLOCK) {
+                    // Prevent cancellation during cooldown (protects against phantom events after capture)
+                    long now = System.currentTimeMillis();
+                    if (now < cancelCooldownUntil[0]) {
+                        event.setCancelled(true);
+                        return; // Ignore this left-click, still in cooldown
+                    }
                     event.setCancelled(true);
                     session.getDynamicListener().stop();
                     if (actionbarTask[0] != null) actionbarTask[0].cancel();
@@ -337,6 +345,9 @@ public class VaultCaptureService {
                 if (block == null) return;
                 if (busy[0]) return;
                 busy[0] = true;
+
+                // Set cooldown to prevent phantom left-click events from canceling capture (~2 ticks / 100ms)
+                cancelCooldownUntil[0] = System.currentTimeMillis() + 100L;
 
                 VaultCapturePolicy.Decision decision = VaultCapturePolicy.evaluate(actor, block);
                 UUID originalOwner = decision.containerOwner();
