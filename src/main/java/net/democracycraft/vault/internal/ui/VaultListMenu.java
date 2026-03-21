@@ -134,6 +134,7 @@ public class VaultListMenu extends ChildMenuImp {
         Player p = getPlayer();
         var plugin = VaultStoragePlugin.getInstance();
         var mojangService = plugin.getMojangService();
+        var bedrockRetriever = plugin.getBedrockUniqueIdentifierRetriever();
 
         // First, resolve query to UUID if needed (async chain)
         CompletableFuture<UUID> queryOwnerFuture;
@@ -148,7 +149,17 @@ public class VaultListMenu extends ChildMenuImp {
             if (parsedUuid != null) {
                 queryOwnerFuture = CompletableFuture.completedFuture(parsedUuid);
             } else if (mojangService != null) {
-                queryOwnerFuture = mojangService.getUUID(q);
+                queryOwnerFuture = mojangService.getUUID(q).thenCompose(resolved -> {
+                    if (resolved != null) {
+                        return CompletableFuture.completedFuture(resolved);
+                    }
+                    if (bedrockRetriever != null) {
+                        return bedrockRetriever.getUniqueIdentifier(q).exceptionally(ex -> null);
+                    }
+                    return CompletableFuture.completedFuture(null);
+                });
+            } else if (bedrockRetriever != null) {
+                queryOwnerFuture = bedrockRetriever.getUniqueIdentifier(q).exceptionally(ex -> null);
             } else {
                 queryOwnerFuture = CompletableFuture.completedFuture(null);
             }

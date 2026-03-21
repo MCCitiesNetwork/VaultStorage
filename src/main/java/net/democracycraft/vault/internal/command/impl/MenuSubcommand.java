@@ -15,6 +15,7 @@ import org.bukkit.Bukkit;
 import org.jspecify.annotations.NonNull;
 
 import java.util.ArrayList;
+import java.util.concurrent.CompletableFuture;
 
 /** /vault menu: opens the capture UI dialog. Supports optional username filter. */
 public class MenuSubcommand implements Subcommand {
@@ -35,14 +36,28 @@ public class MenuSubcommand implements Subcommand {
             String username = ctx.args()[0];
             var plugin = VaultStoragePlugin.getInstance();
             var mojangService = plugin.getMojangService();
+            var bedrockRetriever = plugin.getBedrockUniqueIdentifierRetriever();
 
-            if (mojangService == null) {
-                player.sendMessage("Mojang service unavailable.");
+            CompletableFuture<java.util.UUID> resolveFuture;
+            if (mojangService != null) {
+                resolveFuture = mojangService.getUUID(username).thenCompose(resolved -> {
+                    if (resolved != null) {
+                        return CompletableFuture.completedFuture(resolved);
+                    }
+                    if (bedrockRetriever != null) {
+                        return bedrockRetriever.getUniqueIdentifier(username).exceptionally(ex -> null);
+                    }
+                    return CompletableFuture.completedFuture(null);
+                });
+            } else if (bedrockRetriever != null) {
+                resolveFuture = bedrockRetriever.getUniqueIdentifier(username).exceptionally(ex -> null);
+            } else {
+                player.sendMessage("Player lookup unavailable.");
                 return;
             }
 
             player.sendMessage("Resolving player...");
-            mojangService.getUUID(username).thenAccept(resolved -> {
+            resolveFuture.thenAccept(resolved -> {
                 Bukkit.getScheduler().runTask(plugin, () -> {
                     Player current = Bukkit.getPlayer(player.getUniqueId());
                     if (current == null || !current.isOnline()) return;

@@ -11,6 +11,7 @@ import net.democracycraft.vault.internal.database.MySQLManager;
 import net.democracycraft.vault.internal.database.dao.VaultDAOImpl;
 import net.democracycraft.vault.internal.database.entity.WorldEntity;
 import net.democracycraft.vault.internal.service.*;
+import net.democracycraft.vault.internal.session.BedrockUniqueIdentifierRetriever;
 import net.democracycraft.vault.internal.session.VaultSessionManager;
 import net.democracycraft.vault.internal.util.config.ConfigInitializer;
 import net.democracycraft.vault.internal.ui.VaultActionMenu;
@@ -28,6 +29,7 @@ import org.bukkit.permissions.Permission;
 import org.bukkit.plugin.RegisteredServiceProvider;
 import org.bukkit.plugin.ServicePriority;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.geysermc.floodgate.api.FloodgateApi;
 
 /**
  * Main plugin entry point responsible for bootstrapping configuration, database, and services.
@@ -52,6 +54,7 @@ public final class VaultStoragePlugin extends JavaPlugin {
     private MailService mailService;
     private Essentials essentials;
     private DemocracyLibApi democracyLibApi;
+    private BedrockUniqueIdentifierRetriever bedrockUniqueIdentifierRetriever;
 
     // Database wiring
     private MySQLManager mysql;
@@ -84,6 +87,10 @@ public final class VaultStoragePlugin extends JavaPlugin {
 
     public MojangService<VaultStoragePlugin> getMojangService() { return mojangService; }
 
+    public BedrockUniqueIdentifierRetriever getBedrockUniqueIdentifierRetriever() {
+        return bedrockUniqueIdentifierRetriever;
+    }
+
     @Override
     public void onEnable() {
         instance = this;
@@ -107,6 +114,7 @@ public final class VaultStoragePlugin extends JavaPlugin {
         getServer().getServicesManager().register(VaultService.class, this.vaultService, this, ServicePriority.Normal);
 
         // Integration services
+        this.bedrockUniqueIdentifierRetriever = new BedrockUniqueIdentifierRetriever(FloodgateApi.getInstance());
         this.worldGuardService = new WorldGuardServiceImp();
         getServer().getServicesManager().register(WorldGuardService.class, this.worldGuardService, this, ServicePriority.Normal);
         this.boltService = new BoltServiceImp(this);
