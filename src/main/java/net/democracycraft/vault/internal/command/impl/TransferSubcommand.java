@@ -17,10 +17,6 @@ import java.util.UUID;
  * /vault transfer <vaultId> <newOwnerUUID|playerName>
  * Admin-only command to transfer vault ownership.
  * Useful for recovering vaults that were created with incorrect UUIDs (e.g., Bedrock UUID conversion errors).
- *
- * Examples:
- *   /vault transfer 550e8400-e29b-41d4-a716-446655440000 .CaldironJa1
- *   /vault transfer 550e8400-e29b-41d4-a716-446655440000 a1b2c3d4-e5f6-47a8-b9c0-d1e2f3a4b5c6
  */
 public class TransferSubcommand implements Subcommand {
 
@@ -59,6 +55,7 @@ public class TransferSubcommand implements Subcommand {
         var vaultService = plugin.getVaultService();
 
         ctx.sender().sendMessage("Resolving vault and owner...");
+        plugin.getLogger().info("[TransferSubcommand] Lookup initiated for vault: " + vaultId);
 
         // Async work: verify vault exists and resolve owner UUID
         new BukkitRunnable() {
@@ -67,20 +64,27 @@ public class TransferSubcommand implements Subcommand {
                 // Check if vault exists
                 var vaultOpt = vaultService.get(vaultId);
                 if (vaultOpt.isEmpty()) {
+                    plugin.getLogger().warning("[TransferSubcommand] Vault not found for ID: " + vaultId + " (UUID format valid: " + vaultId.toString() + ")");
                     Bukkit.getScheduler().runTask(plugin, () -> {
-                        ctx.sender().sendMessage("Vault not found with ID: " + vaultId);
+                        ctx.sender().sendMessage("✗ Vault not found with ID: " + vaultId);
+                        ctx.sender().sendMessage("  Debug: UUID format verified. Check if vault exists in database.");
                     });
                     return;
                 }
+
+                var vault = vaultOpt.get();
+                plugin.getLogger().info("[TransferSubcommand] Vault found: " + vaultId + " at world " + vault.worldUuid + " coords(" + vault.x + "," + vault.y + "," + vault.z + ")");
 
                 // Resolve owner UUID using the centralized resolver
                 UniqueIdentifierResolver resolver = new UniqueIdentifierResolver(plugin.getMojangService(), plugin.getBedrockUniqueIdentifierRetriever());
                 resolver.resolve(ownerIdentifier).thenAccept(resolvedUUID -> {
                     if (resolvedUUID == null) {
+                        plugin.getLogger().warning("[TransferSubcommand] Failed to resolve owner identifier: " + ownerIdentifier);
                         Bukkit.getScheduler().runTask(plugin, () -> {
-                            ctx.sender().sendMessage("Could not resolve player: " + ownerIdentifier);
+                            ctx.sender().sendMessage("✗ Could not resolve player: " + ownerIdentifier);
                         });
                     } else {
+                        plugin.getLogger().info("[TransferSubcommand] Resolved owner " + ownerIdentifier + " to UUID: " + resolvedUUID);
                         performTransfer(ctx, plugin, vaultService, vaultId, resolvedUUID);
                     }
                 });
@@ -103,7 +107,9 @@ public class TransferSubcommand implements Subcommand {
             public void run() {
                 try {
                     UUID oldOwner = vaultService.getOwner(vaultId);
+                    plugin.getLogger().info("[TransferSubcommand] Transferring vault " + vaultId + " from " + oldOwner + " to " + newOwnerUUID);
                     vaultService.setOwner(vaultId, newOwnerUUID);
+                    plugin.getLogger().info("[TransferSubcommand] Transfer completed successfully");
 
                     Bukkit.getScheduler().runTask(plugin, () -> {
                         String oldOwnerStr = oldOwner != null ? oldOwner.toString() : "unknown";
@@ -112,9 +118,10 @@ public class TransferSubcommand implements Subcommand {
                         ctx.sender().sendMessage("  New owner: " + newOwnerUUID);
                     });
                 } catch (Exception ex) {
+                    plugin.getLogger().warning("[TransferSubcommand] Transfer error for vault " + vaultId + " to " + newOwnerUUID + ": " + ex.getMessage());
+                    ex.printStackTrace();
                     Bukkit.getScheduler().runTask(plugin, () -> {
                         ctx.sender().sendMessage("✗ Transfer failed: " + ex.getMessage());
-                        plugin.getLogger().warning("Transfer error for vault " + vaultId + ": " + ex);
                     });
                 }
             }

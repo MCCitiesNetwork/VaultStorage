@@ -58,6 +58,9 @@ public class VaultCaptureService {
     private java.util.concurrent.CompletableFuture<UUID> ensureValidOwnerUUID(UUID candidateUUID, Player actor) {
         // If already valid, return immediately
         if (UniqueIdentifierResolver.isValidUUID(candidateUUID)) {
+            VaultStoragePlugin.getInstance().getLogger().info(
+                "[VaultCaptureService] Owner UUID is valid for " + actor.getName() + ": " + candidateUUID
+            );
             return java.util.concurrent.CompletableFuture.completedFuture(candidateUUID);
         }
 
@@ -66,21 +69,21 @@ public class VaultCaptureService {
         var resolver = new UniqueIdentifierResolver(plugin.getMojangService(), plugin.getBedrockUniqueIdentifierRetriever());
 
         VaultStoragePlugin.getInstance().getLogger().warning(
-            "[VaultCaptureService] Invalid owner UUID detected for actor " + actor.getName() +
+            "[VaultCaptureService] INVALID owner UUID detected for actor " + actor.getName() +
             " (" + candidateUUID + "). Attempting to resolve by player name..."
         );
 
         return resolver.resolve(actor.getName()).thenApply(resolvedUUID -> {
             if (UniqueIdentifierResolver.isValidUUID(resolvedUUID)) {
                 VaultStoragePlugin.getInstance().getLogger().info(
-                    "[VaultCaptureService] Successfully resolved UUID for " + actor.getName() +
-                    ": " + resolvedUUID
+                    "[VaultCaptureService]  Successfully resolved UUID for " + actor.getName() +
+                    ": " + resolvedUUID + " (Bedrock player fallback)"
                 );
                 return resolvedUUID;
             } else {
                 VaultStoragePlugin.getInstance().getLogger().warning(
-                    "[VaultCaptureService] Failed to resolve valid UUID for " + actor.getName() +
-                    ". Vault capture aborted."
+                    "[VaultCaptureService] failed to resolve valid UUID for " + actor.getName() +
+                    ". Vault capture aborted. (Invalid fallback UUID: " + resolvedUUID + ")"
                 );
                 return null;
             }
@@ -446,6 +449,9 @@ public class VaultCaptureService {
                                         vault.blockMaterial() == null ? null : vault.blockMaterial().name(),
                                         vault.blockDataString());
                                 newId = created.uuid;
+                                plugin.getLogger().info(
+                                    "[VaultCaptureService] Vault created successfully: ID=" + newId + " Owner=" + validatedOwner + " for player " + actor.getName()
+                                );
                             }
                             List<ItemStack> items = vault.contents();
                             List<VaultItemEntity> batch = new ArrayList<>(items.size());
@@ -618,6 +624,9 @@ public class VaultCaptureService {
                                 vault.blockMaterial() == null ? null : vault.blockMaterial().name(),
                                 vault.blockDataString());
                         newId = created.uuid;
+                        plugin.getLogger().info(
+                            "[VaultCaptureService] Direct vault created: ID=" + newId + " Owner=" + validatedOwner + " for player " + actor.getName()
+                        );
                     }
                     List<ItemStack> items = vault.contents();
                     List<VaultItemEntity> batch = new ArrayList<>(items.size());

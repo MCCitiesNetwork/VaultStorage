@@ -196,7 +196,13 @@ public class AutoTable<T> extends AbstractTable {
         String sql = "SELECT * FROM `" + tableName + "` WHERE `" + field + "` = ? LIMIT 1;";
         return mysql.withConnection(conn -> {
             try (PreparedStatement st = conn.prepareStatement(sql)) {
-                st.setObject(1, (value instanceof UUID) ? value.toString() : value);
+                Object queryValue = value;
+                if (value instanceof UUID) {
+                    queryValue = value.toString().trim().toLowerCase();
+                } else if (value instanceof String) {
+                    queryValue = ((String) value).trim();
+                }
+                st.setObject(1, queryValue);
                 try (ResultSet rs = st.executeQuery()) {
                     if (rs.next()) return buildFromResultSet(rs);
                     return null;
@@ -217,7 +223,13 @@ public class AutoTable<T> extends AbstractTable {
         return mysql.withConnection(conn -> {
             List<T> out = new ArrayList<>();
             try (PreparedStatement st = conn.prepareStatement(sql.toString())) {
-                st.setObject(1, (value instanceof UUID) ? value.toString() : value);
+                Object queryValue = value;
+                if (value instanceof UUID) {
+                    queryValue = value.toString().trim().toLowerCase();
+                } else if (value instanceof String) {
+                    queryValue = ((String) value).trim();
+                }
+                st.setObject(1, queryValue);
                 try (ResultSet rs = st.executeQuery()) { while (rs.next()) out.add(buildFromResultSet(rs)); }
             }
             return out;
@@ -248,7 +260,13 @@ public class AutoTable<T> extends AbstractTable {
             try (PreparedStatement st = conn.prepareStatement(sql.toString())) {
                 for (int i = 0; i < params.size(); i++) {
                     Object v = params.get(i);
-                    st.setObject(i + 1, (v instanceof UUID) ? v.toString() : v);
+                    Object queryValue = v;
+                    if (v instanceof UUID) {
+                        queryValue = v.toString().trim().toLowerCase();
+                    } else if (v instanceof String) {
+                        queryValue = ((String) v).trim();
+                    }
+                    st.setObject(i + 1, queryValue);
                 }
                 try (ResultSet rs = st.executeQuery()) { while (rs.next()) out.add(buildFromResultSet(rs)); }
             }
@@ -274,7 +292,13 @@ public class AutoTable<T> extends AbstractTable {
         String sql = "DELETE FROM `" + tableName + "` WHERE `" + primaryKey + "` = ?;";
         mysql.runAsync(() -> mysql.withConnection(conn -> {
             try (PreparedStatement st = conn.prepareStatement(sql)) {
-                st.setObject(1, (id instanceof UUID) ? id.toString() : id);
+                Object queryValue = id;
+                if (id instanceof UUID) {
+                    queryValue = id.toString().trim().toLowerCase();
+                } else if (id instanceof String) {
+                    queryValue = ((String) id).trim();
+                }
+                st.setObject(1, queryValue);
                 st.executeUpdate();
             }
             return null;
@@ -299,7 +323,13 @@ public class AutoTable<T> extends AbstractTable {
             try (PreparedStatement st = conn.prepareStatement(sql.toString())) {
                 for (int i = 0; i < params.size(); i++) {
                     Object v = params.get(i);
-                    st.setObject(i + 1, (v instanceof UUID) ? v.toString() : v);
+                    Object queryValue = v;
+                    if (v instanceof UUID) {
+                        queryValue = v.toString().trim().toLowerCase();
+                    } else if (v instanceof String) {
+                        queryValue = ((String) v).trim();
+                    }
+                    st.setObject(i + 1, queryValue);
                 }
                 st.executeUpdate();
             }
@@ -325,7 +355,13 @@ public class AutoTable<T> extends AbstractTable {
             try (PreparedStatement st = conn.prepareStatement(sql.toString())) {
                 for (int i = 0; i < params.size(); i++) {
                     Object v = params.get(i);
-                    st.setObject(i + 1, (v instanceof UUID) ? v.toString() : v);
+                    Object queryValue = v;
+                    if (v instanceof UUID) {
+                        queryValue = v.toString().trim().toLowerCase();
+                    } else if (v instanceof String) {
+                        queryValue = ((String) v).trim();
+                    }
+                    st.setObject(i + 1, queryValue);
                 }
                 return st.executeUpdate();
             }
@@ -341,7 +377,7 @@ public class AutoTable<T> extends AbstractTable {
                  ResultSet rs = st.executeQuery()) {
                 while (rs.next()) {
                     T row = buildFromResultSet(rs);
-                    if (row != null) out.add(row);
+                    out.add(row);
                 }
             }
             return out;
