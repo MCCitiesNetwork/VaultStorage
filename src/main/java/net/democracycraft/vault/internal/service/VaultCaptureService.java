@@ -8,6 +8,7 @@ import net.democracycraft.vault.api.service.VaultService;
 import net.democracycraft.vault.internal.data.VaultDtoImp;
 import net.democracycraft.vault.internal.mappable.VaultImp;
 import net.democracycraft.vault.internal.util.item.ItemSerialization;
+import net.democracycraft.vault.internal.util.uuid.UniqueIdentifierResolver;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Material;
@@ -48,6 +49,43 @@ import org.jspecify.annotations.NonNull;
  *
  */
 public class VaultCaptureService {
+
+    /**
+     * Validates that a UUID is not null and not all-zeros.
+     * If invalid, attempts to resolve using the player's name via UniqueIdentifierResolver.
+     * Returns a CompletableFuture with the valid UUID or null if resolution fails.
+     */
+    private java.util.concurrent.CompletableFuture<UUID> ensureValidOwnerUUID(UUID candidateUUID, Player actor) {
+        // If already valid, return immediately
+        if (UniqueIdentifierResolver.isValidUUID(candidateUUID)) {
+            return java.util.concurrent.CompletableFuture.completedFuture(candidateUUID);
+        }
+
+        // UUID is invalid (null or all-zeros), attempt to resolve by player name
+        var plugin = VaultStoragePlugin.getInstance();
+        var resolver = new UniqueIdentifierResolver(plugin.getMojangService(), plugin.getBedrockUniqueIdentifierRetriever());
+
+        VaultStoragePlugin.getInstance().getLogger().warning(
+            "[VaultCaptureService] Invalid owner UUID detected for actor " + actor.getName() +
+            " (" + candidateUUID + "). Attempting to resolve by player name..."
+        );
+
+        return resolver.resolve(actor.getName()).thenApply(resolvedUUID -> {
+            if (UniqueIdentifierResolver.isValidUUID(resolvedUUID)) {
+                VaultStoragePlugin.getInstance().getLogger().info(
+                    "[VaultCaptureService] Successfully resolved UUID for " + actor.getName() +
+                    ": " + resolvedUUID
+                );
+                return resolvedUUID;
+            } else {
+                VaultStoragePlugin.getInstance().getLogger().warning(
+                    "[VaultCaptureService] Failed to resolve valid UUID for " + actor.getName() +
+                    ". Vault capture aborted."
+                );
+                return null;
+            }
+        });
+    }
 
     /**
      * Determines if the given block is a container and if its effective inventory is empty.
@@ -376,47 +414,70 @@ public class VaultCaptureService {
                 var plugin = VaultStoragePlugin.getInstance();
                 UUID finalOwner = outcome.finalOwner();
 
-                new BukkitRunnable() {
-                    @Override public void run() {
-                        var vaultService = plugin.getVaultService();
-                        UUID worldId = block.getWorld().getUID();
-                        UUID newId;
-                        {
-                            var created = vaultService.createVault(worldId, actor.getUniqueId(), block.getX(), block.getY(), block.getZ(), finalOwner,
-                                    vault.blockMaterial() == null ? null : vault.blockMaterial().name(),
-                                    vault.blockDataString());
-                            newId = created.uuid;
-                        }
-                        List<ItemStack> items = vault.contents();
-                        List<VaultItemEntity> batch = new ArrayList<>(items.size());
-                        for (int idx = 0; idx < items.size(); idx++) {
-                            ItemStack itemStack = items.get(idx);
-                            if (itemStack == null) continue;
-                            VaultItemEntity vie = new VaultItemEntity();
-                            vie.vaultUuid = newId;
-                            vie.slot = idx;
-                            vie.amount = itemStack.getAmount();
-                            vie.item = ItemSerialization.toBytes(itemStack);
-                            batch.add(vie);
-                        }
-                        if (!batch.isEmpty()) {
-                            vaultService.putItems(newId, batch);
-                        }
-                        new BukkitRunnable() {
-                            @Override public void run() {
-                                var dto = new VaultDtoImp(newId, finalOwner, List.of(),
-                                        vault.blockMaterial() == null ? null : vault.blockMaterial().name(),
-                                        null, System.currentTimeMillis());
-                                VaultStoragePlugin.getInstance().getSessionManager().getOrCreate(actor.getUniqueId()).setLastVaultDto(dto);
-                                actor.sendMessage(MiniMessageUtil.parseOrPlain(texts.capturedOk));
+                VaultCaptureService captureService = plugin.getCaptureService();
+                captureService.ensureValidOwnerUUID(finalOwner, actor).thenAccept(validatedOwner -> {
+                    if (validatedOwner == null) {
 
-                                new PlayerVaultEvent(actor, vault).callEvent();
+                        new BukkitRunnable(){
 
+                            @Override
+                            public void run() {
+                                actor.sendMessage(MiniMessageUtil.parseOrPlain(
+                                        "<red>Error: Could not determine vault owner. Capture aborted.</red>"
+                                ));
+                                plugin.getLogger().warning(
+                                        "[VaultCaptureService] Vault capture aborted for " + actor.getName() +
+                                                " at " + block.getWorld().getName() + ":" + block.getX() + "," + block.getY() + "," + block.getZ() +
+                                                " - could not validate owner UUID"
+                                );
                                 busy[0] = false;
                             }
                         }.runTask(plugin);
+                        return;
                     }
-                }.runTaskAsynchronously(plugin);
+
+                    new BukkitRunnable() {
+                        @Override public void run() {
+                            var vaultService = plugin.getVaultService();
+                            UUID worldId = block.getWorld().getUID();
+                            UUID newId;
+                            {
+                                var created = vaultService.createVault(worldId, actor.getUniqueId(), block.getX(), block.getY(), block.getZ(), validatedOwner,
+                                        vault.blockMaterial() == null ? null : vault.blockMaterial().name(),
+                                        vault.blockDataString());
+                                newId = created.uuid;
+                            }
+                            List<ItemStack> items = vault.contents();
+                            List<VaultItemEntity> batch = new ArrayList<>(items.size());
+                            for (int idx = 0; idx < items.size(); idx++) {
+                                ItemStack itemStack = items.get(idx);
+                                if (itemStack == null) continue;
+                                VaultItemEntity vie = new VaultItemEntity();
+                                vie.vaultUuid = newId;
+                                vie.slot = idx;
+                                vie.amount = itemStack.getAmount();
+                                vie.item = ItemSerialization.toBytes(itemStack);
+                                batch.add(vie);
+                            }
+                            if (!batch.isEmpty()) {
+                                vaultService.putItems(newId, batch);
+                            }
+                            new BukkitRunnable() {
+                                @Override public void run() {
+                                    var dto = new VaultDtoImp(newId, validatedOwner, List.of(),
+                                            vault.blockMaterial() == null ? null : vault.blockMaterial().name(),
+                                            null, System.currentTimeMillis());
+                                    VaultStoragePlugin.getInstance().getSessionManager().getOrCreate(actor.getUniqueId()).setLastVaultDto(dto);
+                                    actor.sendMessage(MiniMessageUtil.parseOrPlain(texts.capturedOk));
+
+                                    new PlayerVaultEvent(actor, vault).callEvent();
+
+                                    busy[0] = false;
+                                }
+                            }.runTask(plugin);
+                        }
+                    }.runTaskAsynchronously(plugin);
+                });
             }
         });
 
@@ -530,43 +591,61 @@ public class VaultCaptureService {
         VaultImp vault = outcome.vault();
         UUID finalOwner = outcome.finalOwner();
         var plugin = VaultStoragePlugin.getInstance();
-        new BukkitRunnable(){
-            @Override public void run() {
-                VaultService vaultService = plugin.getVaultService();
-                UUID worldId = block.getWorld().getUID();
-                UUID newId;
-                {
-                    var created = vaultService.createVault(worldId, actor.getUniqueId(), block.getX(), block.getY(), block.getZ(), finalOwner,
-                            vault.blockMaterial() == null ? null : vault.blockMaterial().name(),
-                            vault.blockDataString());
-                    newId = created.uuid;
-                }
-                List<ItemStack> items = vault.contents();
-                List<VaultItemEntity> batch = new ArrayList<>(items.size());
-                for (int idx = 0; idx < items.size(); idx++) {
-                    ItemStack itemStack = items.get(idx);
-                    if (itemStack == null) continue;
-                    VaultItemEntity vie = new VaultItemEntity();
-                    vie.vaultUuid = newId;
-                    vie.slot = idx;
-                    vie.amount = itemStack.getAmount();
-                    vie.item = ItemSerialization.toBytes(itemStack);
-                    batch.add(vie);
-                }
-                if (!batch.isEmpty()) vaultService.putItems(newId, batch);
 
-                new BukkitRunnable(){
-                    @Override public void run() {
-                        VaultStoragePlugin.getInstance().getSessionManager().getOrCreate(actor.getUniqueId())
-                                .setLastVaultDto(new VaultDtoImp(newId, finalOwner, List.of(),
-                                        vault.blockMaterial() == null ? null : vault.blockMaterial().name(),
-                                        null, System.currentTimeMillis()));
-                        actor.sendMessage(MiniMessageUtil.parseOrPlain(texts.capturedOk));
-                        new PlayerVaultEvent(actor, vault).callEvent();
-                        onDoneMain.accept(true);
-                    }
-                }.runTask(plugin);
+        // CRITICAL: Validate finalOwner UUID before persisting
+        VaultCaptureService captureService = plugin.getCaptureService();
+        captureService.ensureValidOwnerUUID(finalOwner, actor).thenAccept(validatedOwner -> {
+            if (validatedOwner == null) {
+                actor.sendMessage(MiniMessageUtil.parseOrPlain(
+                    "<red>Error: Could not determine vault owner. Capture aborted.</red>"
+                ));
+                plugin.getLogger().warning(
+                    "[VaultCaptureService] Direct vault capture aborted for " + actor.getName() +
+                    " at " + block.getWorld().getName() + ":" + block.getX() + "," + block.getY() + "," + block.getZ() +
+                    " - could not validate owner UUID"
+                );
+                onDoneMain.accept(false);
+                return;
             }
-        }.runTaskAsynchronously(plugin);
+
+            new BukkitRunnable(){
+                @Override public void run() {
+                    VaultService vaultService = plugin.getVaultService();
+                    UUID worldId = block.getWorld().getUID();
+                    UUID newId;
+                    {
+                        var created = vaultService.createVault(worldId, actor.getUniqueId(), block.getX(), block.getY(), block.getZ(), validatedOwner,
+                                vault.blockMaterial() == null ? null : vault.blockMaterial().name(),
+                                vault.blockDataString());
+                        newId = created.uuid;
+                    }
+                    List<ItemStack> items = vault.contents();
+                    List<VaultItemEntity> batch = new ArrayList<>(items.size());
+                    for (int idx = 0; idx < items.size(); idx++) {
+                        ItemStack itemStack = items.get(idx);
+                        if (itemStack == null) continue;
+                        VaultItemEntity vie = new VaultItemEntity();
+                        vie.vaultUuid = newId;
+                        vie.slot = idx;
+                        vie.amount = itemStack.getAmount();
+                        vie.item = ItemSerialization.toBytes(itemStack);
+                        batch.add(vie);
+                    }
+                    if (!batch.isEmpty()) vaultService.putItems(newId, batch);
+
+                    new BukkitRunnable(){
+                        @Override public void run() {
+                            VaultStoragePlugin.getInstance().getSessionManager().getOrCreate(actor.getUniqueId())
+                                    .setLastVaultDto(new VaultDtoImp(newId, validatedOwner, List.of(),
+                                            vault.blockMaterial() == null ? null : vault.blockMaterial().name(),
+                                            null, System.currentTimeMillis()));
+                            actor.sendMessage(MiniMessageUtil.parseOrPlain(texts.capturedOk));
+                            new PlayerVaultEvent(actor, vault).callEvent();
+                            onDoneMain.accept(true);
+                        }
+                    }.runTask(plugin);
+                }
+            }.runTaskAsynchronously(plugin);
+        });
     }
 }

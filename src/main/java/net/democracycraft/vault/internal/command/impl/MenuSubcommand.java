@@ -11,11 +11,11 @@ import net.democracycraft.vault.internal.security.VaultPermission;
 import org.jetbrains.annotations.NotNull;
 import net.democracycraft.vault.VaultStoragePlugin;
 import net.democracycraft.vault.internal.ui.VaultUIContext;
+import net.democracycraft.vault.internal.util.uuid.UniqueIdentifierResolver;
 import org.bukkit.Bukkit;
 import org.jspecify.annotations.NonNull;
 
 import java.util.ArrayList;
-import java.util.concurrent.CompletableFuture;
 
 /** /vault menu: opens the capture UI dialog. Supports optional username filter. */
 public class MenuSubcommand implements Subcommand {
@@ -35,47 +35,28 @@ public class MenuSubcommand implements Subcommand {
         if (ctx.args().length >= 1) {
             String username = ctx.args()[0];
             var plugin = VaultStoragePlugin.getInstance();
-            var mojangService = plugin.getMojangService();
-            var bedrockRetriever = plugin.getBedrockUniqueIdentifierRetriever();
-
-            CompletableFuture<java.util.UUID> resolveFuture;
-            if (mojangService != null) {
-                resolveFuture = mojangService.getUUID(username).thenCompose(resolved -> {
-                    if (resolved != null) {
-                        return CompletableFuture.completedFuture(resolved);
-                    }
-                    if (bedrockRetriever != null) {
-                        return bedrockRetriever.getUniqueIdentifier(username).exceptionally(ex -> null);
-                    }
-                    return CompletableFuture.completedFuture(null);
-                });
-            } else if (bedrockRetriever != null) {
-                resolveFuture = bedrockRetriever.getUniqueIdentifier(username).exceptionally(ex -> null);
-            } else {
-                player.sendMessage("Player lookup unavailable.");
-                return;
-            }
 
             player.sendMessage("Resolving player...");
-            resolveFuture.thenAccept(resolved -> {
-                Bukkit.getScheduler().runTask(plugin, () -> {
-                    Player current = Bukkit.getPlayer(player.getUniqueId());
-                    if (current == null || !current.isOnline()) return;
-                    if (resolved == null) {
-                        current.sendMessage("Player not found.");
+
+            // Use centralized UUID resolver
+            UniqueIdentifierResolver resolver = new UniqueIdentifierResolver(plugin.getMojangService(), plugin.getBedrockUniqueIdentifierRetriever());
+            resolver.resolve(username).thenAccept(resolved -> Bukkit.getScheduler().runTask(plugin, () -> {
+                Player current = Bukkit.getPlayer(player.getUniqueId());
+                if (current == null || !current.isOnline()) return;
+                if (resolved == null) {
+                    current.sendMessage("Player not found.");
+                    return;
+                }
+                if (resolved.equals(current.getUniqueId())) {
+                    new VaultCaptureMenu(current).open();
+                } else {
+                    if (!VaultPermission.ADMIN.has(current)) {
+                        current.sendMessage("You don't have permission to open other players' vaults.");
                         return;
                     }
-                    if (resolved.equals(current.getUniqueId())) {
-                        new VaultCaptureMenu(current).open();
-                    } else {
-                        if (!VaultPermission.ADMIN.has(current)) {
-                            current.sendMessage("You don't have permission to open other players' vaults.");
-                            return;
-                        }
-                        new VaultCaptureMenu(current, VaultUIContext.adminFiltered(current.getUniqueId(), resolved)).open();
-                    }
-                });
-            });
+                    new VaultCaptureMenu(current, VaultUIContext.adminFiltered(current.getUniqueId(), resolved)).open();
+                }
+            }));
             return;
         }
 

@@ -11,6 +11,7 @@ import net.democracycraft.vault.api.ui.AutoDialog;
 import net.democracycraft.vault.internal.util.minimessage.MiniMessageUtil;
 import net.democracycraft.vault.internal.util.yml.AutoYML;
 import net.democracycraft.vault.internal.util.config.DataFolder;
+import net.democracycraft.vault.internal.util.uuid.UniqueIdentifierResolver;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
@@ -133,8 +134,6 @@ public class VaultListMenu extends ChildMenuImp {
     private void loadAsync() {
         Player p = getPlayer();
         var plugin = VaultStoragePlugin.getInstance();
-        var mojangService = plugin.getMojangService();
-        var bedrockRetriever = plugin.getBedrockUniqueIdentifierRetriever();
 
         // First, resolve query to UUID if needed (async chain)
         CompletableFuture<UUID> queryOwnerFuture;
@@ -144,25 +143,9 @@ public class VaultListMenu extends ChildMenuImp {
         } else if (q == null || q.isBlank()) {
             queryOwnerFuture = CompletableFuture.completedFuture(null);
         } else {
-            UUID parsedUuid = null;
-            try { parsedUuid = UUID.fromString(q); } catch (IllegalArgumentException ignore) {}
-            if (parsedUuid != null) {
-                queryOwnerFuture = CompletableFuture.completedFuture(parsedUuid);
-            } else if (mojangService != null) {
-                queryOwnerFuture = mojangService.getUUID(q).thenCompose(resolved -> {
-                    if (resolved != null) {
-                        return CompletableFuture.completedFuture(resolved);
-                    }
-                    if (bedrockRetriever != null) {
-                        return bedrockRetriever.getUniqueIdentifier(q).exceptionally(ex -> null);
-                    }
-                    return CompletableFuture.completedFuture(null);
-                });
-            } else if (bedrockRetriever != null) {
-                queryOwnerFuture = bedrockRetriever.getUniqueIdentifier(q).exceptionally(ex -> null);
-            } else {
-                queryOwnerFuture = CompletableFuture.completedFuture(null);
-            }
+            // Use centralized UUID resolver
+            UniqueIdentifierResolver resolver = new UniqueIdentifierResolver(plugin.getMojangService(), plugin.getBedrockUniqueIdentifierRetriever());
+            queryOwnerFuture = resolver.resolve(q);
         }
 
         queryOwnerFuture.thenAccept(queryOwner -> {
@@ -189,8 +172,8 @@ public class VaultListMenu extends ChildMenuImp {
                 }
 
                 for (UUID ownerUuid : uniqueOwners) {
-                    if (mojangService != null) {
-                        var future = mojangService.getName(ownerUuid).thenAccept(name -> {
+                    if (plugin.getMojangService() != null) {
+                        var future = plugin.getMojangService() .getName(ownerUuid).thenAccept(name -> {
                             if (name != null && !name.isBlank()) {
                                 resolvedNames.put(ownerUuid, name);
                             }

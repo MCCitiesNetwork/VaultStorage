@@ -2,10 +2,7 @@ package net.democracycraft.vault.internal.command;
 
 import net.democracycraft.vault.internal.command.framework.CommandContext;
 import net.democracycraft.vault.internal.command.framework.Subcommand;
-import net.democracycraft.vault.internal.command.impl.CaptureSubcommand;
-import net.democracycraft.vault.internal.command.impl.MenuSubcommand;
-import net.democracycraft.vault.internal.command.impl.OpenSubcommand;
-import net.democracycraft.vault.internal.command.impl.AdminSubcommand;
+import net.democracycraft.vault.internal.command.impl.*;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -24,7 +21,8 @@ public class VaultCommand implements CommandExecutor, TabCompleter {
             new MenuSubcommand(),
             new CaptureSubcommand(),
             new OpenSubcommand(),
-            new AdminSubcommand()
+            new AdminSubcommand(),
+            new TransferSubcommand()
     );
 
     @Override

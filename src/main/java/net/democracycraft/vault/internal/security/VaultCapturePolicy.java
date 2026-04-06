@@ -88,6 +88,12 @@ public final class VaultCapturePolicy {
             }
         }
 
+        // Log actor UUID for debugging Bedrock player issues
+        UUID actorUUID = actor.getUniqueId();
+        if (actorUUID.toString().matches("0{8}-0{4}-0{4}-0{4}-0{12}")) {
+            VaultStoragePlugin.getInstance().getLogger().warning("[VaultCapturePolicy] Invalid actor UUID for player " + actor.getName() + ": " + actorUUID);
+        }
+
         // Check for Hanging (ItemFrames, Paintings) attached to or intersecting the block
         // Non-admins are not allowed to unlock/vault Hanging.
         boolean hangableRestricted = false;
