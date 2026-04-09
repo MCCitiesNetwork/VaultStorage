@@ -15,6 +15,7 @@ import org.bukkit.Material;
 import org.bukkit.block.*;
 import org.bukkit.entity.Player;
 import org.bukkit.event.Listener;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.EquipmentSlot;
@@ -23,6 +24,7 @@ import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
+import org.bukkit.block.data.type.WallSign;
 import org.jetbrains.annotations.NotNull;
 
 import java.time.Instant;
@@ -269,6 +271,9 @@ public class VaultCaptureService {
     public static class SessionTexts implements Dto {
         public String captureCancelled = "Capture cancelled.";
         public String notAllowed = "<red>Not allowed: region/block rules.</red>";
+        public String signNotAllowed = "<red>Sign not allowed: region/block rules.</red>";
+        public String containerNotAllowed = "<red>Container not allowed: region/block rules.</red>";
+        public String signUnlocked = "Sign protection removed.";
         public String emptyCaptureSkipped = "Protection removed.";
         public String capturedOk = "Vault captured.";
         public String noBoltOwner = "<yellow>No Bolt owner found; you will be set as the vault owner.</yellow>";
@@ -352,7 +357,7 @@ public class VaultCaptureService {
         final long[] cancelCooldownUntil = new long[]{0L};
 
         session.getDynamicListener().setListener(new Listener() {
-            @org.bukkit.event.EventHandler
+            @org.bukkit.event.EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = false)
             public void onInteract(PlayerInteractEvent event) {
                 if (!event.getPlayer().getUniqueId().equals(actor.getUniqueId())) return;
 
@@ -390,15 +395,41 @@ public class VaultCaptureService {
                 // Set cooldown to prevent phantom left-click events from canceling capture (~2 ticks / 100ms)
                 cancelCooldownUntil[0] = System.currentTimeMillis() + 100L;
 
-                VaultCapturePolicy.Decision decision = VaultCapturePolicy.evaluate(actor, block);
+                Block captureBlock = block;
+                boolean clickedSign = isSignBlock(block);
+
+                // Sequential sign->container policy flow:
+                // 1) Evaluate sign (non-container) policy and optionally unlock sign.
+                // 2) Evaluate container policy on attached container (if present).
+                if (clickedSign) {
+                    VaultCapturePolicy.Decision signDecision = VaultCapturePolicy.evaluate(actor, block);
+                    UUID signOwner = signDecision.containerOwner();
+                    if (signDecision.allowed()) {
+                        CaptureOutcome signOutcome = captureWithDoubleChestSupport(actor, block, signOwner);
+                        if (signOutcome.protectionRemoved()) {
+                            actor.sendMessage(MiniMessageUtil.parseOrPlain(texts.signUnlocked));
+                        }
+                    } else {
+                        actor.sendMessage(MiniMessageUtil.parseOrPlain(texts.signNotAllowed));
+                    }
+
+                    Block attachedContainer = resolveAttachedContainerBlock(block);
+                    if (attachedContainer == null) {
+                        busy[0] = false;
+                        return;
+                    }
+                    captureBlock = attachedContainer;
+                }
+
+                VaultCapturePolicy.Decision decision = VaultCapturePolicy.evaluate(actor, captureBlock);
                 UUID originalOwner = decision.containerOwner();
                 if (!decision.allowed()) {
-                    actor.sendMessage(MiniMessageUtil.parseOrPlain(texts.notAllowed));
+                    actor.sendMessage(MiniMessageUtil.parseOrPlain(clickedSign ? texts.containerNotAllowed : texts.notAllowed));
                     busy[0] = false;
                     return;
                 }
 
-                CaptureOutcome outcome = captureWithDoubleChestSupport(actor, block, originalOwner);
+                CaptureOutcome outcome = captureWithDoubleChestSupport(actor, captureBlock, originalOwner);
                 if (outcome.empty()) {
                     // Only send "Protection removed" if we actually removed protection.
                     // If protectionRemoved is false, it means we sent a warning (e.g., "Vault the other side first").
@@ -413,6 +444,7 @@ public class VaultCaptureService {
                     actor.sendMessage(MiniMessageUtil.parseOrPlain(texts.noBoltOwner));
                 }
 
+                final Block finalCaptureBlock = captureBlock;
                 VaultImp vault = outcome.vault();
                 var plugin = VaultStoragePlugin.getInstance();
                 UUID finalOwner = outcome.finalOwner();
@@ -430,7 +462,7 @@ public class VaultCaptureService {
                                 ));
                                 plugin.getLogger().warning(
                                         "[VaultCaptureService] Vault capture aborted for " + actor.getName() +
-                                                " at " + block.getWorld().getName() + ":" + block.getX() + "," + block.getY() + "," + block.getZ() +
+                                                " at " + finalCaptureBlock.getWorld().getName() + ":" + finalCaptureBlock.getX() + "," + finalCaptureBlock.getY() + "," + finalCaptureBlock.getZ() +
                                                 " - could not validate owner UUID"
                                 );
                                 busy[0] = false;
@@ -442,10 +474,10 @@ public class VaultCaptureService {
                     new BukkitRunnable() {
                         @Override public void run() {
                             var vaultService = plugin.getVaultService();
-                            UUID worldId = block.getWorld().getUID();
+                            UUID worldId = finalCaptureBlock.getWorld().getUID();
                             UUID newId;
                             {
-                                var created = vaultService.createVault(worldId, actor.getUniqueId(), block.getX(), block.getY(), block.getZ(), validatedOwner,
+                                var created = vaultService.createVault(worldId, actor.getUniqueId(), finalCaptureBlock.getX(), finalCaptureBlock.getY(), finalCaptureBlock.getZ(), validatedOwner,
                                         vault.blockMaterial() == null ? null : vault.blockMaterial().name(),
                                         vault.blockDataString());
                                 newId = created.uuid;
@@ -567,6 +599,34 @@ public class VaultCaptureService {
             reasonText = resolved;
         }
         return decision.allowed() ? cfg.actionBarReasonAllowedBlank : cfg.actionBarReasonSegmentTemplate.replace("%reason%", reasonText);
+    }
+
+    private static final BlockFace[] ADJACENT_FACES = new BlockFace[]{
+            BlockFace.NORTH, BlockFace.SOUTH, BlockFace.EAST, BlockFace.WEST, BlockFace.UP, BlockFace.DOWN
+    };
+
+    private static boolean isSignBlock(@NotNull Block block) {
+        return block.getState() instanceof Sign;
+    }
+
+    private static Block resolveAttachedContainerBlock(@NotNull Block signBlock) {
+        if (!isSignBlock(signBlock)) return null;
+
+        if (signBlock.getBlockData() instanceof WallSign wallSign) {
+            Block attached = signBlock.getRelative(wallSign.getFacing().getOppositeFace());
+            if (attached.getState() instanceof Container) {
+                return attached;
+            }
+        }
+
+        // Conservative fallback for non-wall signs: check immediate neighbors.
+        for (BlockFace face : ADJACENT_FACES) {
+            Block neighbor = signBlock.getRelative(face);
+            if (neighbor.getState() instanceof Container) {
+                return neighbor;
+            }
+        }
+        return null;
     }
 
     /**
