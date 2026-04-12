@@ -76,7 +76,6 @@ public final class VaultCapturePolicy {
      *
      */
     public static Decision evaluate(Player actor, Block block) {
-        boolean hasOverride = VaultPermission.ACTION_PLACE_OVERRIDE.has(actor);
         BoltService bolt = VaultStoragePlugin.getInstance().getBoltService();
         UUID originalOwner = null;
         if (bolt != null) {
@@ -95,21 +94,55 @@ public final class VaultCapturePolicy {
         }
 
         // Check for Hanging (ItemFrames, Paintings) attached to or intersecting the block
-        // Non-admins are not allowed to unlock/vault Hanging.
-        boolean hangableRestricted = false;
-        if (originalOwner != null && !VaultPermission.ADMIN.has(actor)) {
+        // Non-admins are not allowed to unlock/vault the block itself while hangings remain.
+        boolean hangableRestricted = computeHangableRestricted(actor, block, originalOwner);
+
+        return evaluateBlockPolicy(actor, block, originalOwner, hangableRestricted);
+    }
+
+    /**
+     * Same Bolt and WorldGuard rules as {@link #evaluate(Player, Block)}, but does not apply the
+     * "hangings near block" restriction (used when vaulting the hanging entity itself).
+     * @param actor player performing capture
+     * @param supportingBlock block the hanging is attached to
+     */
+    public static Decision evaluateHangingCapture(Player actor, Block supportingBlock) {
+        BoltService bolt = VaultStoragePlugin.getInstance().getBoltService();
+        UUID originalOwner = null;
+        if (bolt != null) {
             try {
-                // Expand slightly to catch entities on the face of the block
-                var nearby = block.getWorld().getNearbyEntities(block.getBoundingBox().expand(0.2));
-                for (Entity entity : nearby) {
-                    if (entity instanceof Hanging) {
-                        hangableRestricted = true;
-                        break;
-                    }
-                }
-            } catch (Throwable ignored) {}
+                originalOwner = bolt.getOwner(supportingBlock);
+            } catch (Throwable t) {
+                VaultStoragePlugin.getInstance().getLogger().warning("[VaultCapturePolicy] Error obtaining Bolt owner for block in "
+                        + formatBlock(supportingBlock) + ": " + t.getClass().getSimpleName() + " - " + t.getMessage());
+            }
         }
 
+        UUID actorUUID = actor.getUniqueId();
+        if (actorUUID.toString().matches("0{8}-0{4}-0{4}-0{4}-0{12}")) {
+            VaultStoragePlugin.getInstance().getLogger().warning("[VaultCapturePolicy] Invalid actor UUID for player " + actor.getName() + ": " + actorUUID);
+        }
+
+        return evaluateBlockPolicy(actor, supportingBlock, originalOwner, false);
+    }
+
+    private static boolean computeHangableRestricted(Player actor, Block block, UUID originalOwner) {
+        if (originalOwner == null || VaultPermission.ADMIN.has(actor)) {
+            return false;
+        }
+        try {
+            var nearby = block.getWorld().getNearbyEntities(block.getBoundingBox().expand(0.2));
+            for (Entity entity : nearby) {
+                if (entity instanceof Hanging) {
+                    return true;
+                }
+            }
+        } catch (Throwable ignored) {}
+        return false;
+    }
+
+    private static Decision evaluateBlockPolicy(Player actor, Block block, UUID originalOwner, boolean hangableRestricted) {
+        boolean hasOverride = VaultPermission.ACTION_PLACE_OVERRIDE.has(actor);
         boolean actorIsContainerOwner = originalOwner != null && originalOwner.equals(actor.getUniqueId());
         WorldGuardService wgs = VaultStoragePlugin.getInstance().getWorldGuardService();
 
