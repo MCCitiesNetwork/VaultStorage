@@ -75,7 +75,7 @@ public class VaultCaptureService {
             " (" + candidateUUID + "). Attempting to resolve by player name..."
         );
 
-        return resolver.resolve(actor.getName()).thenApply(resolvedUUID -> {
+        return resolver.resolveUuid(actor.getName()).thenApply(resolvedUUID -> {
             if (UniqueIdentifierResolver.isValidUUID(resolvedUUID)) {
                 VaultStoragePlugin.getInstance().getLogger().info(
                     "[VaultCaptureService]  Successfully resolved UUID for " + actor.getName() +

@@ -40,7 +40,7 @@ public class MenuSubcommand implements Subcommand {
 
             // Use centralized UUID resolver
             UniqueIdentifierResolver resolver = new UniqueIdentifierResolver(plugin.getMojangService(), plugin.getBedrockUniqueIdentifierRetriever());
-            resolver.resolve(username).thenAccept(resolved -> Bukkit.getScheduler().runTask(plugin, () -> {
+            resolver.resolveUuid(username).thenAccept(resolved -> Bukkit.getScheduler().runTask(plugin, () -> {
                 Player current = Bukkit.getPlayer(player.getUniqueId());
                 if (current == null || !current.isOnline()) return;
                 if (resolved == null) {

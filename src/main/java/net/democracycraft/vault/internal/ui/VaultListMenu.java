@@ -8,6 +8,7 @@ import net.democracycraft.vault.VaultStoragePlugin;
 import net.democracycraft.vault.api.data.Dto;
 import net.democracycraft.vault.api.service.VaultService;
 import net.democracycraft.vault.api.ui.AutoDialog;
+import net.democracycraft.vault.internal.database.entity.VaultEntity;
 import net.democracycraft.vault.internal.util.minimessage.MiniMessageUtil;
 import net.democracycraft.vault.internal.util.yml.AutoYML;
 import net.democracycraft.vault.internal.util.config.DataFolder;
@@ -108,10 +109,15 @@ public class VaultListMenu extends ChildMenuImp {
 
         // Hide search box when a strict owner filter is active
         if (uiContext.filterOwner() == null) {
-            builder.addInput(DialogInput.text("QUERY", MiniMessageUtil.parseOrPlain(cfg.searchLabel, phQuery)).labelVisible(true).build());
+            builder.addInput(
+                    DialogInput.text(
+                            "QUERY", MiniMessageUtil.parseOrPlain(cfg.searchLabel, phQuery)
+                            )
+                    .labelVisible(true)
+                    .build());
             builder.buttonWithPlayer(MiniMessageUtil.parseOrPlain(cfg.searchBtn, phQuery), null, Duration.ofMinutes(5), 1, (player, response) -> {
-                String q = Optional.ofNullable(response.getText("QUERY")).orElse("").trim();
-                new VaultListMenu(player, (ParentMenuImp) getParentMenu(), uiContext, q).open();
+                String retrievedQuery = Optional.ofNullable(response.getText("QUERY")).orElse("").trim();
+                new VaultListMenu(player, (ParentMenuImp) getParentMenu(), uiContext, retrievedQuery).open();
             });
         }
 
@@ -132,8 +138,16 @@ public class VaultListMenu extends ChildMenuImp {
     }
 
     private void loadAsync() {
-        Player p = getPlayer();
+        Player player = getPlayer();
         var plugin = VaultStoragePlugin.getInstance();
+
+        // Create UUID resolver once for reuse
+        final UniqueIdentifierResolver uuidResolver;
+        if (plugin.getMojangService() != null) {
+            uuidResolver = new UniqueIdentifierResolver(plugin.getMojangService(), plugin.getBedrockUniqueIdentifierRetriever());
+        } else {
+            uuidResolver = null;
+        }
 
         // First, resolve query to UUID if needed (async chain)
         CompletableFuture<UUID> queryOwnerFuture;
@@ -144,26 +158,25 @@ public class VaultListMenu extends ChildMenuImp {
             queryOwnerFuture = CompletableFuture.completedFuture(null);
         } else {
             // Use centralized UUID resolver
-            UniqueIdentifierResolver resolver = new UniqueIdentifierResolver(plugin.getMojangService(), plugin.getBedrockUniqueIdentifierRetriever());
-            queryOwnerFuture = resolver.resolve(q);
+            queryOwnerFuture = uuidResolver != null ? uuidResolver.resolveUuid(q) : CompletableFuture.completedFuture(null);
         }
 
         queryOwnerFuture.thenAccept(queryOwner -> {
             // Now load vaults on async thread
             Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
                 VaultService vs = plugin.getVaultService();
-                List<net.democracycraft.vault.internal.database.entity.VaultEntity> vaults;
+                List<VaultEntity> vaults;
                 if (uiContext.filterOwner() != null) {
                     vaults = vs.listByOwner(uiContext.filterOwner());
                 } else if (q == null || q.isBlank()) {
-                    vaults = vs.listInWorld(p.getWorld().getUID());
+                    vaults = vs.listInWorld(player.getWorld().getUID());
                 } else {
                     vaults = queryOwner != null ? vs.listByOwner(queryOwner) : List.of();
                 }
 
                 // Collect unique owner UUIDs and resolve names in parallel
                 Map<UUID, String> resolvedNames = new ConcurrentHashMap<>();
-                List<java.util.concurrent.CompletableFuture<Void>> nameFutures = new ArrayList<>();
+                List<CompletableFuture<Void>> nameFutures = new ArrayList<>();
                 Set<UUID> uniqueOwners = new HashSet<>();
 
                 for (var v : vaults) {
@@ -172,8 +185,8 @@ public class VaultListMenu extends ChildMenuImp {
                 }
 
                 for (UUID ownerUuid : uniqueOwners) {
-                    if (plugin.getMojangService() != null) {
-                        var future = plugin.getMojangService() .getName(ownerUuid).thenAccept(name -> {
+                    if (uuidResolver != null) {
+                        var future = uuidResolver.getName(ownerUuid).thenAccept(name -> {
                             if (name != null && !name.isBlank()) {
                                 resolvedNames.put(ownerUuid, name);
                             }
@@ -198,7 +211,14 @@ public class VaultListMenu extends ChildMenuImp {
                                 out.add(new Entry(v.uuid, name, idx));
                             }
                             Bukkit.getScheduler().runTask(plugin, () ->
-                                    new VaultListMenu(p, (ParentMenuImp) getParentMenu(), uiContext, query, out).open());
+                                    new VaultListMenu(
+                                            player,
+                                            (ParentMenuImp) getParentMenu(),
+                                            uiContext,
+                                            query,
+                                            out
+                                    ).open()
+                            );
                         });
             });
         });
