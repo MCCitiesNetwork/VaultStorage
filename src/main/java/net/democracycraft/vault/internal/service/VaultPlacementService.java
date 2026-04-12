@@ -1,8 +1,6 @@
 package net.democracycraft.vault.internal.service;
 
 import net.democracycraft.vault.VaultStoragePlugin;
-import net.democracycraft.vault.api.convertible.Vault;
-import net.democracycraft.vault.api.event.PlayerPlaceVaultEvent;
 import net.democracycraft.vault.api.service.VaultService;
 import net.democracycraft.vault.api.service.BoltService;
 import net.democracycraft.vault.internal.database.entity.VaultEntity;
@@ -76,8 +74,8 @@ public class VaultPlacementService {
                 if (vaultEntity.material != null && !vaultEntity.material.isBlank()) {
                     try { mat = Material.valueOf(vaultEntity.material); } catch (IllegalArgumentException ignored) {}
                 }
-                if (mat == null) {
-                    // safe default
+                if (mat == null || !mat.isBlock()) {
+                    // Safe default; also handles item-only material names (e.g. legacy vault rows).
                     mat = Material.CHEST;
                 }
                 UUID ownerUuid = vaultService.getOwner(vaultUuid);
