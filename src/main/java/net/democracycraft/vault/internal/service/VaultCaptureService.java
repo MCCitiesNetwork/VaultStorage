@@ -539,9 +539,6 @@ public class VaultCaptureService {
 
                 Hanging hang = (Hanging) clicked;
                 Block supporting = HangingVaultSupport.resolveSupportingBlock(hang);
-                if (supporting == null) {
-                    return;
-                }
 
                 VaultCapturePolicy.Decision decision = VaultCapturePolicy.evaluateHangingCapture(actor, supporting);
                 if (!decision.allowed()) {

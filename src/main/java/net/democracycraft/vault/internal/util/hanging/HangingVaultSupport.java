@@ -12,7 +12,6 @@ import org.bukkit.entity.ItemFrame;
 import org.bukkit.entity.Painting;
 import org.bukkit.inventory.ItemStack;
 import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -35,14 +34,10 @@ public final class HangingVaultSupport {
     /**
      * Block the hanging is attached to (Bolt and WorldGuard context for policy).
      * @param hanging entity to resolve
-     * @return supporting block, or null if resolution fails
+     * @return supporting block
      */
-    public static @Nullable Block resolveSupportingBlock(@NotNull Hanging hanging) {
-        try {
-            return hanging.getLocation().getBlock().getRelative(hanging.getAttachedFace());
-        } catch (Throwable t) {
-            return null;
-        }
+    public static @NotNull Block resolveSupportingBlock(@NotNull Hanging hanging) {
+        return hanging.getLocation().getBlock().getRelative(hanging.getAttachedFace());
     }
 
     /**
