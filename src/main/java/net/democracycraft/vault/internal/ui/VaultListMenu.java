@@ -12,6 +12,7 @@ import net.democracycraft.vault.internal.util.minimessage.MiniMessageUtil;
 import net.democracycraft.vault.internal.util.yml.AutoYML;
 import net.democracycraft.vault.internal.util.config.DataFolder;
 import net.democracycraft.vault.internal.util.uuid.UniqueIdentifierResolver;
+import net.democracycraft.vault.internal.database.entity.VaultEntity;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
@@ -108,7 +109,10 @@ public class VaultListMenu extends ChildMenuImp {
 
         // Hide search box when a strict owner filter is active
         if (uiContext.filterOwner() == null) {
-            builder.addInput(DialogInput.text("QUERY", MiniMessageUtil.parseOrPlain(cfg.searchLabel, phQuery)).labelVisible(true).build());
+            builder.addInput(DialogInput.text("QUERY", MiniMessageUtil.parseOrPlain(cfg.searchLabel, phQuery))
+                    .maxLength(255)
+                    .labelVisible(true)
+                    .build());
             builder.buttonWithPlayer(MiniMessageUtil.parseOrPlain(cfg.searchBtn, phQuery), null, Duration.ofMinutes(5), 1, (player, response) -> {
                 String q = Optional.ofNullable(response.getText("QUERY")).orElse("").trim();
                 new VaultListMenu(player, (ParentMenuImp) getParentMenu(), uiContext, q).open();
@@ -135,73 +139,116 @@ public class VaultListMenu extends ChildMenuImp {
         Player p = getPlayer();
         var plugin = VaultStoragePlugin.getInstance();
 
-        // First, resolve query to UUID if needed (async chain)
-        CompletableFuture<UUID> queryOwnerFuture;
         String q = this.query;
-        if (uiContext.filterOwner() != null) {
-            queryOwnerFuture = CompletableFuture.completedFuture(null); // not used
-        } else if (q == null || q.isBlank()) {
-            queryOwnerFuture = CompletableFuture.completedFuture(null);
-        } else {
-            // Use centralized UUID resolver
-            UniqueIdentifierResolver resolver = new UniqueIdentifierResolver(plugin.getMojangService(), plugin.getBedrockUniqueIdentifierRetriever());
-            queryOwnerFuture = resolver.resolve(q);
-        }
 
-        queryOwnerFuture.thenAccept(queryOwner -> {
-            // Now load vaults on async thread
+        if (uiContext.filterOwner() != null) {
+            // Explicit owner filter
+            List<VaultEntity> vaults = plugin.getVaultService().listByOwner(uiContext.filterOwner());
+            loadVaultsAsync(plugin, vaults);
+        } else if (q == null || q.isBlank()) {
+            // No query: list all in world
+            List<VaultEntity> vaults = plugin.getVaultService().listInWorld(p.getWorld().getUID());
+            loadVaultsAsync(plugin, vaults);
+        } else {
+            SearchStrategy.SearchQuery sq = SearchStrategy.analyze(q);
+
+            if (sq.type() == SearchStrategy.SearchType.INVALID) {
+                // Try to resolve as username
+                if (plugin.getMojangService() != null) {
+                    UniqueIdentifierResolver resolver = new UniqueIdentifierResolver(
+                            plugin.getMojangService(),
+                            plugin.getBedrockUniqueIdentifierRetriever()
+                    );
+                    resolveUsernameAsync(plugin, p, resolver, q);
+                } else {
+                    loadVaultsAsync(plugin, List.of());
+                }
+            } else {
+                // UUID_STRING case: search async
+                Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+                    VaultService vs = plugin.getVaultService();
+
+                    if(sq.value() == null){
+                        return;
+                    }
+
+                    // Try as owner UUID first
+                    List<VaultEntity> vaults = vs.listByOwnerUuidString(sq.value());
+
+                    if (vaults.isEmpty()) {
+                        // If no results as owner UUID, try as vault UUID
+                        vaults = vs.listByVaultUuidString(sq.value());
+                    }
+
+                    loadVaultsAsync(plugin, vaults);
+                });
+            }
+        }
+    }
+
+    private void resolveUsernameAsync(VaultStoragePlugin plugin, Player p, UniqueIdentifierResolver resolver, String query) {
+        resolver.resolve(query).thenAccept(resolvedUUID -> {
+            SearchStrategy.SearchQuery sq = SearchStrategy.fromResolvedUsername(resolvedUUID);
+
             Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
                 VaultService vs = plugin.getVaultService();
-                List<net.democracycraft.vault.internal.database.entity.VaultEntity> vaults;
-                if (uiContext.filterOwner() != null) {
-                    vaults = vs.listByOwner(uiContext.filterOwner());
-                } else if (q == null || q.isBlank()) {
-                    vaults = vs.listInWorld(p.getWorld().getUID());
+                List<VaultEntity> vaults;
+
+                if (sq.type() == SearchStrategy.SearchType.USERNAME && sq.value() != null) {
+                    vaults = vs.listByOwnerUuidString(sq.value());
                 } else {
-                    vaults = queryOwner != null ? vs.listByOwner(queryOwner) : List.of();
+                    vaults = List.of();
                 }
 
-                // Collect unique owner UUIDs and resolve names in parallel
-                Map<UUID, String> resolvedNames = new ConcurrentHashMap<>();
-                List<java.util.concurrent.CompletableFuture<Void>> nameFutures = new ArrayList<>();
-                Set<UUID> uniqueOwners = new HashSet<>();
-
-                for (var v : vaults) {
-                    UUID ownerUuid = vs.getOwner(v.uuid);
-                    if (ownerUuid != null) uniqueOwners.add(ownerUuid);
-                }
-
-                for (UUID ownerUuid : uniqueOwners) {
-                    if (plugin.getMojangService() != null) {
-                        var future = plugin.getMojangService() .getName(ownerUuid).thenAccept(name -> {
-                            if (name != null && !name.isBlank()) {
-                                resolvedNames.put(ownerUuid, name);
-                            }
-                        });
-                        nameFutures.add(future);
-                    }
-                }
-
-                // Wait for all name resolutions, then build entries
-                CompletableFuture.allOf(nameFutures.toArray(new CompletableFuture[0]))
-                        .thenRun(() -> {
-                            Map<UUID,Integer> ownerCounts = new ConcurrentHashMap<>();
-                            List<Entry> out = new ArrayList<>();
-                            for (var v : vaults) {
-                                UUID ownerUuid = vs.getOwner(v.uuid);
-                                String name = "Unknown";
-                                if (ownerUuid != null) {
-                                    String resolved = resolvedNames.get(ownerUuid);
-                                    name = (resolved != null) ? resolved : ownerUuid.toString().substring(0,8);
-                                }
-                                int idx = ownerCounts.merge(ownerUuid == null ? new UUID(0,0) : ownerUuid, 1, Integer::sum);
-                                out.add(new Entry(v.uuid, name, idx));
-                            }
-                            Bukkit.getScheduler().runTask(plugin, () ->
-                                    new VaultListMenu(p, (ParentMenuImp) getParentMenu(), uiContext, query, out).open());
-                        });
+                loadVaultsAsync(plugin, vaults);
             });
         });
+    }
+
+
+    private void loadVaultsAsync(VaultStoragePlugin plugin, List<VaultEntity> vaults) {
+        Player p = getPlayer();
+        VaultService vs = plugin.getVaultService();
+
+        // Collect unique owner UUIDs and resolve names in parallel
+        Map<UUID, String> resolvedNames = new ConcurrentHashMap<>();
+        List<CompletableFuture<Void>> nameFutures = new ArrayList<>();
+        Set<UUID> uniqueOwners = new HashSet<>();
+
+        for (var v : vaults) {
+            UUID ownerUuid = vs.getOwner(v.uuid);
+            if (ownerUuid != null) uniqueOwners.add(ownerUuid);
+        }
+
+        for (UUID ownerUuid : uniqueOwners) {
+            if (plugin.getMojangService() != null) {
+                var future = plugin.getMojangService().getName(ownerUuid).thenAccept(name -> {
+                    if (name != null && !name.isBlank()) {
+                        resolvedNames.put(ownerUuid, name);
+                    }
+                });
+                nameFutures.add(future);
+            }
+        }
+
+        // Wait for all name resolutions, then build entries
+        CompletableFuture.allOf(nameFutures.toArray(new CompletableFuture[0]))
+                .thenRun(() -> {
+                    Map<UUID,Integer> ownerCounts = new ConcurrentHashMap<>();
+                    List<Entry> out = new ArrayList<>();
+                    for (var v : vaults) {
+                        UUID ownerUuid = vs.getOwner(v.uuid);
+                        String name = "Unknown";
+                        if (ownerUuid != null) {
+                            String resolved = resolvedNames.get(ownerUuid);
+                            name = (resolved != null) ? resolved : ownerUuid.toString().substring(0,8);
+                        }
+                        int idx = ownerCounts.merge(ownerUuid == null ? new UUID(0,0) : ownerUuid, 1, Integer::sum);
+                        out.add(new Entry(v.uuid, name, idx));
+                    }
+                    Bukkit.getScheduler().runTask(plugin, () ->
+                            new VaultListMenu(p, (ParentMenuImp) getParentMenu(), uiContext, query, out).open());
+                });
     }
 
     @Override

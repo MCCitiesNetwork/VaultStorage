@@ -139,6 +139,18 @@ public record VaultServiceImpl(VaultDAO dao) implements VaultService {
     }
 
     @Override
+    public @NotNull List<VaultEntity> listByOwnerUuidString(@NotNull String ownerUuidString) {
+        Objects.requireNonNull(ownerUuidString, "ownerUuidString");
+        return dao.listByOwnerUuidString(ownerUuidString);
+    }
+
+    @Override
+    public @NotNull List<VaultEntity> listByVaultUuidString(@NotNull String vaultUuidString) {
+        Objects.requireNonNull(vaultUuidString, "vaultUuidString");
+        return dao.listByVaultUuidString(vaultUuidString);
+    }
+
+    @Override
     public void putItem(@NotNull UUID vaultUuid, int slot, int amount, byte[] itemBytes) {
         Objects.requireNonNull(vaultUuid, "vaultUuid");
         dao.putItem(vaultUuid, slot, amount, itemBytes);

@@ -52,6 +52,17 @@ public interface VaultDAO {
      * Lists all vaults located in a given world.
      */
     @NotNull List<VaultEntity> listInWorld(@NotNull UUID worldUuid);
+    /**
+     * Lists all vaults for a given owner UUID string (no validation).
+     * Used for search queries where the string format has been pre-validated.
+     */
+    @NotNull List<VaultEntity> listByOwnerUuidString(@NotNull String ownerUuidString);
+    /**
+     * Lists vaults by vault UUID string (no validation).
+     * Used for direct vault searches where the string format has been pre-validated.
+     * Typically returns 0 or 1 result.
+     */
+    @NotNull List<VaultEntity> listByVaultUuidString(@NotNull String vaultUuidString);
 
     // Items
     /**

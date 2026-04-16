@@ -100,6 +100,29 @@ public record VaultDAOImpl(DatabaseSchema schema) implements VaultDAO {
     }
 
     @Override
+    public @NotNull List<VaultEntity> listByOwnerUuidString(@NotNull String ownerUuidString) {
+        Objects.requireNonNull(ownerUuidString, "ownerUuidString");
+        try {
+            UUID ownerUuid = UUID.fromString(ownerUuidString);
+            return listByOwner(ownerUuid);
+        } catch (IllegalArgumentException e) {
+            return List.of();
+        }
+    }
+
+    @Override
+    public @NotNull List<VaultEntity> listByVaultUuidString(@NotNull String vaultUuidString) {
+        Objects.requireNonNull(vaultUuidString, "vaultUuidString");
+        try {
+            UUID vaultUuid = UUID.fromString(vaultUuidString);
+            VaultEntity vault = getVault(vaultUuid);
+            return vault != null ? List.of(vault) : List.of();
+        } catch (IllegalArgumentException e) {
+            return List.of();
+        }
+    }
+
+    @Override
     public void putItem(@NotNull UUID vaultUuid, int slot, int amount, byte[] itemBytes) {
         Objects.requireNonNull(vaultUuid, "vaultUuid");
         Map<String, Object> where = new LinkedHashMap<>();

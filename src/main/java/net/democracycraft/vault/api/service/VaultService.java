@@ -29,6 +29,8 @@ public interface VaultService extends Service {
 
     @NotNull List<VaultEntity> listByOwner(@NotNull UUID ownerUuid);
     @NotNull List<VaultEntity> listInWorld(@NotNull UUID worldUuid);
+    @NotNull List<VaultEntity> listByOwnerUuidString(@NotNull String ownerUuidString);
+    @NotNull List<VaultEntity> listByVaultUuidString(@NotNull String vaultUuidString);
 
     /**
      * Inserts or updates a single item slot for a vault.
