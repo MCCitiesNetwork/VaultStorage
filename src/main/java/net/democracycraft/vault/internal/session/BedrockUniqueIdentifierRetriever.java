@@ -18,4 +18,13 @@ public class BedrockUniqueIdentifierRetriever {
         return floodgateApi.getUuidFor(playerName);
     }
 
+    @NotNull public CompletableFuture<String> getPlayerName(@NotNull UUID uuid) {
+        String hex = uuid
+                .toString()
+                .replace("-", "")
+                .substring(16);
+        long xuid = Long.parseUnsignedLong(hex, 16);
+        return floodgateApi.getGamertagFor(xuid);
+    }
+
 }

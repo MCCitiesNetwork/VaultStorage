@@ -77,7 +77,7 @@ public class TransferSubcommand implements Subcommand {
 
                 // Resolve owner UUID using the centralized resolver
                 UniqueIdentifierResolver resolver = new UniqueIdentifierResolver(plugin.getMojangService(), plugin.getBedrockUniqueIdentifierRetriever());
-                resolver.resolve(ownerIdentifier).thenAccept(resolvedUUID -> {
+                resolver.resolveUuid(ownerIdentifier).thenAccept(resolvedUUID -> {
                     if (resolvedUUID == null) {
                         plugin.getLogger().warning("[TransferSubcommand] Failed to resolve owner identifier: " + ownerIdentifier);
                         Bukkit.getScheduler().runTask(plugin, () -> {

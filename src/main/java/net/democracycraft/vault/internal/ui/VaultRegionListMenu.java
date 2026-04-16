@@ -74,7 +74,12 @@ public class VaultRegionListMenu extends ChildMenuImp {
     private final List<String> subsetIds; // when non-null, list only these region ids
 
     /** Browse mode: filter by query across all regions in world. */
-    public VaultRegionListMenu(@NotNull Player player, @NotNull ParentMenu parent, @NotNull String query, int page) {
+    public VaultRegionListMenu(
+            @NotNull Player player,
+            @NotNull ParentMenu parent,
+            @NotNull String query,
+            int page
+    ) {
         super(player, parent, "vault_region_list");
         this.query = query.trim();
         this.page = Math.max(0, page);
@@ -200,7 +205,7 @@ public class VaultRegionListMenu extends ChildMenuImp {
      * @param player actor opening results
      * @param regionId target region identifier
      */
-    private void openResultsFor(Player player, String regionId) {
+    private void openResultsFor(@NotNull Player player, String regionId) {
         if (!checkCooldown(player)) return;
         VaultUIContext context = VaultPermission.ADMIN.has(player) ? VaultUIContext.admin(player.getUniqueId()) : VaultUIContext.self(player.getUniqueId());
         new LoadingMenu(player, getParentMenu(), Map.of("%player%", player.getName())).open();
@@ -210,7 +215,7 @@ public class VaultRegionListMenu extends ChildMenuImp {
         });
     }
 
-    private boolean checkCooldown(Player player) {
+    private boolean checkCooldown(@NotNull Player player) {
         if (VaultPermission.ADMIN.has(player)) return true;
         var session = VaultStoragePlugin.getInstance().getSessionManager().getOrCreate(player.getUniqueId());
         long now = System.currentTimeMillis();
@@ -225,7 +230,7 @@ public class VaultRegionListMenu extends ChildMenuImp {
         return true;
     }
 
-    private List<VaultRegion> filterAndSort(List<VaultRegion> all, String filter) {
+    private List<VaultRegion> filterAndSort(@NotNull List<VaultRegion> all, String filter) {
         if (filter == null || filter.isBlank()) return all.stream().sorted(Comparator.comparing(VaultRegion::id, String.CASE_INSENSITIVE_ORDER)).toList();
         String f = filter.toLowerCase(Locale.ROOT);
         return all.stream()

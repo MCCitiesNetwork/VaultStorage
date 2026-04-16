@@ -5,6 +5,7 @@ import net.democracycraft.vault.internal.session.BedrockUniqueIdentifierRetrieve
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.text.spi.CollatorProvider;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
@@ -18,9 +19,20 @@ public class UniqueIdentifierResolver {
     private final MojangService<?> mojangService;
     private final BedrockUniqueIdentifierRetriever bedrockRetriever;
 
-    public UniqueIdentifierResolver(@Nullable MojangService<?> mojangService, @Nullable BedrockUniqueIdentifierRetriever bedrockRetriever) {
+    public UniqueIdentifierResolver(@NotNull MojangService<?> mojangService, @NotNull BedrockUniqueIdentifierRetriever bedrockRetriever) {
         this.mojangService = mojangService;
         this.bedrockRetriever = bedrockRetriever;
+    }
+
+    public @NotNull CompletableFuture<String> getName(@NotNull UUID uniqueIdentifier){
+        return mojangService.getName(uniqueIdentifier).thenCompose(name -> {
+            if (name != null){
+                return CompletableFuture.completedFuture(name);
+            }
+
+            return bedrockRetriever.getPlayerName(uniqueIdentifier).
+                    exceptionally(ex -> null);
+        });
     }
 
     /**
@@ -31,7 +43,7 @@ public class UniqueIdentifierResolver {
      * @param identifier UUID string or player name
      * @return CompletableFuture with the resolved UUID, or null if resolution fails
      */
-    public CompletableFuture<UUID> resolve(@NotNull String identifier) {
+    public CompletableFuture<UUID> resolveUuid(@NotNull String identifier) {
         // Try parsing as UUID first
         UUID parsed = tryParseUUID(identifier);
         if (parsed != null) {
@@ -46,23 +58,14 @@ public class UniqueIdentifierResolver {
      * Resolves a player name to UUID using MojangService (Java) then BedrockRetriever (Bedrock) as fallback.
      */
     private CompletableFuture<UUID> resolvePlayerName(@NotNull String playerName) {
-        if (mojangService != null) {
-            return mojangService.getUUID(playerName).thenCompose(resolved -> {
-                if (resolved != null) {
-                    return CompletableFuture.completedFuture(resolved);
-                }
-                // Fallback to Bedrock
-                if (bedrockRetriever != null) {
-                    return bedrockRetriever.getUniqueIdentifier(playerName)
-                        .exceptionally(ex -> null);
-                }
-                return CompletableFuture.completedFuture(null);
-            });
-        } else if (bedrockRetriever != null) {
+        return mojangService.getUUID(playerName).thenCompose(resolved -> {
+            if (resolved != null) {
+                return CompletableFuture.completedFuture(resolved);
+            }
+            // Fallback to Bedrock
             return bedrockRetriever.getUniqueIdentifier(playerName)
                 .exceptionally(ex -> null);
-        }
-        return CompletableFuture.completedFuture(null);
+        });
     }
 
     /**

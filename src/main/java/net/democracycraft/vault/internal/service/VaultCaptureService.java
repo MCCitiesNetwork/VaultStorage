@@ -13,9 +13,16 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Material;
 import org.bukkit.block.*;
+import org.bukkit.entity.Entity;
+import org.bukkit.entity.Hanging;
+import org.bukkit.entity.ItemFrame;
+import org.bukkit.entity.Painting;
 import org.bukkit.entity.Player;
+import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.block.Action;
+import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.Inventory;
@@ -23,10 +30,12 @@ import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
+import org.bukkit.block.data.type.WallSign;
 import org.jetbrains.annotations.NotNull;
 
 import java.time.Instant;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
@@ -35,6 +44,7 @@ import net.democracycraft.vault.internal.security.VaultCapturePolicy;
 import net.democracycraft.vault.internal.security.VaultPermission;
 import net.democracycraft.vault.internal.session.VaultSessionManager;
 import net.democracycraft.vault.internal.session.VaultSessionManager.Mode;
+import net.democracycraft.vault.internal.util.hanging.HangingVaultSupport;
 import net.democracycraft.vault.internal.util.minimessage.MiniMessageUtil;
 import net.democracycraft.vault.internal.util.yml.AutoYML;
 import net.democracycraft.vault.internal.util.config.DataFolder;
@@ -55,13 +65,13 @@ public class VaultCaptureService {
      * If invalid, attempts to resolve using the player's name via UniqueIdentifierResolver.
      * Returns a CompletableFuture with the valid UUID or null if resolution fails.
      */
-    private java.util.concurrent.CompletableFuture<UUID> ensureValidOwnerUUID(UUID candidateUUID, Player actor) {
+    private CompletableFuture<UUID> ensureValidOwnerUUID(UUID candidateUUID, Player actor) {
         // If already valid, return immediately
         if (UniqueIdentifierResolver.isValidUUID(candidateUUID)) {
             VaultStoragePlugin.getInstance().getLogger().info(
                 "[VaultCaptureService] Owner UUID is valid for " + actor.getName() + ": " + candidateUUID
             );
-            return java.util.concurrent.CompletableFuture.completedFuture(candidateUUID);
+            return CompletableFuture.completedFuture(candidateUUID);
         }
 
         // UUID is invalid (null or all-zeros), attempt to resolve by player name
@@ -73,7 +83,7 @@ public class VaultCaptureService {
             " (" + candidateUUID + "). Attempting to resolve by player name..."
         );
 
-        return resolver.resolve(actor.getName()).thenApply(resolvedUUID -> {
+        return resolver.resolveUuid(actor.getName()).thenApply(resolvedUUID -> {
             if (UniqueIdentifierResolver.isValidUUID(resolvedUUID)) {
                 VaultStoragePlugin.getInstance().getLogger().info(
                     "[VaultCaptureService]  Successfully resolved UUID for " + actor.getName() +
@@ -269,10 +279,13 @@ public class VaultCaptureService {
     public static class SessionTexts implements Dto {
         public String captureCancelled = "Capture cancelled.";
         public String notAllowed = "<red>Not allowed: region/block rules.</red>";
+        public String signNotAllowed = "<red>Sign not allowed: region/block rules.</red>";
+        public String containerNotAllowed = "<red>Container not allowed: region/block rules.</red>";
+        public String signUnlocked = "Sign protection removed.";
         public String emptyCaptureSkipped = "Protection removed.";
         public String capturedOk = "Vault captured.";
         public String noBoltOwner = "<yellow>No Bolt owner found; you will be set as the vault owner.</yellow>";
-        public String actionBarIdle = "<yellow>Capture mode</yellow> - Right-click a block. <gray>Left-click to cancel.</gray>";
+        public String actionBarIdle = "<yellow>Capture mode</yellow> - Right-click a block, item frame, or painting. <gray>Left-click to cancel.</gray>";
         public String actionBarContainer = "<gray>Owner:</gray> <white>%owner%</white> <gray>| Vaultable:</gray> <white>%vaultable%</white><gray>%reasonSegment%</gray>%admin%";
         public String actionBarReasonSegmentTemplate = " | Reason: %reason%";
         public String actionBarReasonAllowedBlank = "";
@@ -352,7 +365,7 @@ public class VaultCaptureService {
         final long[] cancelCooldownUntil = new long[]{0L};
 
         session.getDynamicListener().setListener(new Listener() {
-            @org.bukkit.event.EventHandler
+            @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = false)
             public void onInteract(PlayerInteractEvent event) {
                 if (!event.getPlayer().getUniqueId().equals(actor.getUniqueId())) return;
 
@@ -362,7 +375,7 @@ public class VaultCaptureService {
                 // Verify session is still in CAPTURE mode (may have been changed externally)
                 if (session.getMode() != Mode.CAPTURE) return;
 
-                org.bukkit.event.block.Action action = event.getAction();
+                Action action = event.getAction();
 
                 if (action == Action.LEFT_CLICK_AIR || action == Action.LEFT_CLICK_BLOCK) {
                     // Prevent cancellation during cooldown (protects against phantom events after capture)
@@ -390,15 +403,41 @@ public class VaultCaptureService {
                 // Set cooldown to prevent phantom left-click events from canceling capture (~2 ticks / 100ms)
                 cancelCooldownUntil[0] = System.currentTimeMillis() + 100L;
 
-                VaultCapturePolicy.Decision decision = VaultCapturePolicy.evaluate(actor, block);
+                Block captureBlock = block;
+                boolean clickedSign = isSignBlock(block);
+
+                // Sequential sign->container policy flow:
+                // 1) Evaluate sign (non-container) policy and optionally unlock sign.
+                // 2) Evaluate container policy on attached container (if present).
+                if (clickedSign) {
+                    VaultCapturePolicy.Decision signDecision = VaultCapturePolicy.evaluate(actor, block);
+                    UUID signOwner = signDecision.containerOwner();
+                    if (signDecision.allowed()) {
+                        CaptureOutcome signOutcome = captureWithDoubleChestSupport(actor, block, signOwner);
+                        if (signOutcome.protectionRemoved()) {
+                            actor.sendMessage(MiniMessageUtil.parseOrPlain(texts.signUnlocked));
+                        }
+                    } else {
+                        actor.sendMessage(MiniMessageUtil.parseOrPlain(texts.signNotAllowed));
+                    }
+
+                    Block attachedContainer = resolveAttachedContainerBlock(block);
+                    if (attachedContainer == null) {
+                        busy[0] = false;
+                        return;
+                    }
+                    captureBlock = attachedContainer;
+                }
+
+                VaultCapturePolicy.Decision decision = VaultCapturePolicy.evaluate(actor, captureBlock);
                 UUID originalOwner = decision.containerOwner();
                 if (!decision.allowed()) {
-                    actor.sendMessage(MiniMessageUtil.parseOrPlain(texts.notAllowed));
+                    actor.sendMessage(MiniMessageUtil.parseOrPlain(clickedSign ? texts.containerNotAllowed : texts.notAllowed));
                     busy[0] = false;
                     return;
                 }
 
-                CaptureOutcome outcome = captureWithDoubleChestSupport(actor, block, originalOwner);
+                CaptureOutcome outcome = captureWithDoubleChestSupport(actor, captureBlock, originalOwner);
                 if (outcome.empty()) {
                     // Only send "Protection removed" if we actually removed protection.
                     // If protectionRemoved is false, it means we sent a warning (e.g., "Vault the other side first").
@@ -413,12 +452,12 @@ public class VaultCaptureService {
                     actor.sendMessage(MiniMessageUtil.parseOrPlain(texts.noBoltOwner));
                 }
 
+                final Block finalCaptureBlock = captureBlock;
                 VaultImp vault = outcome.vault();
                 var plugin = VaultStoragePlugin.getInstance();
                 UUID finalOwner = outcome.finalOwner();
 
-                VaultCaptureService captureService = plugin.getCaptureService();
-                captureService.ensureValidOwnerUUID(finalOwner, actor).thenAccept(validatedOwner -> {
+                ensureValidOwnerUUID(finalOwner, actor).thenAccept(validatedOwner -> {
                     if (validatedOwner == null) {
 
                         new BukkitRunnable(){
@@ -430,7 +469,7 @@ public class VaultCaptureService {
                                 ));
                                 plugin.getLogger().warning(
                                         "[VaultCaptureService] Vault capture aborted for " + actor.getName() +
-                                                " at " + block.getWorld().getName() + ":" + block.getX() + "," + block.getY() + "," + block.getZ() +
+                                                " at " + finalCaptureBlock.getWorld().getName() + ":" + finalCaptureBlock.getX() + "," + finalCaptureBlock.getY() + "," + finalCaptureBlock.getZ() +
                                                 " - could not validate owner UUID"
                                 );
                                 busy[0] = false;
@@ -442,10 +481,10 @@ public class VaultCaptureService {
                     new BukkitRunnable() {
                         @Override public void run() {
                             var vaultService = plugin.getVaultService();
-                            UUID worldId = block.getWorld().getUID();
+                            UUID worldId = finalCaptureBlock.getWorld().getUID();
                             UUID newId;
                             {
-                                var created = vaultService.createVault(worldId, actor.getUniqueId(), block.getX(), block.getY(), block.getZ(), validatedOwner,
+                                var created = vaultService.createVault(worldId, actor.getUniqueId(), finalCaptureBlock.getX(), finalCaptureBlock.getY(), finalCaptureBlock.getZ(), validatedOwner,
                                         vault.blockMaterial() == null ? null : vault.blockMaterial().name(),
                                         vault.blockDataString());
                                 newId = created.uuid;
@@ -485,6 +524,130 @@ public class VaultCaptureService {
                     }.runTaskAsynchronously(plugin);
                 });
             }
+
+            @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = false)
+            public void onInteractEntity(PlayerInteractEntityEvent event) {
+                if (!event.getPlayer().getUniqueId().equals(actor.getUniqueId())) return;
+                if (event.getHand() == EquipmentSlot.OFF_HAND) return;
+                if (session.getMode() != Mode.CAPTURE) return;
+                if (busy[0]) return;
+
+                Entity clicked = event.getRightClicked();
+                if (!(clicked instanceof ItemFrame) && !(clicked instanceof Painting)) return;
+
+                event.setCancelled(true);
+
+                Hanging hang = (Hanging) clicked;
+                Block supporting = HangingVaultSupport.resolveSupportingBlock(hang);
+
+                VaultCapturePolicy.Decision decision = VaultCapturePolicy.evaluateHangingCapture(actor, supporting);
+                if (!decision.allowed()) {
+                    actor.sendMessage(MiniMessageUtil.parseOrPlain(texts.notAllowed));
+                    return;
+                }
+
+                // Empty item frame: unlock supporting block only (like empty non-container); do not vault or remove entity.
+                if (hang instanceof ItemFrame frame && HangingVaultSupport.isItemFrameDisplayEmpty(frame)) {
+                    BoltService bolt = VaultStoragePlugin.getInstance().getBoltService();
+                    if (bolt != null) {
+                        try {
+                            bolt.removeProtection(supporting);
+                        } catch (Throwable ignored) {}
+                    }
+                    actor.sendMessage(MiniMessageUtil.parseOrPlain(texts.emptyCaptureSkipped));
+                    return;
+                }
+
+                List<ItemStack> stacks = HangingVaultSupport.itemStacksFrom(hang);
+                if (stacks.isEmpty()) {
+                    return;
+                }
+
+                busy[0] = true;
+                cancelCooldownUntil[0] = System.currentTimeMillis() + 100L;
+                ensureValidOwnerUUID(actor.getUniqueId(), actor).thenAccept(validatedOwner -> {
+                    if (validatedOwner == null) {
+                        new BukkitRunnable() {
+                            @Override public void run() {
+                                actor.sendMessage(MiniMessageUtil.parseOrPlain(
+                                        "<red>Error: Could not determine vault owner. Capture aborted.</red>"
+                                ));
+                                busy[0] = false;
+                            }
+                        }.runTask(VaultStoragePlugin.getInstance());
+                        return;
+                    }
+
+                    new BukkitRunnable() {
+                        @Override public void run() {
+                            var plugin = VaultStoragePlugin.getInstance();
+                            VaultService vaultService = plugin.getVaultService();
+                            int needed = stacks.size();
+                            var targetOpt = HangingVaultSupport.findFirstVaultWithSpace(vaultService, validatedOwner, needed);
+                            UUID vaultUuid;
+                            int startSlot;
+                            if (targetOpt.isPresent()) {
+                                var t = targetOpt.get();
+                                vaultUuid = t.vaultUuid();
+                                startSlot = t.startSlot();
+                            } else {
+                                // Note: persisted material must be a block; placement uses Block#setType (item names are invalid).
+                                var created = vaultService.createVault(
+                                        supporting.getWorld().getUID(),
+                                        actor.getUniqueId(),
+                                        supporting.getX(),
+                                        supporting.getY(),
+                                        supporting.getZ(),
+                                        validatedOwner,
+                                        Material.CHEST.name(),
+                                        null
+                                );
+                                vaultUuid = created.uuid;
+                                startSlot = 0;
+                                plugin.getLogger().info(
+                                        "[VaultCaptureService] Hanging capture created vault ID=" + vaultUuid + " owner=" + validatedOwner
+                                );
+                            }
+
+                            List<VaultItemEntity> batch = new ArrayList<>(stacks.size());
+                            int slot = startSlot;
+                            for (ItemStack stack : stacks) {
+                                VaultItemEntity vie = new VaultItemEntity();
+                                vie.vaultUuid = vaultUuid;
+                                vie.slot = slot++;
+                                vie.amount = stack.getAmount();
+                                vie.item = ItemSerialization.toBytes(stack);
+                                batch.add(vie);
+                            }
+                            vaultService.putItems(vaultUuid, batch);
+
+                            new BukkitRunnable() {
+                                @Override public void run() {
+                                    if (hang.isValid()) {
+                                        hang.remove();
+                                    }
+                                    Material vm = stacks.get(0).getType();
+                                    VaultImp vaultEvt = new VaultImp(
+                                            validatedOwner,
+                                            vaultUuid,
+                                            stacks,
+                                            vm,
+                                            supporting.getLocation(),
+                                            Instant.now(),
+                                            supporting.getBlockData().getAsString()
+                                    );
+                                    VaultStoragePlugin.getInstance().getSessionManager().getOrCreate(actor.getUniqueId())
+                                            .setLastVaultDto(new VaultDtoImp(vaultUuid, validatedOwner, List.of(),
+                                                    vm.name(), null, System.currentTimeMillis()));
+                                    actor.sendMessage(MiniMessageUtil.parseOrPlain(texts.capturedOk));
+                                    new PlayerVaultEvent(actor, vaultEvt).callEvent();
+                                    busy[0] = false;
+                                }
+                            }.runTask(plugin);
+                        }
+                    }.runTaskAsynchronously(VaultStoragePlugin.getInstance());
+                });
+            }
         });
 
         actionbarTask[0] = new BukkitRunnable() {
@@ -522,7 +685,7 @@ public class VaultCaptureService {
     }
 
     /** Simple in-memory cache for UUID->username for actionbar display. */
-    private static final java.util.concurrent.ConcurrentHashMap<UUID, String> NAME_CACHE = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<UUID, String> NAME_CACHE = new ConcurrentHashMap<>();
 
     /**
      * Returns a display name for the UUID without blocking the main thread.
@@ -569,6 +732,34 @@ public class VaultCaptureService {
         return decision.allowed() ? cfg.actionBarReasonAllowedBlank : cfg.actionBarReasonSegmentTemplate.replace("%reason%", reasonText);
     }
 
+    private static final BlockFace[] ADJACENT_FACES = new BlockFace[]{
+            BlockFace.NORTH, BlockFace.SOUTH, BlockFace.EAST, BlockFace.WEST, BlockFace.UP, BlockFace.DOWN
+    };
+
+    private static boolean isSignBlock(@NotNull Block block) {
+        return block.getState() instanceof Sign;
+    }
+
+    private static Block resolveAttachedContainerBlock(@NotNull Block signBlock) {
+        if (!isSignBlock(signBlock)) return null;
+
+        if (signBlock.getBlockData() instanceof WallSign wallSign) {
+            Block attached = signBlock.getRelative(wallSign.getFacing().getOppositeFace());
+            if (attached.getState() instanceof Container) {
+                return attached;
+            }
+        }
+
+        // Conservative fallback for non-wall signs: check immediate neighbors.
+        for (BlockFace face : ADJACENT_FACES) {
+            Block neighbor = signBlock.getRelative(face);
+            if (neighbor.getState() instanceof Container) {
+                return neighbor;
+            }
+        }
+        return null;
+    }
+
     /**
      * Direct one-shot capture with messages and DB persistence.
      * Applies policy, captures/removes the block, persists items when applicable, and sends user feedback.
@@ -599,8 +790,7 @@ public class VaultCaptureService {
         var plugin = VaultStoragePlugin.getInstance();
 
         // CRITICAL: Validate finalOwner UUID before persisting
-        VaultCaptureService captureService = plugin.getCaptureService();
-        captureService.ensureValidOwnerUUID(finalOwner, actor).thenAccept(validatedOwner -> {
+        ensureValidOwnerUUID(finalOwner, actor).thenAccept(validatedOwner -> {
             if (validatedOwner == null) {
                 actor.sendMessage(MiniMessageUtil.parseOrPlain(
                     "<red>Error: Could not determine vault owner. Capture aborted.</red>"
