@@ -187,7 +187,7 @@ public class VaultListMenu extends ChildMenuImp {
     }
 
     private void resolveUsernameAsync(VaultStoragePlugin plugin, Player p, UniqueIdentifierResolver resolver, String query) {
-        resolver.resolve(query).thenAccept(resolvedUUID -> {
+        resolver.resolveUuid(query).thenAccept(resolvedUUID -> {
             SearchStrategy.SearchQuery sq = SearchStrategy.fromResolvedUsername(resolvedUUID);
 
             Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
