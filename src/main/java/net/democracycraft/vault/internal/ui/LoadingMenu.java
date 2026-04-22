@@ -9,7 +9,10 @@ import net.democracycraft.vault.api.ui.ParentMenu;
 import net.democracycraft.vault.internal.util.config.DataFolder;
 import net.democracycraft.vault.internal.util.minimessage.MiniMessageUtil;
 import net.democracycraft.vault.internal.util.yml.AutoYML;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.entity.Player;
+import org.geysermc.floodgate.api.FloodgateApi;
 
 import java.util.Map;
 
@@ -65,7 +68,11 @@ public class LoadingMenu extends ChildMenuImp {
 
     @Override
     public void open() {
-        setDialog(build());
-        super.open();
+        if(FloodgateApi.getInstance().isFloodgatePlayer(player.getUniqueId())){
+            player.sendMessage(Component.text("Loading Menu...", NamedTextColor.GREEN));
+        }else{
+            setDialog(build());
+            super.open();
+        }
     }
 }

@@ -47,8 +47,6 @@ public class VaultListMenu extends ChildMenuImp {
         public String backBtn = "<red><bold>Back</bold></red>";
         /** Message when no results match the query. Supports %query%. */
         public String noneFound = "<gray>No vaults found.</gray>";
-        /** Loading message while fetching results. */
-        public String loading = "<gray>Loading...</gray>";
         /**
          * Format for each listed vault button.
          * Placeholders:
@@ -83,8 +81,6 @@ public class VaultListMenu extends ChildMenuImp {
         this.uiContext = ctx;
         this.query = query == null ? "" : query.trim();
         this.entries = null; // loading
-        setDialog(build());
-        loadAsync();
     }
 
     /** Internal constructor with precomputed entries. */
@@ -119,15 +115,15 @@ public class VaultListMenu extends ChildMenuImp {
             });
         }
 
-        if (entries == null) {
-            builder.addBody(DialogBody.plainMessage(MiniMessageUtil.parseOrPlain(cfg.loading)));
-        } else if (entries.isEmpty()) {
-            builder.addBody(DialogBody.plainMessage(MiniMessageUtil.parseOrPlain(cfg.noneFound, phQuery)));
-        } else {
-            for (Entry e : entries) {
-                Map<String, String> ph = Map.of("%owner%", e.ownerName(), "%index%", String.valueOf(e.indexWithinOwner()));
-                Component label = MiniMessageUtil.parseOrPlain(cfg.itemFormat, ph);
-                builder.button(label, ctx -> new VaultActionMenu(ctx.player(), (ParentMenuImp) getParentMenu(), uiContext, e.id()).open());
+        if (entries != null) {
+            if (entries.isEmpty()) {
+                builder.addBody(DialogBody.plainMessage(MiniMessageUtil.parseOrPlain(cfg.noneFound, phQuery)));
+            } else {
+                for (Entry e : entries) {
+                    Map<String, String> ph = Map.of("%owner%", e.ownerName(), "%index%", String.valueOf(e.indexWithinOwner()));
+                    Component label = MiniMessageUtil.parseOrPlain(cfg.itemFormat, ph);
+                    builder.button(label, ctx -> new VaultActionMenu(ctx.player(), (ParentMenuImp) getParentMenu(), uiContext, e.id()).open());
+                }
             }
         }
 
@@ -159,7 +155,7 @@ public class VaultListMenu extends ChildMenuImp {
                             plugin.getMojangService(),
                             plugin.getBedrockUniqueIdentifierRetriever()
                     );
-                    resolveUsernameAsync(plugin, p, resolver, q);
+                    resolveUsernameAsync(plugin, resolver, q);
                 } else {
                     loadVaultsAsync(plugin, List.of());
                 }
@@ -186,7 +182,7 @@ public class VaultListMenu extends ChildMenuImp {
         }
     }
 
-    private void resolveUsernameAsync(VaultStoragePlugin plugin, Player p, UniqueIdentifierResolver resolver, String query) {
+    private void resolveUsernameAsync(VaultStoragePlugin plugin, UniqueIdentifierResolver resolver, String query) {
         resolver.resolveUuid(query).thenAccept(resolvedUUID -> {
             SearchStrategy.SearchQuery sq = SearchStrategy.fromResolvedUsername(resolvedUUID);
 
@@ -253,8 +249,12 @@ public class VaultListMenu extends ChildMenuImp {
 
     @Override
     public void open() {
-        // Rebuild UI to reflect latest YAML configuration each time the menu opens
-        setDialog(build());
-        super.open();
+        if (entries == null) {
+            new LoadingMenu(getPlayer(), getParentMenu(), Map.of("%query%", query)).open();
+            loadAsync();
+        } else {
+            setDialog(build());
+            super.open();
+        }
     }
 }

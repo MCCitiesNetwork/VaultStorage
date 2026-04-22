@@ -16,7 +16,7 @@ import java.util.List;
  * Provides helper methods for common UI tasks (MiniMessage parsing).
  */
 public abstract class ParentMenuImp implements ParentMenu {
-    private final Player player;
+    protected final Player player;
     private final String id;
     private Dialog dialog;
     private final List<ChildMenu> children = new ArrayList<>();
