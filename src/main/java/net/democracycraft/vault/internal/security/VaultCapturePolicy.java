@@ -5,6 +5,7 @@ import net.democracycraft.vault.api.data.Dto;
 import net.democracycraft.vault.api.region.VaultRegion;
 import net.democracycraft.vault.api.service.BoltService;
 import net.democracycraft.vault.api.service.WorldGuardService;
+import net.democracycraft.vault.internal.util.hanging.HangingVaultSupport;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Hanging;
@@ -56,7 +57,7 @@ public final class VaultCapturePolicy {
              */
             NOT_IN_REGION,
             /**
-             * The block involves a Hangable entity (ItemFrame, Painting) and the actor lacks admin permission.
+             * The entity type is not supported for non-admin vaulting.
              */
             ENTITIES_REQUIRE_ADMIN
         }
@@ -320,17 +321,17 @@ public final class VaultCapturePolicy {
      * Evaluate vaulting permission for a specific entity (e.g. from Scan Menu).
      */
     public static Decision evaluate(Player actor, Entity entity) {
+        if (entity instanceof Hanging hanging) {
+            Block supporting = HangingVaultSupport.resolveSupportingBlock(hanging);
+            return evaluateHangingCapture(actor, hanging, supporting);
+        }
+
         boolean hasOverride = VaultPermission.ACTION_PLACE_OVERRIDE.has(actor);
         boolean isAdmin = VaultPermission.ADMIN.has(actor);
 
-        if (entity instanceof Hanging && !isAdmin) {
-             return new Decision(false, hasOverride, false, false, false, false, false, null, Decision.Reason.ENTITIES_REQUIRE_ADMIN, List.of());
-        }
-
-        if(!isAdmin) {
+        if (!isAdmin) {
             return new Decision(false, hasOverride, false, false, false, false, false, null, Decision.Reason.ENTITIES_REQUIRE_ADMIN, List.of());
         }
-
 
         return new Decision(true, hasOverride, false, false, false, false, true, null, Decision.Reason.ALLOWED, List.of());
     }
