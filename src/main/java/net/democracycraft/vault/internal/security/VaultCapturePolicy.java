@@ -174,22 +174,15 @@ public final class VaultCapturePolicy {
                 && !hangableRestricted
                 && ((inAnyRegion && baseAllowed) || hasOverride);
 
-        Decision.Reason reason;
-        if (allowed) {
-            reason = Decision.Reason.ALLOWED;
-        } else if (hangableRestricted) {
-            reason = Decision.Reason.ENTITIES_REQUIRE_ADMIN;
-        } else if (!inAnyRegion) {
-            reason = Decision.Reason.NOT_IN_REGION;
-        } else if (disallowedOwnerSelf) {
-            reason = Decision.Reason.OWNER_SELF_IN_REGION;
-        } else if (actorParticipantAny && containerOwnerParticipantAny) {
-            reason = Decision.Reason.CONTAINER_OWNER_IN_OVERLAP;
-        } else if (originalOwner == null) {
-            reason = Decision.Reason.UNPROTECTED_NO_OVERRIDE;
-        } else {
-            reason = Decision.Reason.NOT_INVOLVED_NOT_OWNER;
-        }
+        Decision.Reason reason = switch (Boolean.TRUE) {
+            case Boolean b when allowed -> Decision.Reason.ALLOWED;
+            case Boolean b when hangableRestricted -> Decision.Reason.ENTITIES_REQUIRE_ADMIN;
+            case Boolean b when !inAnyRegion -> Decision.Reason.NOT_IN_REGION;
+            case Boolean b when disallowedOwnerSelf -> Decision.Reason.OWNER_SELF_IN_REGION;
+            case Boolean b when actorParticipantAny && containerOwnerParticipantAny -> Decision.Reason.CONTAINER_OWNER_IN_OVERLAP;
+            case Boolean b when originalOwner == null -> Decision.Reason.UNPROTECTED_NO_OVERRIDE;
+            default -> Decision.Reason.NOT_INVOLVED_NOT_OWNER;
+        };
 
         return new Decision(
                 allowed,
