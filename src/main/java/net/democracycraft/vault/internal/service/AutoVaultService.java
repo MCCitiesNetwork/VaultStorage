@@ -7,6 +7,7 @@ import net.democracycraft.vault.api.service.WorldGuardService;
 import net.democracycraft.vault.internal.util.config.ConfigPaths;
 import net.democracycraft.vault.internal.util.minimessage.MiniMessageUtil;
 import net.democracycraft.vault.internal.util.region.RegionKey;
+import net.democracycraft.vault.internal.util.region.SweepFilter;
 import net.democracycraft.vault.internal.util.scan.OfflineRegionScanner;
 import net.democracycraft.vault.internal.util.scan.OfflineRegionScanner.DisplacedContainer;
 import org.bukkit.Bukkit;
@@ -24,10 +25,8 @@ import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
@@ -114,26 +113,27 @@ public class AutoVaultService {
         if (wgs == null) {
             return;
         }
-        VaultRegion region = wgs.getRegionById(key.regionId(), world);
+        // Resolve every region once: the swept region plus the sweep filter both come from this single list.
+        List<VaultRegion> regions = wgs.getRegionsIn(world);
+        VaultRegion region = regions.stream().filter(r -> r.id().equals(key.regionId())).findFirst().orElse(null);
         if (region == null) {
             // Region was deleted during the delay window; nothing to sweep.
             return;
         }
 
-        Set<UUID> allowed = new HashSet<>();
-        allowed.addAll(region.owners());
-        allowed.addAll(region.members());
-        allowed.add(initiator);
+        // Decides which locked containers this sweep may vault: skips the swept region's participants and the new
+        // occupant, nested sub-leases, and owners protected by an overlapping region. See SweepFilter.
+        SweepFilter filter = SweepFilter.forSweep(regions, region, initiator);
 
         // Shared across both passes so the occupant is messaged at most once per sweep.
         Runnable onVaulted = vaultedNotifier(initiator);
 
-        List<DisplacedContainer> displaced = OfflineRegionScanner.scan(key.worldId(), region.boundingBox(), allowed);
+        List<DisplacedContainer> displaced = OfflineRegionScanner.scan(key.worldId(), region.boundingBox(), filter);
         if (displaced != null && !displaced.isEmpty()) {
             vaultBlocks(key.worldId(), displaced, initiator, onVaulted);
         }
         if (plugin.getConfig().getBoolean(ConfigPaths.AUTOVAULT_INCLUDE_HANGINGS.getPath(), true)) {
-            vaultHangings(key.worldId(), region.boundingBox(), allowed, initiator, onVaulted);
+            vaultHangings(key.worldId(), region.boundingBox(), filter, initiator, onVaulted);
         }
     }
 
@@ -152,8 +152,8 @@ public class AutoVaultService {
      * Vaults displaced item frames and paintings across the region. Entity protections are not indexed
      * by coordinate, so every chunk in the region's bounds is loaded and its hanging entities inspected.
      */
-    private void vaultHangings(@NotNull UUID worldId, @NotNull BoundingBox box, @NotNull Set<UUID> allowed, @NotNull UUID initiator,
-                               @NotNull Runnable onVaulted) {
+    private void vaultHangings(@NotNull UUID worldId, @NotNull BoundingBox box, @NotNull SweepFilter filter,
+                               @NotNull UUID initiator, @NotNull Runnable onVaulted) {
         VaultCaptureService captureService = plugin.getCaptureService();
         BoltService bolt = plugin.getBoltService();
 
@@ -174,7 +174,7 @@ public class AutoVaultService {
                     for (Entity entity : chunk.getEntities()) {
                         if (!(entity instanceof ItemFrame) && !(entity instanceof Painting)) continue;
                         UUID owner = bolt.getOwner(entity);
-                        if (owner == null || allowed.contains(owner)) continue;
+                        if (!filter.shouldVault(owner, entity.getX(), entity.getY(), entity.getZ())) continue;
                         captureService.captureHangingOfflineAsync((Hanging) entity, owner, initiator, onVaulted);
                     }
                 });

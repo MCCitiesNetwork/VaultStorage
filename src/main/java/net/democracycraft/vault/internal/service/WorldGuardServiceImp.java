@@ -9,6 +9,7 @@ import com.sk89q.worldguard.protection.regions.RegionContainer;
 import net.democracycraft.vault.api.region.VaultRegion;
 import net.democracycraft.vault.api.service.WorldGuardService;
 import net.democracycraft.vault.internal.region.VaultRegionImp;
+import net.democracycraft.vault.internal.util.region.RegionGeometry;
 import org.bukkit.util.Vector;
 import org.bukkit.World;
 import org.bukkit.block.Block;
@@ -46,15 +47,8 @@ public class WorldGuardServiceImp implements WorldGuardService {
         Vector pos = block.getLocation().toVector();
 
         return getRegionsIn(block.getWorld()).stream()
-                .filter(region -> containsInclusive(region.boundingBox(), pos))
+                .filter(region -> RegionGeometry.containsInclusive(region.boundingBox(), pos.getX(), pos.getY(), pos.getZ()))
                 .toList();
-    }
-
-    private boolean containsInclusive(@NotNull BoundingBox box, @NotNull Vector pos) {
-        double x = pos.getX(), y = pos.getY(), z = pos.getZ();
-        return x >= box.getMinX() && x <= box.getMaxX()
-                && y >= box.getMinY() && y <= box.getMaxY()
-                && z >= box.getMinZ() && z <= box.getMaxZ();
     }
 
 
