@@ -63,6 +63,17 @@ import org.jspecify.annotations.NonNull;
 public class VaultCaptureService {
 
     /**
+     * Serializes hanging persistence per Bolt owner across every caller of {@link #persistHangingStacks} — both the
+     * offline auto-vault sweep and the interactive capture session dispatch it on async tasks. Each captured hanging
+     * runs its find-or-create-vault, slot assignment, and putItems as one atomic unit; without this, concurrent
+     * same-owner captures race — both read the same free slot (which {@code putItems} then overwrites via ON
+     * DUPLICATE KEY UPDATE, losing one hanging) or both create a fresh vault. Keyed by owner so unrelated owners
+     * still persist in parallel. Entries are retained for the process lifetime — one bare monitor per distinct owner,
+     * bounded by the player base; do not add eviction, which would reintroduce a lock-lifecycle race.
+     */
+    private final ConcurrentHashMap<UUID, Object> hangingPersistLocks = new ConcurrentHashMap<>();
+
+    /**
      * Validates that a UUID is not null and not all-zeros.
      * If invalid, attempts to resolve using the player's name via UniqueIdentifierResolver.
      * Returns a CompletableFuture with the valid UUID or null if resolution fails.
@@ -944,22 +955,26 @@ public class VaultCaptureService {
     private UUID persistHangingStacks(@NotNull List<ItemStack> stacks, @NotNull UUID boltOwner, @NotNull UUID creatorUuid, @NotNull Block supporting) {
         var plugin = VaultStoragePlugin.getInstance();
         VaultService vaultService = plugin.getVaultService();
-        var target = HangingVaultSupport.findFirstVaultWithSpace(vaultService, boltOwner, stacks.size());
-        UUID vaultUuid;
-        int startSlot;
-        if (target.isPresent()) {
-            vaultUuid = target.get().vaultUuid();
-            startSlot = target.get().startSlot();
-        } else {
-            // Persisted material must be a block; placement uses Block#setType (item names are invalid).
-            var created = vaultService.createVault(supporting.getWorld().getUID(), creatorUuid,
-                    supporting.getX(), supporting.getY(), supporting.getZ(), boltOwner, Material.CHEST.name(), null);
-            vaultUuid = created.uuid;
-            startSlot = 0;
-            plugin.getLogger().info("[VaultCaptureService] Hanging capture created vault ID=" + vaultUuid + " owner=" + boltOwner);
+        // Atomic per owner: find-or-create the target vault, claim its free slots, and write them without another
+        // concurrent capture for the same owner interleaving and clobbering the same slot. See hangingPersistLocks.
+        synchronized (hangingPersistLocks.computeIfAbsent(boltOwner, k -> new Object())) {
+            var target = HangingVaultSupport.findFirstVaultWithSpace(vaultService, boltOwner, stacks.size());
+            UUID vaultUuid;
+            int startSlot;
+            if (target.isPresent()) {
+                vaultUuid = target.get().vaultUuid();
+                startSlot = target.get().startSlot();
+            } else {
+                // Persisted material must be a block; placement uses Block#setType (item names are invalid).
+                var created = vaultService.createVault(supporting.getWorld().getUID(), creatorUuid,
+                        supporting.getX(), supporting.getY(), supporting.getZ(), boltOwner, Material.CHEST.name(), null);
+                vaultUuid = created.uuid;
+                startSlot = 0;
+                plugin.getLogger().info("[VaultCaptureService] Hanging capture created vault ID=" + vaultUuid + " owner=" + boltOwner);
+            }
+            vaultService.putItems(vaultUuid, toItemBatch(vaultUuid, stacks, startSlot));
+            return vaultUuid;
         }
-        vaultService.putItems(vaultUuid, toItemBatch(vaultUuid, stacks, startSlot));
-        return vaultUuid;
     }
 
     /** Serializes a vault's contents into persistable item rows starting at slot 0, skipping empty slots. */
