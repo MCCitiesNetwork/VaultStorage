@@ -10,27 +10,29 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * The auto-vault sweep's "should this locked container be vaulted?" decision, in one place for both the block
- * and hanging-entity passes. A container is spared (left alone) when:
+ * The auto-vault sweep's "should this locked container be vaulted?" decision, in one place for every kind of
+ * vaultable thing (locked blocks, hanging entities, and any future pass). A candidate is spared (left alone) when:
  * <ul>
+ *   <li>it lies outside the swept region's bounds;</li>
  *   <li>its Bolt owner is allowed — a participant of the swept region, or the new occupant;</li>
- *   <li>it sits inside a region nested within the swept one — a sub-lease governed by its own jurisdiction, so a
- *       title change on the parent must not touch it;</li>
- *   <li>its owner participates in another region overlapping the swept one, where that region covers the spot.</li>
+ *   <li>it sits inside a region nested within the swept one;</li>
+ *   <li>its owner participates in an overlapping region that covers the spot.</li>
  * </ul>
- * This is the offline/box-based analogue of the participation rules {@code VaultCapturePolicy} evaluates per-block
- * for live captures; it deliberately works from precomputed region boxes rather than per-block region queries.
+ * Box-based: works from precomputed region bounding boxes rather than per-block region queries. Holding the
+ * swept box here lets every pass share the bounds check, whether or not its caller already clipped to the region.
  */
 public final class SweepFilter {
 
     /** A region overlapping the swept area, paired with its participants (owners ∪ members). */
     public record OwnerZone(BoundingBox box, Set<UUID> participants) {}
 
+    private final BoundingBox sweptBox;
     private final Set<UUID> allowed;
     private final List<BoundingBox> exclusions;
     private final List<OwnerZone> ownerZones;
 
-    private SweepFilter(Set<UUID> allowed, List<BoundingBox> exclusions, List<OwnerZone> ownerZones) {
+    private SweepFilter(BoundingBox sweptBox, Set<UUID> allowed, List<BoundingBox> exclusions, List<OwnerZone> ownerZones) {
+        this.sweptBox = sweptBox;
         this.allowed = allowed;
         this.exclusions = exclusions;
         this.ownerZones = ownerZones;
@@ -61,7 +63,7 @@ public final class SweepFilter {
             if (participants.isEmpty()) continue;
             ownerZones.add(new OwnerZone(otherBox, participants));
         }
-        return new SweepFilter(allowed, exclusions, ownerZones);
+        return new SweepFilter(sweptBox, allowed, exclusions, ownerZones);
     }
 
     /** A region's participants: its owners and members combined into a fresh, mutable set for O(1) lookups. */
@@ -71,8 +73,10 @@ public final class SweepFilter {
         return combined;
     }
 
-    /** Whether a container with the given Bolt owner at (x, y, z) should be vaulted by this sweep. */
+    /** Whether a locked thing with the given Bolt owner at (x, y, z) should be vaulted by this sweep. */
     public boolean shouldVault(UUID owner, double x, double y, double z) {
+        // Never vault anything outside the swept region.
+        if (!RegionGeometry.containsInclusive(sweptBox, x, y, z)) return false;
         if (owner == null || allowed.contains(owner)) return false;
         for (BoundingBox exclusion : exclusions) {
             if (RegionGeometry.containsInclusive(exclusion, x, y, z)) return false;

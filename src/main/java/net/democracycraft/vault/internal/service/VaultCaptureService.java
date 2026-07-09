@@ -912,7 +912,7 @@ public class VaultCaptureService {
 
                 List<VaultItemEntity> batch = toItemBatch(newId, vault.contents());
                 if (!batch.isEmpty()) vaultService.putItems(newId, batch);
-                // No PlayerVaultEvent: this is an automated capture. Signal the occupant notifier that a vault was made.
+                // Automated capture: no PlayerVaultEvent, just signal the notifier.
                 onVaulted.run();
             }
         }.runTaskAsynchronously(plugin);

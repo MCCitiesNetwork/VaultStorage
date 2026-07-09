@@ -76,10 +76,9 @@ public class AutoVaultService {
     }
 
     /**
-     * Builds the callback the capture service runs whenever it actually vaults one of the previous occupant's
-     * locks during this sweep. The first such call (and only the first) tells the new occupant, if online and
-     * notifications are enabled, that those items have been moved to vault storage. Thread-safe and may be
-     * invoked from async capture tasks; the message send is hopped back onto the main thread.
+     * Returns the callback the capture service runs after each vault it creates during a sweep. Only the first
+     * invocation notifies the occupant (if online and enabled); the rest are no-ops. Thread-safe: may be called
+     * from async capture tasks, and hops the message send onto the main thread.
      */
     private Runnable vaultedNotifier(@NotNull UUID initiator) {
         if (!plugin.getConfig().getBoolean(ConfigPaths.AUTOVAULT_NOTIFY_OCCUPANT.getPath(), true)) {
@@ -121,11 +120,8 @@ public class AutoVaultService {
             return;
         }
 
-        // Decides which locked containers this sweep may vault: skips the swept region's participants and the new
-        // occupant, nested sub-leases, and owners protected by an overlapping region. See SweepFilter.
         SweepFilter filter = SweepFilter.forSweep(regions, region, initiator);
-
-        // Shared across both passes so the occupant is messaged at most once per sweep.
+        // One notifier shared by both passes, so the occupant is messaged at most once per sweep.
         Runnable onVaulted = vaultedNotifier(initiator);
 
         List<DisplacedContainer> displaced = OfflineRegionScanner.scan(key.worldId(), region.boundingBox(), filter);
