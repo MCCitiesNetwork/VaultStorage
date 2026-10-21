@@ -8,6 +8,7 @@ version = '1.2.0'
 
 repositories {
     mavenCentral()
+    maven { url = "https://maven.minecraftcitiesnetwork.com/releases" }
     maven {
         name = "papermc"
         url = "https://repo.papermc.io/repository/maven-public/"
@@ -50,6 +51,9 @@ repositories {
 }
 
 dependencies {
+    compileOnly("io.github.md5sha256:player-notifications-api:1.2.0") { transitive = false }
+    testImplementation("org.junit.jupiter:junit-jupiter:5.11.4")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.11.4")
     String democracyLibVersion = "e5ddf4ac24"
     String democracyLib = "com.github.MCCitiesNetwork:DemocracyLib:$democracyLibVersion"
     implementation(democracyLib)
@@ -95,3 +99,5 @@ processResources {
         expand props
     }
 }
+
+test { useJUnitPlatform() }

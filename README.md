@@ -26,7 +26,7 @@ Command (in‑game):
 
 ### Requirements
 - Paper 1.21.8 (or compatible)
-- Java 21
+- Java 25
 - WorldEdit and WorldGuard installed
 - Bolt installed (for ownership/protection integration)
 
@@ -190,3 +190,15 @@ Concurrency and threading:
 Developed and maintained by **Alepando**  
 for **[DemocracyCraft.net](https://democracycraft.net)**  
 as the **Lead Developer** of the Vault plugin.
+
+### Owner notifications
+
+Vault creation notices use the existing PlayerNotifications mail inbox when available. The sender,
+recipient, configured message template and text are retained; notices do not expire. Before delivery,
+each notice is saved under `pending-notifications/`. If the provider is unavailable or rejects it, the
+file remains and delivery retries once a minute and after restart. Preserve pending files until the
+provider accepts them. A write failure is logged with the unsaved notice; the created vault and its
+stored contents remain intact. Existing Essentials mail is never converted or deleted.
+
+The retry key stays stable across restarts. If delivery succeeds but removing its pending file fails,
+the file is retained for operator inspection; the adapter does not overwrite an existing inbox entry.
