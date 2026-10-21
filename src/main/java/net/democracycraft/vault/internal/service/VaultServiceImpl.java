@@ -47,16 +47,10 @@ public record VaultServiceImpl(VaultDAO dao) implements VaultService {
         dao.createVault(vaultEntity, ownerUuid);
 
         Essentials essentials = VaultStoragePlugin.getInstance().getEssentials();
-        User sender = essentials.getUser(actor);
-
-
-
-        User recipient = essentials.getUser(ownerUuid);
-        if(sender == null || recipient == null) {
-            return vaultEntity;
-        }
-        String senderName = sender.getName();
-        String recipientName = recipient.getName();
+        User sender = essentials == null ? null : essentials.getUser(actor);
+        User recipient = essentials == null ? null : essentials.getUser(ownerUuid);
+        String senderName = sender == null || sender.getName() == null ? actor.toString() : sender.getName();
+        String recipientName = recipient == null || recipient.getName() == null ? ownerUuid.toString() : recipient.getName();
 
         // Load configurable MiniMessage template and apply placeholders
         AutoYML<MailConfig> yml = AutoYML.create(MailConfig.class, "mail", DataFolder.MAIL, MailConfig.HEADER);
@@ -69,7 +63,19 @@ public record VaultServiceImpl(VaultDAO dao) implements VaultService {
         String message = LegacyComponentSerializer.legacySection()
                 .serialize(MiniMessageUtil.parseOrPlain(cfg.vaultCreatedMessage, placeholders));
 
-        VaultStoragePlugin.getInstance().getMailService().sendMail(recipient, sender, message);
+        try {
+            boolean delivered = VaultStoragePlugin.getInstance().getOfflineNotifications()
+                    .send(ownerUuid, actor, senderName, message);
+            if (!delivered) {
+                VaultStoragePlugin.getInstance().getLogger().warning(
+                        "Vault " + vaultEntity.uuid + " created; owner notification is queued for inbox delivery.");
+            }
+        } catch (java.io.IOException exception) {
+            // The vault already exists. A notification failure must not undo storage or lose its contents.
+            VaultStoragePlugin.getInstance().getLogger().log(java.util.logging.Level.SEVERE,
+                    "Vault " + vaultEntity.uuid + " created but its owner notice could not be queued. Recipient: "
+                            + ownerUuid + "; sender: " + actor + "; notice: " + message, exception);
+        }
 
         return vaultEntity;
     }
