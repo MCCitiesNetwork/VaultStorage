@@ -1,5 +1,6 @@
 package com.minecraftcitiesnetwork.vaultstorage.menu;
 
+import org.bukkit.entity.Hanging;
 import java.util.Comparator;
 import com.minecraftcitiesnetwork.vaultstorage.permission.Permissions;
 import com.minecraftcitiesnetwork.vaultstorage.config.MessageKeys;
@@ -290,11 +291,19 @@ public final class VaultScanMenu extends ChildMenuImp {
                         return;
                     }
 
+                    Runnable refresh = () -> new VaultScanMenu(ctx.player(), parentMenu(), uiContext, regionId,
+                            entries, eCurrentPage, FilterMode.ENTITY).open();
+                    // An item frame or painting is vaulted with what it shows. Any other locked
+                    // entity holds nothing to store, so it only loses its lock.
+                    if (protections.get(protection) instanceof Hanging hanging && hanging.isValid()) {
+                        plugin.captureService().captureHanging(ctx.player(), hanging)
+                                .thenRun(refresh);
+                        return;
+                    }
                     BoltService svc = plugin.bolt();
                     if (svc == null) return;
                     svc.removeProtection(protection);
-                    // Refresh entity list after removal
-                    new VaultScanMenu(ctx.player(), parentMenu(), uiContext, regionId, entries, eCurrentPage, FilterMode.ENTITY).open();
+                    refresh.run();
                 },100);
             }
 

@@ -202,7 +202,8 @@ region all being refused; placement refused on land the owner has no part in and
 their own GriefPrevention claim.
 
 Also covered live: one half of a double chest being vaulted and the other staying locked for its
-owner; a locked item frame being vaulted with the item it shows.
+owner; a locked item frame being vaulted with the item it shows. The same frame found by a
+region scan is vaulted from the results, not merely unlocked.
 
 Also covered live: the action menu naming the vault's block and position; delete asking first,
 Cancel keeping the vault and Delete removing it.

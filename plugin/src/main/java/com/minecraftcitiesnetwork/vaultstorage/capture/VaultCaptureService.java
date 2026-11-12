@@ -1,5 +1,6 @@
 package com.minecraftcitiesnetwork.vaultstorage.capture;
 
+import org.bukkit.entity.ItemFrame;
 import com.minecraftcitiesnetwork.vaultstorage.config.MessageKeys;
 import com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin;
 import com.minecraftcitiesnetwork.vaultstorage.capture.PlayerVaultEvent;
@@ -225,6 +226,56 @@ public final class VaultCaptureService {
                 }
             });
         }, plugin.getServer().getScheduler().getMainThreadExecutor(plugin));
+    }
+
+    /**
+     * Vaults a locked item frame or painting for the player who asked, with what it displays, and
+     * tells them how it went. An empty item frame only loses the lock on the block behind it.
+     * Call on the main thread; the future completes there, with true when a vault was stored,
+     * and never exceptionally.
+     */
+    public @NotNull CompletableFuture<Boolean> captureHanging(@NotNull Player actor, @NotNull Hanging hang) {
+        Block supporting = HangingVaultSupport.resolveSupportingBlock(hang);
+        VaultCapturePolicy.Decision decision = this.plugin.capturePolicy().evaluateHangingCapture(actor, hang, supporting);
+        if (!decision.allowed()) {
+            actor.sendMessage(this.plugin.text().of(MessageKeys.CAPTURE_NOT_ALLOWED));
+            return CompletableFuture.completedFuture(false);
+        }
+        if (hang instanceof ItemFrame frame && HangingVaultSupport.isItemFrameDisplayEmpty(frame)) {
+            unprotect(supporting);
+            actor.sendMessage(this.plugin.text().of(MessageKeys.CAPTURE_EMPTY_CAPTURE_SKIPPED));
+            return CompletableFuture.completedFuture(false);
+        }
+        List<ItemStack> stacks = HangingVaultSupport.itemStacksFrom(hang);
+        if (stacks.isEmpty()) {
+            return CompletableFuture.completedFuture(false);
+        }
+        Executor mainThread = this.plugin.getServer().getScheduler().getMainThreadExecutor(this.plugin);
+        return this.owners.validate(decision.containerOwner(), actor)
+                .thenComposeAsync(owner -> {
+                    if (owner == null) {
+                        actor.sendMessage(this.plugin.text().of(MessageKeys.CAPTURE_OWNER_UNKNOWN));
+                        return CompletableFuture.completedFuture(false);
+                    }
+                    // Stored first, removed after: a failed save leaves the entity where it is.
+                    return CompletableFuture
+                            .supplyAsync(() -> persistHangingStacks(stacks, owner, actor.getUniqueId(), supporting, true),
+                                    this.plugin.databaseExecutor())
+                            .thenApplyAsync(vault -> {
+                                if (hang.isValid()) {
+                                    hang.remove();
+                                }
+                                actor.sendMessage(this.plugin.text().of(MessageKeys.CAPTURE_CAPTURED_OK));
+                                new PlayerVaultEvent(actor, vault, owner, supporting.getLocation()).callEvent();
+                                return true;
+                            }, mainThread);
+                }, mainThread)
+                .exceptionally(failure -> {
+                    this.plugin.getLogger().log(Level.SEVERE, "Hanging capture failed for " + actor.getName()
+                            + "; the entity was left in place.", failure);
+                    mainThread.execute(() -> actor.sendMessage(this.plugin.text().of(MessageKeys.CAPTURE_SAVE_FAILED)));
+                    return false;
+                });
     }
 
     /**

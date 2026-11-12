@@ -1,8 +1,6 @@
 package com.minecraftcitiesnetwork.vaultstorage.capture;
 
 import com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin;
-import com.minecraftcitiesnetwork.vaultstorage.bolt.BoltService;
-import com.minecraftcitiesnetwork.vaultstorage.capture.HangingVaultSupport;
 import com.minecraftcitiesnetwork.vaultstorage.capture.PlayerVaultEvent;
 import com.minecraftcitiesnetwork.vaultstorage.capture.VaultCapturePolicy;
 import com.minecraftcitiesnetwork.vaultstorage.chestshop.ChestShopService;
@@ -11,8 +9,6 @@ import com.minecraftcitiesnetwork.vaultstorage.session.VaultSessionManager.Mode;
 import com.minecraftcitiesnetwork.vaultstorage.session.VaultSessionManager;
 import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
-import java.util.logging.Level;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Hanging;
@@ -26,7 +22,6 @@ import org.bukkit.event.block.Action;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.EquipmentSlot;
-import org.bukkit.inventory.ItemStack;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.jetbrains.annotations.NotNull;
 
@@ -223,59 +218,8 @@ public final class CaptureSession implements Listener {
 
         event.setCancelled(true);
 
-        Hanging hang = (Hanging) clicked;
-        Block supporting = HangingVaultSupport.resolveSupportingBlock(hang);
-
-        VaultCapturePolicy.Decision decision = plugin.capturePolicy().evaluateHangingCapture(actor, hang, supporting);
-        if (!decision.allowed()) {
-            actor.sendMessage(plugin.text().of(MessageKeys.CAPTURE_NOT_ALLOWED));
-            return;
-        }
-
-        // Empty item frame: unlock supporting block only (like empty non-container); do not vault or remove entity.
-        if (hang instanceof ItemFrame frame && HangingVaultSupport.isItemFrameDisplayEmpty(frame)) {
-            BoltService bolt = plugin.bolt();
-            service.unprotect(supporting);
-            actor.sendMessage(plugin.text().of(MessageKeys.CAPTURE_EMPTY_CAPTURE_SKIPPED));
-            return;
-        }
-
-        List<ItemStack> stacks = HangingVaultSupport.itemStacksFrom(hang);
-        if (stacks.isEmpty()) {
-            return;
-        }
-
         busy = true;
         cancelCooldownUntil = System.currentTimeMillis() + CANCEL_COOLDOWN_MILLIS;
-        service.owners().validate(decision.containerOwner(), actor).thenAccept(validatedOwner -> {
-            if (validatedOwner == null) {
-                new BukkitRunnable() {
-                    @Override public void run() {
-                        actor.sendMessage(plugin.text().of(MessageKeys.CAPTURE_OWNER_UNKNOWN));
-                        busy = false;
-                    }
-                }.runTask(plugin);
-                return;
-            }
-
-            // Stored first, removed after: a failed save leaves the entity where it is.
-            CompletableFuture
-                    .supplyAsync(() -> service.persistHangingStacks(stacks, validatedOwner, actor.getUniqueId(), supporting, true),
-                            plugin.databaseExecutor())
-                    .thenAcceptAsync(vaultUuid -> {
-                        if (hang.isValid()) {
-                            hang.remove();
-                        }
-                        actor.sendMessage(plugin.text().of(MessageKeys.CAPTURE_CAPTURED_OK));
-                        new PlayerVaultEvent(actor, vaultUuid, validatedOwner, supporting.getLocation()).callEvent();
-                    }, plugin.getServer().getScheduler().getMainThreadExecutor(plugin))
-                    .exceptionally(failure -> {
-                        plugin.getLogger().log(Level.SEVERE, "Hanging capture failed for " + actor.getName()
-                                + "; the entity was left in place.", failure);
-                        actor.sendMessage(plugin.text().of(MessageKeys.CAPTURE_SAVE_FAILED));
-                        return null;
-                    })
-                    .whenComplete((done, failure) -> busy = false);
-        });
+        service.captureHanging(actor, (Hanging) clicked).whenComplete((vaulted, failure) -> busy = false);
     }
 }
