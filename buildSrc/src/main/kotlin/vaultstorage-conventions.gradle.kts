@@ -24,6 +24,11 @@ repositories {
     maven("https://repo.minebench.de/") { name = "minebench" }
     maven("https://maven.democracycraft.net/releases") { name = "democracycraft" }
     maven("https://maven.minecraftcitiesnetwork.com/snapshots") { name = "mccities-snapshots" }
+    // GriefPrevention is published only here. Filtered, so nothing else resolves from it.
+    maven("https://jitpack.io") {
+        name = "jitpack"
+        content { includeGroup("com.github.TechFortress") }
+    }
 }
 
 dependencies {

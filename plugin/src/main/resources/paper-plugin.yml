@@ -16,6 +16,7 @@ dependencies:
     Namebook:   { load: BEFORE, required: false, join-classpath: true }
     ChestShop:  { load: BEFORE, required: false, join-classpath: true }
     Realty:     { load: BEFORE, required: false, join-classpath: true }
+    GriefPrevention: { load: BEFORE, required: false, join-classpath: true }
 
 # Every permission is declared here with a description and a default.
 permissions:

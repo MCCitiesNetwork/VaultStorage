@@ -15,6 +15,7 @@ essentialsx = "2.21.2"
 floodgate-api = "2.2.5-SNAPSHOT"
 chestshop = "3.12.2"
 realty-paper-api = "1.4.0"
+griefprevention = "16.18.8"
 mybatis = "3.5.19"
 mariadb = "3.5.6"
 testcontainers-mariadb = "2.0.1"
@@ -36,6 +37,7 @@ essentialsx = { module = "net.essentialsx:EssentialsX", version.ref = "essential
 floodgate-api = { module = "org.geysermc.floodgate:api", version.ref = "floodgate-api" }
 chestshop = { module = "com.acrobot.chestshop:chestshop", version.ref = "chestshop" }
 realty-paper-api = { module = "io.github.md5sha256:realty-paper-api", version.ref = "realty-paper-api" }
+griefprevention = { module = "com.github.TechFortress:GriefPrevention", version.ref = "griefprevention" }
 mybatis = { module = "org.mybatis:mybatis", version.ref = "mybatis" }
 mariadb-java-client = { module = "org.mariadb.jdbc:mariadb-java-client", version.ref = "mariadb" }
 testcontainers-mariadb = { module = "org.testcontainers:testcontainers-mariadb", version.ref = "testcontainers-mariadb" }
