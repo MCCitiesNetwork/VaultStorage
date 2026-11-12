@@ -7,7 +7,8 @@ plugins {
 val prefix = "com.minecraftcitiesnetwork.vaultstorage.libraries"
 
 tasks.named<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("shadowJar") {
-    listOf<String>(
+    listOf(
+        "com.minecraftcitiesnetwork.pluginInfrastructure",
     ).forEach {
         relocate(it, "$prefix.$it")
     }

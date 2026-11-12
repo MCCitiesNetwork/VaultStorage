@@ -8,6 +8,8 @@ plugins {
 
 dependencies {
     compileOnly(libs.paper.api)
+    // Bundled and relocated; modules reach it through the host's class loader.
+    implementation(libs.plugin.infrastructure)
     compileOnly(libs.bolt.bukkit)
     compileOnly(libs.bolt.common)
     compileOnly(libs.worldguard)
@@ -21,7 +23,28 @@ dependencies {
     testImplementation(libs.paper.api)
 }
 
+// Module jars, for the run directory.
+val moduleJars: Configuration by configurations.creating {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+}
+
+dependencies {
+    moduleJars(project(path = ":modules:namebook-adapter", configuration = "moduleJar"))
+}
+
+val installModules by tasks.registering(Sync::class) {
+    from(moduleJars)
+    into(layout.projectDirectory.dir("run/plugins/VaultStorage/modules"))
+    // Module configs written by a previous run survive.
+    preserve { exclude("*.jar") }
+}
+
 tasks {
+    runServer {
+        dependsOn(installModules)
+    }
+
     build {
         dependsOn(shadowJar)
     }

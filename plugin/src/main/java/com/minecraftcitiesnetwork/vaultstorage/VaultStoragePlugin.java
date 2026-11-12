@@ -40,7 +40,13 @@ import net.essentialsx.api.v2.services.mail.MailService;
 import com.minecraftcitiesnetwork.vaultstorage.names.NameSource;
 import com.minecraftcitiesnetwork.vaultstorage.names.Names;
 import com.minecraftcitiesnetwork.vaultstorage.names.PaperProfileNameSource;
+import com.minecraftcitiesnetwork.pluginInfrastructure.modules.ModuleLifecycleManager;
+import com.minecraftcitiesnetwork.pluginInfrastructure.modules.ModuleLoader;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Optional;
+import java.util.logging.Level;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import org.bukkit.Bukkit;
@@ -68,6 +74,7 @@ public final class VaultStoragePlugin extends JavaPlugin {
 
     // Integration services
     private final Integrations integrations = new Integrations();
+    private ModuleLifecycleManager<VaultStoragePlugin> modules;
     private Names names;
     private VaultService vaultService;
     private WorldGuardService worldGuardService;
@@ -200,6 +207,21 @@ public final class VaultStoragePlugin extends JavaPlugin {
             getServer().getPluginManager().registerEvents(new RealtyOccupantChangeListener(autoVaultService), this);
             getLogger().info("Realty detected: auto-vault on region occupant change enabled.");
         }
+
+        startModules();
+    }
+
+    /** Loads feature modules from the data folder. Called last, once the host's services exist. */
+    private void startModules() {
+        try {
+            Path moduleDir = getDataFolder().toPath().resolve("modules");
+            Files.createDirectories(moduleDir);
+            this.modules = new ModuleLifecycleManager<>(this, new ModuleLoader(moduleDir));
+            this.modules.start();
+        } catch (IOException | LinkageError ex) {
+            // One bad module jar must not stop the host enabling.
+            getLogger().log(Level.SEVERE, "Could not load feature modules.", ex);
+        }
     }
 
     private void validatePermissionsMapping() {
@@ -242,6 +264,9 @@ public final class VaultStoragePlugin extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        if (this.modules != null) {
+            this.modules.stop();
+        }
         if (this.autoVaultService != null) this.autoVaultService.shutdown();
         if (this.mysql != null) this.mysql.disconnect();
     }
