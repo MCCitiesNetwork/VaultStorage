@@ -1,5 +1,8 @@
 package com.minecraftcitiesnetwork.vaultstorage.menu;
 
+import org.bukkit.World;
+import org.bukkit.Bukkit;
+import com.minecraftcitiesnetwork.pluginInfrastructure.configurate.MessageContainer;
 import com.minecraftcitiesnetwork.vaultstorage.config.MessageKeys;
 import com.minecraftcitiesnetwork.vaultstorage.config.Text;
 import com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin;
@@ -44,13 +47,16 @@ public class VaultListMenu extends ChildMenuImp {
         return VaultStoragePlugin.getInstance().settings().get().vaultList().pageSize();
     }
 
+    /** Wide enough for a whole label; the client shrinks it to the window. */
+    private static final int LABEL_WIDTH = 400;
+
     private final VaultUIContext uiContext;
     private final String query;
     private final int requestedPage;
     /** Null until the page has been loaded. */
     private final @Nullable Loaded loaded;
 
-    private record Entry(UUID id, String ownerName, int index) {}
+    private record Entry(VaultSummary vault, String ownerName, int index) {}
 
     private record Loaded(List<Entry> entries, Paging paging) {}
 
@@ -117,9 +123,11 @@ public class VaultListMenu extends ChildMenuImp {
                     "%pages%", String.valueOf(paging.pages()),
                     "%count%", String.valueOf(paging.total())))));
             for (Entry entry : page.entries()) {
-                Component label = Text.of(MessageKeys.LIST_ITEM_FORMAT,
-                        Map.of("%owner%", entry.ownerName(), "%index%", String.valueOf(entry.index())));
-                builder.button(label, ctx -> new VaultActionMenu(ctx.player(), parent, this.uiContext, entry.id()).open());
+                Component label = label(entry);
+                // Back from the vault returns to this page of this search.
+                builder.sizableButton(label, ctx -> new VaultActionMenu(ctx.player(), parent, this.uiContext,
+                        entry.vault().uuid(), label, actor -> new VaultListMenu(actor, parent, this.uiContext,
+                        this.query, paging.page()).open()).open(), LABEL_WIDTH);
             }
         }
         if (paging.hasPrevious()) {
@@ -132,6 +140,25 @@ public class VaultListMenu extends ChildMenuImp {
         }
         builder.button(Text.of(MessageKeys.LIST_BACK_BTN), ctx -> getParentMenu().open());
         return builder.build();
+    }
+
+    /** Who owns the vault, what it was, where it stood, how much it holds and when it was captured. */
+    private static Component label(@NotNull Entry entry) {
+        VaultSummary vault = entry.vault();
+        MessageContainer messages = VaultStoragePlugin.getInstance().messages();
+        World world = Bukkit.getWorld(vault.worldUuid());
+        Component items = messages.messageFor(VaultLabel.itemsKey(vault.itemCount()),
+                MessageContainer.value("count", String.valueOf(vault.itemCount())));
+        return messages.messageFor(MessageKeys.LIST_ITEM_FORMAT,
+                MessageContainer.value("owner", entry.ownerName()),
+                MessageContainer.value("index", String.valueOf(entry.index())),
+                MessageContainer.value("material", VaultLabel.materialName(vault.material())),
+                MessageContainer.value("world", world != null ? world.getName() : vault.worldUuid().toString().substring(0, 8)),
+                MessageContainer.value("x", String.valueOf(vault.x())),
+                MessageContainer.value("y", String.valueOf(vault.y())),
+                MessageContainer.value("z", String.valueOf(vault.z())),
+                MessageContainer.markup("items", items),
+                MessageContainer.value("date", VaultLabel.date(vault.createdTime())));
     }
 
     /** What the list covers: one owner's vaults, one vault, or everything. */
@@ -206,7 +233,7 @@ public class VaultListMenu extends ChildMenuImp {
                         List<Entry> entries = new ArrayList<>();
                         int index = paging.offset() + 1;
                         for (VaultSummary vault : page.vaults()) {
-                            entries.add(new Entry(vault.uuid(), names.get(vault.ownerUuid()), index++));
+                            entries.add(new Entry(vault, names.get(vault.ownerUuid()), index++));
                         }
                         return new Loaded(entries, paging);
                     });

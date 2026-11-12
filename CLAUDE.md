@@ -49,7 +49,7 @@ Under `com.minecraftcitiesnetwork.vaultstorage`, grouped by feature:
 | `bolt` | Bolt service |
 | `chestshop` | the `ChestShopService` interface and its no-op default |
 | `names` | `NameSource`, the Paper source, `Names`, `UniqueIdentifierResolver` |
-| `menu` | dialog menus and `AutoDialog` |
+| `menu` | dialog menus, `AutoDialog`, `ConfirmMenu`, `VaultLabel` |
 | `command` | `VaultCommand` (the Brigadier tree), its sealed outcomes, `VaultActionArgument` |
 | `permission` | `Permissions`, one constant per node |
 | `session` | per-player session state |
@@ -126,6 +126,16 @@ step of the programme below.
 - **A command's outcome is a sealed interface** switched over for the reply. No exception text
   reaches a player.
 
+## Rules for menus
+
+- **Whoever opens a `LoadingMenu` ends it** on every path: replace it with the next dialog, or
+  `closeDialog()` before telling the player what went wrong.
+- **Anything that cannot be undone goes through `ConfirmMenu`.** Cancel is its first button.
+- **A menu that leads to a vault passes the way back**, so Back returns to the same page and search.
+- **A sentence with two outcomes is two keys** (`scan.entry-vaultable` / `-not-vaultable`), chosen
+  in Java. Never insert "yes" or "no" into one.
+- **A list that is paged is sorted first**, by something that does not change between pages.
+
 ## Standardisation programme
 
 Specs and plans are in `docs/superpowers/`. One spec and one plan per step.
@@ -137,7 +147,7 @@ Specs and plans are in `docs/superpowers/`. One spec and one plan per step.
 | 3. Capture, placement, auto-vault | done, except shop owners from Treasury | save before destroy, futures, two more modules |
 | 4. Config and messages | done | Configurate records, `messages.yml`, reload |
 | 5. Commands and permissions | done | Brigadier, `vaultstorage.command.*` |
-| 6. Menus | outline | paged vault list with real labels, confirmations |
+| 6. Menus | done | vault labels, delete confirmation, loading dialogs that end, whole-sentence keys |
 | 7. Sweep | outline | code style everywhere, dead code removed |
 
 Step 3 so far, on `refactor/capture-placement` (plan: `docs/superpowers/plans/2026-11-12-capture-placement-autovault.md`):
@@ -193,6 +203,9 @@ their own GriefPrevention claim.
 
 Also covered live: one half of a double chest being vaulted and the other staying locked for its
 owner; a locked item frame being vaulted with the item it shows.
+
+Also covered live: the action menu naming the vault's block and position; delete asking first,
+Cancel keeping the vault and Delete removing it.
 
 Also covered live: `vaultstorage.admin` alone giving a non-operator the staff commands, and a
 player with only the menu permission being refused `/vault reload`.

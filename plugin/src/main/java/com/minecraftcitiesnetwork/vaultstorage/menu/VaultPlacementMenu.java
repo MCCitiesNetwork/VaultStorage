@@ -182,8 +182,8 @@ public class VaultPlacementMenu extends ChildMenuImp {
                 boolean allowed = actor.hasPermission(Permissions.ACTION_PLACE)
                         && (actor.hasPermission(Permissions.BYPASS_REGION)
                         || VaultStoragePlugin.getInstance().integrations().mayPlace(actor.getUniqueId(), target.getLocation()));
-                var ph = Map.of("%placeable%", Text.plain(allowed ? MessageKeys.PLACEMENT_PLACE_YES : MessageKeys.PLACEMENT_PLACE_NO));
-                actor.sendActionBar(Text.of(MessageKeys.PLACEMENT_ACTION_BAR_TARGET, ph));
+                actor.sendActionBar(Text.of(allowed
+                        ? MessageKeys.PLACEMENT_ACTION_BAR_PLACEABLE : MessageKeys.PLACEMENT_ACTION_BAR_NOT_PLACEABLE));
             }
         }.runTaskTimer(VaultStoragePlugin.getInstance(), 0L, 5L);
         session.setActionBarTask(actionbarTask[0]);

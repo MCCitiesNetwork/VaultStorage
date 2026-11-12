@@ -74,6 +74,7 @@ public class VaultInventoryService implements Listener {
                 .thenAcceptAsync(entry -> {
                     Loaded loaded = entry.getKey();
                     if (loaded.vault().isEmpty()) {
+                        closeLoading(player, parentMenu);
                         player.sendMessage(Text.of(loaded.refusal()));
                         return;
                     }
@@ -86,9 +87,19 @@ public class VaultInventoryService implements Listener {
                 .exceptionally(failure -> {
                     plugin.getLogger().log(Level.SEVERE, "Could not open vault " + vaultId + ".", failure);
                     releaseIfEditing(plugin, vaultId, editing);
-                    player.sendMessage(Text.of(MessageKeys.INVENTORY_OPEN_FAILED));
+                    mainThread.execute(() -> {
+                        closeLoading(player, parentMenu);
+                        player.sendMessage(Text.of(MessageKeys.INVENTORY_OPEN_FAILED));
+                    });
                     return null;
                 });
+    }
+
+    /** Takes down the loading dialog this open put up, so a refusal is not hidden behind it. */
+    private static void closeLoading(@NotNull Player player, @Nullable ParentMenu parentMenu) {
+        if (parentMenu != null && player.isOnline()) {
+            player.closeDialog();
+        }
     }
 
     /** A loaded vault, or the messages.yml key of the reason there is none to show. */

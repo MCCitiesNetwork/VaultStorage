@@ -16,6 +16,8 @@ loading:
 # The menu for one vault.
 action:
   title: '<gold><bold>Vault Action</bold></gold>'
+  # <vault>: the vault's line from the list
+  description: '<vault>'
   action-label: '<gray>Select action</gray>'
   open-btn: '<green><bold>Open Inventory</bold></green>'
   place-btn: '<yellow><bold>Place Block</bold></yellow>'
@@ -28,6 +30,11 @@ action:
   delete-ok: '<green>Vault deleted.</green>'
   delete-fail: '<red>Vault deletion failed.</red>'
   delete-loading: '<gray>Deleting vault...</gray>'
+  delete-confirm-title: '<red><bold>Delete this vault?</bold></red>'
+  # <vault>: the vault's line from the list
+  delete-confirm-body: '<vault><newline><newline><red>The vault and every item in it will be deleted. This cannot be undone.</red>'
+  delete-confirm-btn: '<red><bold>Delete</bold></red>'
+  delete-cancel-btn: '<gray>Cancel</gray>'
 
 # The vault list.
 list:
@@ -36,8 +43,13 @@ list:
   search-btn: '<aqua>Search</aqua>'
   back-btn: '<red><bold>Back</bold></red>'
   none-found: '<gray>No vaults found.</gray>'
-  # <owner> <index>
-  item-format: '<white><owner></white><gray>''s Vault #</gray><white><index></white>'
+  # <owner> <index> <material> <world> <x> <y> <z> <items> <date>
+  item-format: '<white><owner></white><gray>''s Vault #</gray><white><index></white> <dark_gray>|</dark_gray> <white><material></white> <gray>at <world> <x>, <y>, <z></gray> <dark_gray>|</dark_gray> <items> <dark_gray>|</dark_gray> <gray><date></gray>'
+  # What <items> above becomes.
+  items-none: '<gray>empty</gray>'
+  items-one: '<white>1</white> <gray>item</gray>'
+  # <count>
+  items-many: '<white><count></white> <gray>items</gray>'
   prev-btn: '<yellow>< Prev</yellow>'
   next-btn: '<yellow>Next ></yellow>'
   # <page> <pages> <count>
@@ -51,8 +63,14 @@ scan:
   services-missing: '<red>Scan unavailable: services not ready.</red>'
   # <region> <count>
   results-header: '<gold><bold>Region <region></bold></gold> <gray>(<count> results)</gray>'
-  # <index> <x> <y> <z> <owner> <kind> <vaultable>
-  entry-line: '<gray>- <index> </gray><white>(<x>, <y>, <z>)</white> <gray>owner:</gray> <white><owner></white> <gray>|</gray> <white><kind></white> <gray>| vaultable:</gray> <white><vaultable></white>'
+  # <index> <x> <y> <z> <owner> <kind>
+  entry-vaultable: '<gray>- <index> </gray><white>(<x>, <y>, <z>)</white> <gray>owner:</gray> <white><owner></white> <gray>|</gray> <white><kind></white> <gray>| vaultable:</gray> <green>yes</green>'
+  # <index> <x> <y> <z> <owner> <kind>
+  entry-not-vaultable: '<gray>- <index> </gray><white>(<x>, <y>, <z>)</white> <gray>owner:</gray> <white><owner></white> <gray>|</gray> <white><kind></white> <gray>| vaultable:</gray> <red>no</red>'
+  # What <owner> and <kind> above may become.
+  owner-unknown: 'unknown'
+  kind-container: 'container'
+  kind-block: 'block'
   # <index>
   entry-vault-button: '<yellow>(vault) - <index></yellow>'
   entry-teleport-button: '<aqua>(teleport)</aqua>'
@@ -64,21 +82,17 @@ scan:
   not-allowed: '<red>Not allowed by region/block rules.</red>'
   # <time>
   scan-cooldown: '<red>Please wait <time>s before scanning again.</red>'
-  vaultable-yes: 'yes'
-  vaultable-no: 'no'
   prev-btn: '<yellow>< Prev</yellow>'
   next-btn: '<yellow>Next ></yellow>'
   # <page> <total>
   page-label: '<gray>Page <page> / <total></gray>'
-  # <mode>
-  filter-btn: '<gray>[Filter: <mode>]</gray>'
+  filter-btn-block: '<gray>[Filter: Block]</gray>'
+  filter-btn-non-container: '<gray>[Filter: Non-Container]</gray>'
+  filter-btn-container: '<gray>[Filter: Container]</gray>'
+  filter-btn-entity: '<gray>[Filter: Entity]</gray>'
   no-region-here: '<red>No region at your location.</red>'
   not-your-region: '<red>You can only scan regions you own or are a member of.</red>'
   no-entities: '<gray>No protected entities found in this region.</gray>'
-  filter-block: 'Block'
-  filter-non-container: 'Non-Container'
-  filter-container: 'Container'
-  filter-entity: 'Entity'
 
 # The list of regions to scan.
 regions:
@@ -113,10 +127,8 @@ placement:
   back-btn: '<red><bold>Back</bold></red>'
   placement-cancelled: 'Placement cancelled.'
   action-bar-idle: '<yellow>Placement mode</yellow> - Right-click a block face. <gray>Left-click to cancel.</gray>'
-  # <placeable>
-  action-bar-target: '<gray>Placeable:</gray> <white><placeable></white>'
-  place-yes: 'yes'
-  place-no: 'no'
+  action-bar-placeable: '<gray>Placeable:</gray> <green>yes</green>'
+  action-bar-not-placeable: '<gray>Placeable:</gray> <red>no</red>'
   not-allowed: '<red>You must be a region member/owner or have override permission.</red>'
   no-permission: '<red>You don''t have permission to place vaults.</red>'
   none-left: 'You have no more vaults to place.'
@@ -138,8 +150,10 @@ capture:
   captured-ok: 'Vault captured.'
   no-bolt-owner: '<yellow>No Bolt owner found; you will be set as the vault owner.</yellow>'
   action-bar-idle: '<yellow>Capture mode</yellow> - Right-click a block, item frame, or painting. <gray>Left-click to cancel.</gray>'
-  # <owner> <vaultable> <reason-segment> <admin>
-  action-bar-container: '<gray>Owner:</gray> <white><owner></white> <gray>| Vaultable:</gray> <white><vaultable></white><gray><reason-segment></gray><admin>'
+  # <owner> <admin>
+  action-bar-vaultable: '<gray>Owner:</gray> <white><owner></white> <gray>| Vaultable:</gray> <green>yes</green><admin>'
+  # <owner> <reason-segment> <admin>
+  action-bar-not-vaultable: '<gray>Owner:</gray> <white><owner></white> <gray>| Vaultable:</gray> <red>no</red><gray><reason-segment></gray><admin>'
   # <reason>
   action-bar-reason-segment-template: ' | Reason: <reason>'
   # <regions>
@@ -152,8 +166,6 @@ capture:
   reason-hangable-requires-admin: 'vaulting this entity requires an administrator'
   reason-fallback: 'vault not permitted'
   action-bar-unprotected-owner: 'unprotected'
-  action-bar-vaultable-yes: 'yes'
-  action-bar-vaultable-no: 'no'
   admin-mode-enabled: '<gold>Admin mode enabled.</gold>'
   action-bar-admin-mode-tag: '<gray> |</gray> <gold> ADMIN</gold>'
   no-permission: 'You don''t have permission to capture blocks.'

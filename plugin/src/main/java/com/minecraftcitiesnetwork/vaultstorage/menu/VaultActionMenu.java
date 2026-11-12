@@ -1,5 +1,9 @@
 package com.minecraftcitiesnetwork.vaultstorage.menu;
 
+import org.jetbrains.annotations.NotNull;
+import net.kyori.adventure.text.Component;
+import java.util.function.Consumer;
+import com.minecraftcitiesnetwork.pluginInfrastructure.configurate.MessageContainer;
 import com.minecraftcitiesnetwork.vaultstorage.config.MessageKeys;
 import com.minecraftcitiesnetwork.vaultstorage.config.Text;
 import com.minecraftcitiesnetwork.vaultstorage.database.DeleteResult;
@@ -39,14 +43,23 @@ public class VaultActionMenu extends ChildMenuImp {
 
     private final UUID vaultId;
     private final VaultUIContext uiContext;
+    private final Component description;
+    private final Consumer<Player> back;
 
 
 
 
-    public VaultActionMenu(Player player, ParentMenuImp parent, VaultUIContext ctx, UUID vaultId) {
+    /**
+     * @param description the vault's line from the list, shown so the player knows which vault this is
+     * @param back        where Back, a finished delete and a finished placement lead
+     */
+    public VaultActionMenu(Player player, ParentMenuImp parent, VaultUIContext ctx, UUID vaultId,
+                           @NotNull Component description, @NotNull Consumer<Player> back) {
         super(player, parent, "vault_action");
         this.vaultId = vaultId;
         this.uiContext = ctx;
+        this.description = description;
+        this.back = back;
         setDialog(build());
     }
 
@@ -55,6 +68,8 @@ public class VaultActionMenu extends ChildMenuImp {
         builder.title(Text.of(MessageKeys.ACTION_TITLE));
         builder.canCloseWithEscape(true);
         builder.afterAction(DialogBase.DialogAfterAction.CLOSE);
+        builder.addBody(DialogBody.plainMessage(VaultStoragePlugin.getInstance().messages().messageFor(
+                MessageKeys.ACTION_DESCRIPTION, MessageContainer.markup("vault", this.description))));
 
         // Build SingleOption with available actions filtered by permissions
         List<SingleOptionDialogInput.OptionEntry> entries = new ArrayList<>();
@@ -71,7 +86,7 @@ public class VaultActionMenu extends ChildMenuImp {
         }
         if (entries.isEmpty()) {
             builder.addBody(DialogBody.plainMessage(Text.of(MessageKeys.ACTION_NO_ACTIONS)));
-            builder.button(Text.of(MessageKeys.ACTION_BACK_BTN), ctx -> new VaultListMenu(ctx.player(), (ParentMenuImp) getParentMenu(), uiContext,"").open());
+            builder.button(Text.of(MessageKeys.ACTION_BACK_BTN), ctx -> this.back.accept(ctx.player()));
             return builder.build();
         }
 
@@ -98,37 +113,51 @@ public class VaultActionMenu extends ChildMenuImp {
                     actor.sendMessage(Text.of(MessageKeys.COMMAND_NO_PERMISSION));
                     return;
                 }
-                actor.sendMessage(Text.of(MessageKeys.ACTION_DELETE_LOADING));
-                var plugin = VaultStoragePlugin.getInstance();
-                Executor mainThread = plugin.getServer().getScheduler().getMainThreadExecutor(plugin);
-                CompletableFuture.supplyAsync(() -> plugin.repository().find(vaultId), plugin.databaseExecutor())
-                        .thenComposeAsync(found -> {
-                            if (!(found instanceof FindResult.Found vault)) {
-                                return CompletableFuture.completedFuture(false);
-                            }
-                            // The event is synchronous, so it is fired here, on the main thread.
-                            new PlayerDeleteVaultEvent(actor, vault.vault().vault()).callEvent();
-                            return CompletableFuture.supplyAsync(
-                                    () -> plugin.repository().delete(vaultId) instanceof DeleteResult.Deleted,
-                                    plugin.databaseExecutor());
-                        }, mainThread)
-                        .exceptionally(failure -> {
-                            plugin.getLogger().log(Level.SEVERE, "Could not delete vault " + vaultId + ".", failure);
-                            return false;
-                        })
-                        .thenAcceptAsync(deleted -> {
-                            actor.sendMessage(Text.of(deleted ? MessageKeys.ACTION_DELETE_OK : MessageKeys.ACTION_DELETE_FAIL));
-                            if (getParentMenu() instanceof ParentMenuImp parent) {
-                                new VaultListMenu(actor, parent, uiContext, "").open();
-                            } else {
-                                actor.closeDialog();
-                            }
-                        }, mainThread);
+                MessageContainer messages = VaultStoragePlugin.getInstance().messages();
+                new ConfirmMenu(actor, getParentMenu(),
+                        messages.messageFor(MessageKeys.ACTION_DELETE_CONFIRM_TITLE),
+                        messages.messageFor(MessageKeys.ACTION_DELETE_CONFIRM_BODY,
+                                MessageContainer.markup("vault", this.description)),
+                        messages.messageFor(MessageKeys.ACTION_DELETE_CONFIRM_BTN),
+                        messages.messageFor(MessageKeys.ACTION_DELETE_CANCEL_BTN),
+                        this::delete,
+                        cancelled -> new VaultActionMenu(cancelled, (ParentMenuImp) getParentMenu(), uiContext,
+                                vaultId, this.description, this.back).open()).open();
             });
         }
 
-        builder.button(Text.of(MessageKeys.ACTION_BACK_BTN), ctx -> new VaultListMenu(ctx.player(), (ParentMenuImp) getParentMenu(), uiContext, "").open());
+        builder.button(Text.of(MessageKeys.ACTION_BACK_BTN), ctx -> this.back.accept(ctx.player()));
         return builder.build();
+    }
+
+    /** Deletes the vault for good. Reached only through the confirmation. */
+    private void delete(@NotNull Player actor) {
+        if (!actor.hasPermission(Permissions.ADMIN)) {
+            actor.sendMessage(Text.of(MessageKeys.COMMAND_NO_PERMISSION));
+            return;
+        }
+        actor.sendMessage(Text.of(MessageKeys.ACTION_DELETE_LOADING));
+        var plugin = VaultStoragePlugin.getInstance();
+        Executor mainThread = plugin.getServer().getScheduler().getMainThreadExecutor(plugin);
+        CompletableFuture.supplyAsync(() -> plugin.repository().find(vaultId), plugin.databaseExecutor())
+                .thenComposeAsync(found -> {
+                    if (!(found instanceof FindResult.Found vault)) {
+                        return CompletableFuture.completedFuture(false);
+                    }
+                    // The event is synchronous, so it is fired here, on the main thread.
+                    new PlayerDeleteVaultEvent(actor, vault.vault().vault()).callEvent();
+                    return CompletableFuture.supplyAsync(
+                            () -> plugin.repository().delete(vaultId) instanceof DeleteResult.Deleted,
+                            plugin.databaseExecutor());
+                }, mainThread)
+                .exceptionally(failure -> {
+                    plugin.getLogger().log(Level.SEVERE, "Could not delete vault " + vaultId + ".", failure);
+                    return false;
+                })
+                .thenAcceptAsync(deleted -> {
+                    actor.sendMessage(Text.of(deleted ? MessageKeys.ACTION_DELETE_OK : MessageKeys.ACTION_DELETE_FAIL));
+                    this.back.accept(actor);
+                }, mainThread);
     }
 
     private static VaultAction parseAction(String s) {
@@ -143,7 +172,7 @@ public class VaultActionMenu extends ChildMenuImp {
 
     private void openInventoryAsync(Player player, VaultAction action) {
         VaultInventoryService invSvc = VaultStoragePlugin.getInstance().getInventoryService();
-        invSvc.openVirtualInventory(player, vaultId, action, getParentMenu(), () -> new VaultActionMenu(player, (ParentMenuImp) getParentMenu(), uiContext, vaultId).open());
+        invSvc.openVirtualInventory(player, vaultId, action, getParentMenu(), () -> new VaultActionMenu(player, (ParentMenuImp) getParentMenu(), uiContext, vaultId, this.description, this.back).open());
     }
 
     @Override

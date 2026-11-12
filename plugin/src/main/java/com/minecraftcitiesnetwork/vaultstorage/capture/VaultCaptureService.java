@@ -615,17 +615,15 @@ public class VaultCaptureService {
                 String ownerName = ownerDisplayNameAsync(owner);
 
                 VaultCapturePolicy.Decision decision = VaultCapturePolicy.evaluate(actor, target);
-                String vaultable = Text.plain(decision.allowed()
-                        ? MessageKeys.CAPTURE_ACTION_BAR_VAULTABLE_YES : MessageKeys.CAPTURE_ACTION_BAR_VAULTABLE_NO);
                 String regionsList = decision.regionStatuses().stream().map(VaultCapturePolicy.RegionStatus::regionId).sorted().reduce((a,b)->a+", "+b).orElse("");
                 Component reasonSegment = reasonSegment(decision, ownerName, regionsList);
                 Component adminTag = decision.hasOverride()
                         ? Text.of(MessageKeys.CAPTURE_ACTION_BAR_ADMIN_MODE_TAG) : Component.empty();
                 // The owner's name goes in as text; the two segments are components built here.
                 actor.sendActionBar(VaultStoragePlugin.getInstance().messages().messageFor(
-                        MessageKeys.CAPTURE_ACTION_BAR_CONTAINER,
+                        decision.allowed()
+                                ? MessageKeys.CAPTURE_ACTION_BAR_VAULTABLE : MessageKeys.CAPTURE_ACTION_BAR_NOT_VAULTABLE,
                         MessageContainer.value("owner", ownerName),
-                        MessageContainer.value("vaultable", vaultable),
                         MessageContainer.markup("reason-segment", reasonSegment),
                         MessageContainer.markup("admin", adminTag)));
             }

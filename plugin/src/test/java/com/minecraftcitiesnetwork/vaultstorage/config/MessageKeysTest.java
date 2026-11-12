@@ -8,6 +8,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -59,11 +60,11 @@ class MessageKeysTest {
     }
 
     @Test
-    void theCaptureActionBarKeepsItsWording() {
+    void theCaptureActionBarSaysWhyABlockCannotBeVaulted() {
         MessageContainer messages = TestMessages.shipped();
         String rendered = PlainTextComponentSerializer.plainText().serialize(messages.messageFor(
-                MessageKeys.CAPTURE_ACTION_BAR_CONTAINER,
-                MessageContainer.value("owner", "Alice"), MessageContainer.value("vaultable", "no"),
+                MessageKeys.CAPTURE_ACTION_BAR_NOT_VAULTABLE,
+                MessageContainer.value("owner", "Alice"),
                 MessageContainer.markup("reason-segment", messages.messageFor(
                         MessageKeys.CAPTURE_ACTION_BAR_REASON_SEGMENT_TEMPLATE,
                         MessageContainer.markup("reason", messages.messageFor(MessageKeys.CAPTURE_REASON_NOT_IN_REGION)))),
@@ -71,6 +72,31 @@ class MessageKeysTest {
 
         Assertions.assertEquals(
                 "Owner: Alice | Vaultable: no | Reason: block is not inside any protected region |  ADMIN", rendered);
+    }
+
+    @Test
+    void theCaptureActionBarForAVaultableBlockHasNoReason() {
+        String rendered = PlainTextComponentSerializer.plainText().serialize(TestMessages.shipped().messageFor(
+                MessageKeys.CAPTURE_ACTION_BAR_VAULTABLE,
+                MessageContainer.value("owner", "Alice"), MessageContainer.markup("admin", Component.empty())));
+
+        Assertions.assertEquals("Owner: Alice | Vaultable: yes", rendered);
+    }
+
+    @Test
+    void aVaultsLabelSaysWhatItIsWhereItStoodAndWhatItHolds() {
+        MessageContainer messages = TestMessages.shipped();
+        String rendered = PlainTextComponentSerializer.plainText().serialize(messages.messageFor(
+                MessageKeys.LIST_ITEM_FORMAT,
+                MessageContainer.value("owner", "Alice"), MessageContainer.value("index", "3"),
+                MessageContainer.value("material", "Trapped Chest"), MessageContainer.value("world", "world"),
+                MessageContainer.value("x", "10"), MessageContainer.value("y", "64"), MessageContainer.value("z", "-5"),
+                MessageContainer.markup("items", messages.messageFor(MessageKeys.LIST_ITEMS_MANY,
+                        MessageContainer.value("count", "12"))),
+                MessageContainer.value("date", "2026-11-12")));
+
+        Assertions.assertEquals(
+                "Alice's Vault #3 | Trapped Chest at world 10, 64, -5 | 12 items | 2026-11-12", rendered);
     }
 
     private static List<String> declaredKeys() throws IllegalAccessException {

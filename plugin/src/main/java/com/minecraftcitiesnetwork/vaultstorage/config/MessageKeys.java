@@ -7,6 +7,7 @@ public final class MessageKeys {
     public static final String LOADING_MESSAGE = "loading.message";
 
     public static final String ACTION_TITLE = "action.title";
+    public static final String ACTION_DESCRIPTION = "action.description";
     public static final String ACTION_ACTION_LABEL = "action.action-label";
     public static final String ACTION_OPEN_BTN = "action.open-btn";
     public static final String ACTION_PLACE_BTN = "action.place-btn";
@@ -18,6 +19,10 @@ public final class MessageKeys {
     public static final String ACTION_DELETE_OK = "action.delete-ok";
     public static final String ACTION_DELETE_FAIL = "action.delete-fail";
     public static final String ACTION_DELETE_LOADING = "action.delete-loading";
+    public static final String ACTION_DELETE_CONFIRM_TITLE = "action.delete-confirm-title";
+    public static final String ACTION_DELETE_CONFIRM_BODY = "action.delete-confirm-body";
+    public static final String ACTION_DELETE_CONFIRM_BTN = "action.delete-confirm-btn";
+    public static final String ACTION_DELETE_CANCEL_BTN = "action.delete-cancel-btn";
 
     public static final String LIST_TITLE = "list.title";
     public static final String LIST_SEARCH_LABEL = "list.search-label";
@@ -25,6 +30,9 @@ public final class MessageKeys {
     public static final String LIST_BACK_BTN = "list.back-btn";
     public static final String LIST_NONE_FOUND = "list.none-found";
     public static final String LIST_ITEM_FORMAT = "list.item-format";
+    public static final String LIST_ITEMS_NONE = "list.items-none";
+    public static final String LIST_ITEMS_ONE = "list.items-one";
+    public static final String LIST_ITEMS_MANY = "list.items-many";
     public static final String LIST_PREV_BTN = "list.prev-btn";
     public static final String LIST_NEXT_BTN = "list.next-btn";
     public static final String LIST_PAGE_LABEL = "list.page-label";
@@ -33,7 +41,11 @@ public final class MessageKeys {
     public static final String SCAN_NONE_FOUND = "scan.none-found";
     public static final String SCAN_SERVICES_MISSING = "scan.services-missing";
     public static final String SCAN_RESULTS_HEADER = "scan.results-header";
-    public static final String SCAN_ENTRY_LINE = "scan.entry-line";
+    public static final String SCAN_ENTRY_VAULTABLE = "scan.entry-vaultable";
+    public static final String SCAN_ENTRY_NOT_VAULTABLE = "scan.entry-not-vaultable";
+    public static final String SCAN_OWNER_UNKNOWN = "scan.owner-unknown";
+    public static final String SCAN_KIND_CONTAINER = "scan.kind-container";
+    public static final String SCAN_KIND_BLOCK = "scan.kind-block";
     public static final String SCAN_ENTRY_VAULT_BUTTON = "scan.entry-vault-button";
     public static final String SCAN_ENTRY_TELEPORT_BUTTON = "scan.entry-teleport-button";
     public static final String SCAN_SEARCH_LABEL = "scan.search-label";
@@ -42,12 +54,13 @@ public final class MessageKeys {
     public static final String SCAN_REGION_NOT_FOUND = "scan.region-not-found";
     public static final String SCAN_NOT_ALLOWED = "scan.not-allowed";
     public static final String SCAN_SCAN_COOLDOWN = "scan.scan-cooldown";
-    public static final String SCAN_VAULTABLE_YES = "scan.vaultable-yes";
-    public static final String SCAN_VAULTABLE_NO = "scan.vaultable-no";
     public static final String SCAN_PREV_BTN = "scan.prev-btn";
     public static final String SCAN_NEXT_BTN = "scan.next-btn";
     public static final String SCAN_PAGE_LABEL = "scan.page-label";
-    public static final String SCAN_FILTER_BTN = "scan.filter-btn";
+    public static final String SCAN_FILTER_BTN_BLOCK = "scan.filter-btn-block";
+    public static final String SCAN_FILTER_BTN_NON_CONTAINER = "scan.filter-btn-non-container";
+    public static final String SCAN_FILTER_BTN_CONTAINER = "scan.filter-btn-container";
+    public static final String SCAN_FILTER_BTN_ENTITY = "scan.filter-btn-entity";
 
     public static final String REGIONS_TITLE = "regions.title";
     public static final String REGIONS_HEADER = "regions.header";
@@ -73,9 +86,8 @@ public final class MessageKeys {
     public static final String PLACEMENT_BACK_BTN = "placement.back-btn";
     public static final String PLACEMENT_PLACEMENT_CANCELLED = "placement.placement-cancelled";
     public static final String PLACEMENT_ACTION_BAR_IDLE = "placement.action-bar-idle";
-    public static final String PLACEMENT_ACTION_BAR_TARGET = "placement.action-bar-target";
-    public static final String PLACEMENT_PLACE_YES = "placement.place-yes";
-    public static final String PLACEMENT_PLACE_NO = "placement.place-no";
+    public static final String PLACEMENT_ACTION_BAR_PLACEABLE = "placement.action-bar-placeable";
+    public static final String PLACEMENT_ACTION_BAR_NOT_PLACEABLE = "placement.action-bar-not-placeable";
     public static final String PLACEMENT_NOT_ALLOWED = "placement.not-allowed";
 
     public static final String CAPTURE_CAPTURE_CANCELLED = "capture.capture-cancelled";
@@ -88,7 +100,8 @@ public final class MessageKeys {
     public static final String CAPTURE_CAPTURED_OK = "capture.captured-ok";
     public static final String CAPTURE_NO_BOLT_OWNER = "capture.no-bolt-owner";
     public static final String CAPTURE_ACTION_BAR_IDLE = "capture.action-bar-idle";
-    public static final String CAPTURE_ACTION_BAR_CONTAINER = "capture.action-bar-container";
+    public static final String CAPTURE_ACTION_BAR_VAULTABLE = "capture.action-bar-vaultable";
+    public static final String CAPTURE_ACTION_BAR_NOT_VAULTABLE = "capture.action-bar-not-vaultable";
     public static final String CAPTURE_ACTION_BAR_REASON_SEGMENT_TEMPLATE = "capture.action-bar-reason-segment-template";
     public static final String CAPTURE_REASON_OWNER_SELF_IN_REGION = "capture.reason-owner-self-in-region";
     public static final String CAPTURE_REASON_CONTAINER_OWNER_IN_OVERLAP = "capture.reason-container-owner-in-overlap";
@@ -98,8 +111,6 @@ public final class MessageKeys {
     public static final String CAPTURE_REASON_HANGABLE_REQUIRES_ADMIN = "capture.reason-hangable-requires-admin";
     public static final String CAPTURE_REASON_FALLBACK = "capture.reason-fallback";
     public static final String CAPTURE_ACTION_BAR_UNPROTECTED_OWNER = "capture.action-bar-unprotected-owner";
-    public static final String CAPTURE_ACTION_BAR_VAULTABLE_YES = "capture.action-bar-vaultable-yes";
-    public static final String CAPTURE_ACTION_BAR_VAULTABLE_NO = "capture.action-bar-vaultable-no";
     public static final String CAPTURE_ADMIN_MODE_ENABLED = "capture.admin-mode-enabled";
     public static final String CAPTURE_ACTION_BAR_ADMIN_MODE_TAG = "capture.action-bar-admin-mode-tag";
 
@@ -110,10 +121,6 @@ public final class MessageKeys {
     public static final String SCAN_NO_REGION_HERE = "scan.no-region-here";
     public static final String SCAN_NOT_YOUR_REGION = "scan.not-your-region";
     public static final String SCAN_NO_ENTITIES = "scan.no-entities";
-    public static final String SCAN_FILTER_BLOCK = "scan.filter-block";
-    public static final String SCAN_FILTER_NON_CONTAINER = "scan.filter-non-container";
-    public static final String SCAN_FILTER_CONTAINER = "scan.filter-container";
-    public static final String SCAN_FILTER_ENTITY = "scan.filter-entity";
 
     public static final String PLACEMENT_NO_PERMISSION = "placement.no-permission";
     public static final String PLACEMENT_NONE_LEFT = "placement.none-left";

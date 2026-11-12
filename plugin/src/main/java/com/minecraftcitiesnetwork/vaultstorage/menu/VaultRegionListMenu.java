@@ -184,7 +184,10 @@ public class VaultRegionListMenu extends ChildMenuImp {
         VaultUIContext context = player.hasPermission(Permissions.ADMIN) ? VaultUIContext.admin(player.getUniqueId()) : VaultUIContext.self(player.getUniqueId());
         new LoadingMenu(player, getParentMenu(), Map.of("%player%", player.getName())).open();
         VaultStoragePlugin.getInstance().getScanService().scan(player, regionId, context, results -> {
-            if (results == null) return;
+            if (results == null) {
+                player.closeDialog();
+                return;
+            }
             new VaultScanMenu(player, getParentMenu(), context, regionId, results).open();
         });
     }

@@ -1,5 +1,6 @@
 package com.minecraftcitiesnetwork.vaultstorage.menu;
 
+import java.util.Comparator;
 import com.minecraftcitiesnetwork.vaultstorage.permission.Permissions;
 import com.minecraftcitiesnetwork.vaultstorage.config.MessageKeys;
 import com.minecraftcitiesnetwork.vaultstorage.config.Text;
@@ -191,7 +192,11 @@ public class VaultScanMenu extends ChildMenuImp {
                 if (!checkCooldown(ctx.player())) return;
                 new LoadingMenu(ctx.player(), getParentMenu(), Map.of("%player%", ctx.player().getName())).open();
                 VaultStoragePlugin.getInstance().getScanService().scan(ctx.player(), only.id(), uiContext, blocks -> {
-                    if (blocks == null) return;
+                    if (blocks == null) {
+                        // The scan could not run and has said why; take the loading dialog down.
+                        ctx.player().closeDialog();
+                        return;
+                    }
                     new VaultScanMenu(ctx.player(), getParentMenu(), uiContext, only.id(), blocks, 0).open();
                 });
             });
@@ -227,6 +232,13 @@ public class VaultScanMenu extends ChildMenuImp {
                 return builder.build();
             }
             Map<EntityProtection, Entity> protections = boltService.getProtectedEntities(getPlayer().getWorld(), region.boundingBox());
+            // A fixed order, so that a page shows the same entities each time it is built.
+            List<EntityProtection> ordered = protections.keySet().stream()
+                    .sorted(Comparator.<EntityProtection>comparingInt(p -> protections.get(p).getLocation().getBlockX())
+                            .thenComparingInt(p -> protections.get(p).getLocation().getBlockY())
+                            .thenComparingInt(p -> protections.get(p).getLocation().getBlockZ())
+                            .thenComparing(p -> protections.get(p).getUniqueId()))
+                    .toList();
             int eSize = protections.size();
             if (eSize == 0) {
                 builder.addBody(DialogBody.plainMessage(Text.of(MessageKeys.SCAN_NO_ENTITIES)));
@@ -240,11 +252,11 @@ public class VaultScanMenu extends ChildMenuImp {
 
             Set<UUID> toResolve = new HashSet<>();
             for (int i = eStart; i < eEnd; i++) {
-                EntityProtection protection = protections.keySet().stream().toList().get(i);
+                EntityProtection protection = ordered.get(i);
                 UUID ownerUuid = protection.getOwner();
                 String ownerName;
                 if (ownerUuid == null) {
-                    ownerName = "unknown";
+                    ownerName = Text.plain(MessageKeys.SCAN_OWNER_UNKNOWN);
                 } else {
                     String cached = NAME_CACHE.get(ownerUuid);
                     if (cached == null) {
@@ -258,10 +270,9 @@ public class VaultScanMenu extends ChildMenuImp {
 
                 Location entityLoc = protections.get(protection).getLocation();
 
-                String entityName = protections.get(protection).getType().name();
+                String entityName = VaultLabel.materialName(protections.get(protection).getType().name());
 
                 var decision = VaultCapturePolicy.evaluate(getPlayer(), protections.get(protection));
-                String vaultable = Text.plain(decision.allowed() ? MessageKeys.SCAN_VAULTABLE_YES : MessageKeys.SCAN_VAULTABLE_NO);
 
                 Map<String,String> placeholdersEntry = Map.of(
                         "%x%", String.valueOf(entityLoc.getBlockX()),
@@ -269,10 +280,10 @@ public class VaultScanMenu extends ChildMenuImp {
                         "%z%", String.valueOf(entityLoc.getBlockZ()),
                         "%index%", index,
                         "%kind%", entityName,
-                        "%owner%", ownerName,
-                        "%vaultable%", vaultable
+                        "%owner%", ownerName
                 );
-                builder.addBody(DialogBody.plainMessage(Text.of(MessageKeys.SCAN_ENTRY_LINE, placeholdersEntry)));
+                builder.addBody(DialogBody.plainMessage(Text.of(decision.allowed()
+                        ? MessageKeys.SCAN_ENTRY_VAULTABLE : MessageKeys.SCAN_ENTRY_NOT_VAULTABLE, placeholdersEntry)));
                 // Remove protection button for entity (calls BoltService#removeProtection with the EntityProtection instance)
                 builder.sizableButton(Text.of(MessageKeys.SCAN_ENTRY_VAULT_BUTTON, placeholdersEntry), ctx -> {
                     var check = VaultCapturePolicy.evaluate(ctx.player(), protections.get(protection));
@@ -317,7 +328,7 @@ public class VaultScanMenu extends ChildMenuImp {
             UUID ownerUuid = entry.owner();
             String ownerName;
             if (ownerUuid == null) {
-                ownerName = "unknown";
+                ownerName = Text.plain(MessageKeys.SCAN_OWNER_UNKNOWN);
             } else {
                 String cached = NAME_CACHE.get(ownerUuid);
                 if (cached == null) {
@@ -327,16 +338,15 @@ public class VaultScanMenu extends ChildMenuImp {
                     ownerName = cached;
                 }
             }
-            String kind = isContainerMaterial(entry.type()) ? "container" : "block";
-            String vaultable = Text.plain(MessageKeys.SCAN_VAULTABLE_YES);
+            String kind = Text.plain(isContainerMaterial(entry.type())
+                    ? MessageKeys.SCAN_KIND_CONTAINER : MessageKeys.SCAN_KIND_BLOCK);
             Map<String,String> placeholdersEntry = Map.of(
                     "%x%", String.valueOf(entryBlock.getX()), "%y%", String.valueOf(entryBlock.getY()), "%z%", String.valueOf(entryBlock.getZ()),
                     "%owner%", ownerName,
                     "%kind%", kind,
-                    "%index%", String.valueOf(i + 1),
-                    "%vaultable%", vaultable
+                    "%index%", String.valueOf(i + 1)
             );
-            builder.addBody(DialogBody.plainMessage(Text.of(MessageKeys.SCAN_ENTRY_LINE, placeholdersEntry)));
+            builder.addBody(DialogBody.plainMessage(Text.of(MessageKeys.SCAN_ENTRY_VAULTABLE, placeholdersEntry)));
             // Vault button for this entry
             builder.button(Text.of(MessageKeys.SCAN_ENTRY_VAULT_BUTTON, placeholdersEntry), ctx -> {
                 // Show a loading menu while we process DB work
@@ -385,14 +395,13 @@ public class VaultScanMenu extends ChildMenuImp {
     }
 
     private void addFilterButton(AutoDialog.Builder builder, int currentPage) {
-        String modeLabel = switch (filterMode) {
-            case BLOCK -> Text.plain(MessageKeys.SCAN_FILTER_BLOCK);
-            case NON_CONTAINER -> Text.plain(MessageKeys.SCAN_FILTER_NON_CONTAINER);
-            case CONTAINER -> Text.plain(MessageKeys.SCAN_FILTER_CONTAINER);
-            case ENTITY -> Text.plain(MessageKeys.SCAN_FILTER_ENTITY);
+        String label = switch (filterMode) {
+            case BLOCK -> MessageKeys.SCAN_FILTER_BTN_BLOCK;
+            case NON_CONTAINER -> MessageKeys.SCAN_FILTER_BTN_NON_CONTAINER;
+            case CONTAINER -> MessageKeys.SCAN_FILTER_BTN_CONTAINER;
+            case ENTITY -> MessageKeys.SCAN_FILTER_BTN_ENTITY;
         };
-        Map<String,String> phFilter = Map.of("%mode%", modeLabel);
-        builder.sizableButton(Text.of(MessageKeys.SCAN_FILTER_BTN, phFilter), ctx -> {
+        builder.sizableButton(Text.of(label), ctx -> {
             FilterMode next = filterMode.next();
             new VaultScanMenu(ctx.player(), getParentMenu(), uiContext, regionId, entries, currentPage, next).open();
         }, 100);

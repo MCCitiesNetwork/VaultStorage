@@ -52,6 +52,8 @@ public class VaultRegionScanner {
         BoltService boltService = VaultStoragePlugin.getInstance().getBoltService();
 
         if (worldGuardService == null || boltService == null) {
+            // The caller put up a loading dialog; nothing will replace it.
+            player.closeDialog();
             player.sendMessage(Text.of(MessageKeys.SCAN_SERVICES_MISSING));
             callback.accept(null);
             return;
@@ -61,6 +63,7 @@ public class VaultRegionScanner {
         var regions = worldGuardService.getRegionsIn(world);
         var target = regions.stream().filter(r -> r.id().equalsIgnoreCase(regionId)).findFirst();
         if (target.isEmpty()) {
+            player.closeDialog();
             player.sendMessage(Text.of(MessageKeys.SCAN_REGION_NOT_FOUND, Map.of("%region%", regionId)));
             callback.accept(null);
             return;

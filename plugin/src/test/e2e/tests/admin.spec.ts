@@ -1,7 +1,7 @@
 import { expect, test } from '@plugwright/runner';
 import { query, seedVaults } from './database.js';
 import { Dialogs } from './dialogs.js';
-import { adminVaultActions, openWindow } from './vaults.js';
+import { adminVaultActions, dialogTitled, openWindow } from './vaults.js';
 
 // What only an admin can do to someone else's vault.
 
@@ -12,7 +12,21 @@ test('an admin deletes a vault from its action menu', async ({ player, createPla
     seedVaults(ownerUuid, 1);
     const dialogs = new Dialogs(player);
 
-    (await adminVaultActions(player, dialogs, owner.username)).click('Delete Vault');
+    const actions = await adminVaultActions(player, dialogs, owner.username);
+    // The action menu says which vault it is: what it was and where it stood.
+    expect(actions.body).toContain(`${owner.username}'s Vault #1`);
+    expect(actions.body).toContain('Chest at');
+
+    // Delete asks first, and Cancel keeps the vault.
+    actions.click('Delete Vault');
+    const confirm = await dialogTitled(dialogs, 'Delete this vault?');
+    expect(confirm.body).toContain('cannot be undone');
+    confirm.click('Cancel');
+    const again = await dialogTitled(dialogs, 'Vault Action');
+    expect(query(`SELECT COUNT(*) FROM Vault WHERE ownerUuid = '${ownerUuid}'`)).toEqual(['1']);
+
+    again.click('Delete Vault');
+    (await dialogTitled(dialogs, 'Delete this vault?')).click('Delete');
     await expect(player).toHaveReceivedMessage('Vault deleted.');
     expect(query(`SELECT COUNT(*) FROM Vault WHERE ownerUuid = '${ownerUuid}'`)).toEqual(['0']);
 });
