@@ -176,6 +176,7 @@ public final class VaultStoragePlugin extends JavaPlugin {
         LoadingMenu.ensureConfig();
 
         getServer().getPluginManager().registerEvents(new SessionQuitListener(this.sessionManager), this);
+        getServer().getPluginManager().registerEvents(this.inventoryService, this);
 
         VaultCommand vaultCommand = new VaultCommand();
         getLifecycleManager().registerEventHandler(LifecycleEvents.COMMANDS, event ->
@@ -261,6 +262,10 @@ public final class VaultStoragePlugin extends JavaPlugin {
     public void onDisable() {
         if (this.modules != null) {
             this.modules.stop();
+        }
+        // Before the pool goes: an edit in progress is written back now or not at all.
+        if (this.inventoryService != null && this.repository != null) {
+            this.inventoryService.saveOpenViews();
         }
         if (this.databaseExecutor != null) {
             this.databaseExecutor.shutdownNow();

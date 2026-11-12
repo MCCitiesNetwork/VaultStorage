@@ -1,12 +1,21 @@
 package com.minecraftcitiesnetwork.vaultstorage.vault;
 
 import com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin;
-import com.minecraftcitiesnetwork.vaultstorage.database.legacy.VaultService;
-import com.minecraftcitiesnetwork.vaultstorage.menu.ParentMenu;
+import com.minecraftcitiesnetwork.vaultstorage.database.ClaimResult;
+import com.minecraftcitiesnetwork.vaultstorage.database.FindResult;
+import com.minecraftcitiesnetwork.vaultstorage.database.StoredVault;
+import com.minecraftcitiesnetwork.vaultstorage.database.VaultItem;
+import com.minecraftcitiesnetwork.vaultstorage.database.VaultItemEntity;
 import com.minecraftcitiesnetwork.vaultstorage.menu.LoadingMenu;
-import com.minecraftcitiesnetwork.vaultstorage.vault.VaultAction;
-import com.minecraftcitiesnetwork.vaultstorage.vault.ItemSerialization;
-import com.minecraftcitiesnetwork.vaultstorage.session.DynamicListener;
+import com.minecraftcitiesnetwork.vaultstorage.menu.ParentMenu;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
+import java.util.logging.Level;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
@@ -18,176 +27,213 @@ import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.scheduler.BukkitRunnable;
-
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-import com.minecraftcitiesnetwork.vaultstorage.database.legacy.VaultItemEntity;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 /**
- * Service to open a virtual inventory for a Vault with a specific action mode.
- * Uses VaultService to load/persist items asynchronously.
+ * Shows a vault as an inventory, to view it, copy from it or edit it.
+ *
+ * <p>One listener serves every open vault; it recognises them by their {@link VaultView} holder.
+ * Editing claims the vault for as long as it is open, so two people cannot edit it, or edit it
+ * while it is being placed, and saves the whole contents in one transaction on close.
  */
-public class VaultInventoryService {
+public class VaultInventoryService implements Listener {
+
+    private static final int MAX_SIZE = 54;
+    private static final int ROW = 9;
 
     /** Opens a virtual inventory for the given vault id and action. */
-    public void openVirtualInventory(Player player, UUID vaultId, VaultAction action) {
+    public void openVirtualInventory(@NotNull Player player, @NotNull UUID vaultId, @NotNull VaultAction action) {
         openVirtualInventory(player, vaultId, action, null, null);
     }
 
-    /** Opens a virtual inventory with a callback to run (on main thread) after it closes. */
-    public void openVirtualInventory(Player player, UUID vaultId, VaultAction action, Runnable reopenCallback) {
-        openVirtualInventory(player, vaultId, action, (ParentMenu) null, reopenCallback);
+    /**
+     * Opens the vault for the player. With a parent menu, a loading menu is shown meanwhile.
+     * {@code reopenCallback} runs on the main thread after the inventory closes.
+     */
+    public void openVirtualInventory(@NotNull Player player, @NotNull UUID vaultId, @NotNull VaultAction action,
+                                     @Nullable ParentMenu parentMenu, @Nullable Runnable reopenCallback) {
+        VaultStoragePlugin plugin = VaultStoragePlugin.getInstance();
+        Executor mainThread = plugin.getServer().getScheduler().getMainThreadExecutor(plugin);
+        if (parentMenu != null) {
+            Map<String, String> placeholders = Map.of("%player%", player.getName(), "%vault%", String.valueOf(vaultId));
+            mainThread.execute(() -> new LoadingMenu(player, parentMenu, placeholders).open());
+        }
+        boolean editing = VaultViewRules.savesOnClose(action);
+        CompletableFuture
+                .supplyAsync(() -> load(plugin, vaultId, editing), plugin.databaseExecutor())
+                .thenCompose(loaded -> {
+                    if (loaded.vault().isEmpty()) {
+                        return CompletableFuture.completedFuture(Map.entry(loaded, ""));
+                    }
+                    UUID owner = loaded.vault().get().vault().ownerUuid();
+                    return plugin.names().nameOf(owner).thenApply(name ->
+                            Map.entry(loaded, name.filter(found -> !found.isBlank()).orElse(owner.toString())));
+                })
+                .thenAcceptAsync(entry -> {
+                    Loaded loaded = entry.getKey();
+                    if (loaded.vault().isEmpty()) {
+                        player.sendMessage(loaded.refusal());
+                        return;
+                    }
+                    if (!player.isOnline()) {
+                        releaseIfEditing(plugin, vaultId, editing);
+                        return;
+                    }
+                    show(player, loaded.vault().get(), entry.getValue(), action, reopenCallback);
+                }, mainThread)
+                .exceptionally(failure -> {
+                    plugin.getLogger().log(Level.SEVERE, "Could not open vault " + vaultId + ".", failure);
+                    releaseIfEditing(plugin, vaultId, editing);
+                    player.sendMessage("The vault could not be opened.");
+                    return null;
+                });
+    }
+
+    /** A loaded vault, or the reason there is none to show. */
+    private record Loaded(@NotNull Optional<StoredVault> vault, @NotNull String refusal) {
+    }
+
+    private static @NotNull Loaded load(@NotNull VaultStoragePlugin plugin, @NotNull UUID vaultId, boolean editing) {
+        if (editing) {
+            return switch (plugin.repository().claim(vaultId)) {
+                case ClaimResult.Claimed claimed -> new Loaded(Optional.of(claimed.vault()), "");
+                case ClaimResult.AlreadyClaimed held -> new Loaded(Optional.empty(), "Someone else is using that vault.");
+                case ClaimResult.NoSuchVault missing -> new Loaded(Optional.empty(), "Vault not found.");
+            };
+        }
+        return switch (plugin.repository().find(vaultId)) {
+            case FindResult.Found found -> new Loaded(Optional.of(found.vault()), "");
+            case FindResult.NoSuchVault missing -> new Loaded(Optional.empty(), "Vault not found.");
+        };
+    }
+
+    private static void releaseIfEditing(@NotNull VaultStoragePlugin plugin, @NotNull UUID vaultId, boolean editing) {
+        if (!editing) {
+            return;
+        }
+        CompletableFuture.runAsync(() -> plugin.repository().release(vaultId), plugin.databaseExecutor())
+                .exceptionally(failure -> {
+                    plugin.getLogger().log(Level.SEVERE, "Could not release vault " + vaultId + ".", failure);
+                    return null;
+                });
+    }
+
+    private static void show(@NotNull Player player, @NotNull StoredVault stored, @NotNull String ownerName,
+                             @NotNull VaultAction action, @Nullable Runnable reopenCallback) {
+        int highestSlot = stored.items().stream().mapToInt(VaultItemEntity::slot).max().orElse(-1);
+        int size = Math.min(MAX_SIZE, Math.max(ROW, ((highestSlot + 1 + ROW - 1) / ROW) * ROW));
+        Component title = Component.text("Owner: ", NamedTextColor.WHITE)
+                .append(Component.text(ownerName, NamedTextColor.GOLD))
+                .append(Component.text(" - " + action.name(), NamedTextColor.GRAY));
+        VaultView view = new VaultView(stored.vault().uuid(), action, reopenCallback);
+        Inventory inventory = Bukkit.createInventory(view, size, title);
+        view.inventory(inventory);
+        for (VaultItemEntity row : stored.items()) {
+            if (row.slot() >= 0 && row.slot() < size) {
+                inventory.setItem(row.slot(), ItemSerialization.fromBytes(row.item()));
+            }
+        }
+        player.openInventory(inventory);
+    }
+
+    @EventHandler
+    public void onClick(@NotNull InventoryClickEvent event) {
+        if (!(event.getView().getTopInventory().getHolder() instanceof VaultView view)) {
+            return;
+        }
+        boolean clickedVault = event.getClickedInventory() == event.getView().getTopInventory();
+        ItemStack current = event.getCurrentItem();
+        if (VaultViewRules.cancelsClick(view.action())) {
+            event.setCancelled(true);
+        }
+        if (VaultViewRules.givesCopy(view.action(), clickedVault, current != null && !current.getType().isAir())
+                && event.getWhoClicked() instanceof Player player) {
+            for (ItemStack leftover : player.getInventory().addItem(current.clone()).values()) {
+                player.getWorld().dropItemNaturally(player.getLocation(), leftover);
+            }
+        }
+    }
+
+    @EventHandler
+    public void onDrag(@NotNull InventoryDragEvent event) {
+        if (!(event.getView().getTopInventory().getHolder() instanceof VaultView view)) {
+            return;
+        }
+        int vaultSlots = event.getView().getTopInventory().getSize();
+        boolean touchesVault = event.getRawSlots().stream().anyMatch(slot -> slot < vaultSlots);
+        if (VaultViewRules.cancelsDrag(view.action(), touchesVault)) {
+            event.setCancelled(true);
+        }
+    }
+
+    @EventHandler
+    public void onClose(@NotNull InventoryCloseEvent event) {
+        if (!(event.getInventory().getHolder() instanceof VaultView view)) {
+            return;
+        }
+        VaultStoragePlugin plugin = VaultStoragePlugin.getInstance();
+        Runnable afterClose = view.afterClose();
+        Executor mainThread = plugin.getServer().getScheduler().getMainThreadExecutor(plugin);
+        if (!VaultViewRules.savesOnClose(view.action())) {
+            if (afterClose != null) {
+                mainThread.execute(afterClose);
+            }
+            return;
+        }
+        List<VaultItem> items = itemsOf(event.getInventory());
+        CompletableFuture.runAsync(() -> saveAndRelease(plugin, view.vault(), items), plugin.databaseExecutor())
+                .exceptionally(failure -> {
+                    plugin.getLogger().log(Level.SEVERE, "Vault " + view.vault() + " could not be saved after "
+                            + event.getPlayer().getName() + " edited it. It keeps its previous contents; what they"
+                            + " put in is lost and what they took out exists twice.", failure);
+                    event.getPlayer().sendMessage("The vault could not be saved. Tell staff.");
+                    return null;
+                })
+                .thenRunAsync(() -> {
+                    if (afterClose != null) {
+                        afterClose.run();
+                    }
+                }, mainThread);
+    }
+
+    private static @NotNull List<VaultItem> itemsOf(@NotNull Inventory inventory) {
+        ItemStack[] contents = inventory.getContents();
+        List<VaultItem> items = new ArrayList<>();
+        for (int slot = 0; slot < contents.length; slot++) {
+            ItemStack stack = contents[slot];
+            if (stack != null && !stack.getType().isAir() && stack.getAmount() > 0) {
+                items.add(new VaultItem(slot, stack.getAmount(), ItemSerialization.toBytes(stack)));
+            }
+        }
+        return items;
+    }
+
+    /** Saves, then gives the vault back even if the save failed, so it is not held forever. */
+    private static void saveAndRelease(@NotNull VaultStoragePlugin plugin, @NotNull UUID vault, @NotNull List<VaultItem> items) {
+        try {
+            plugin.repository().replaceItems(vault, items);
+        } finally {
+            plugin.repository().release(vault);
+        }
     }
 
     /**
-     * Opens a virtual inventory for the given vault id and action.
-     * Performs asynchronous owner username resolution to avoid blocking the main thread.
-     * If a parent menu is provided, a LoadingMenu child will be shown while resolving.
+     * Saves every vault open for editing, on the calling thread. For shutdown only: the database
+     * pool is about to close, so the save cannot be handed to it.
      */
-    public void openVirtualInventory(Player player, UUID vaultId, VaultAction action, ParentMenu parentMenu, Runnable reopenCallback) {
-        var plugin = VaultStoragePlugin.getInstance();
-        if (parentMenu != null) {
-            java.util.Map<String,String> ph = java.util.Map.of(
-                    "%player%", player.getName(),
-                    "%vault%", String.valueOf(vaultId)
-            );
-            Bukkit.getScheduler().runTask(plugin, () -> new LoadingMenu(player, parentMenu, ph).open());
+    public void saveOpenViews() {
+        VaultStoragePlugin plugin = VaultStoragePlugin.getInstance();
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            Inventory open = player.getOpenInventory().getTopInventory();
+            if (!(open.getHolder() instanceof VaultView view) || !VaultViewRules.savesOnClose(view.action())) {
+                continue;
+            }
+            try {
+                saveAndRelease(plugin, view.vault(), itemsOf(open));
+            } catch (RuntimeException ex) {
+                plugin.getLogger().log(Level.SEVERE, "Vault " + view.vault() + " could not be saved at shutdown.", ex);
+            }
         }
-        new BukkitRunnable() {
-            @Override public void run() {
-                VaultService vaultService = plugin.getVaultService();
-                var entityOpt = vaultService.get(vaultId);
-                if (entityOpt.isEmpty()) {
-                    new BukkitRunnable() {
-                        @Override public void run() {
-                            player.sendMessage("Vault not found.");
-                        }
-                    }.runTask(plugin);
-                    return;
-                }
-                UUID ownerUuid = vaultService.getOwner(vaultId);
-                var items = vaultService.listItems(vaultId);
-                int maxSlot = items.stream().mapToInt(it -> it.slot).max().orElse(-1);
-                int invSize = Math.min(54, Math.max(9, ((Math.max(maxSlot + 1, 9) + 8) / 9) * 9));
-                ItemStack[] contents = new ItemStack[invSize];
-                Arrays.fill(contents, null);
-                for (var it : items) {
-                    if (it.slot >= 0 && it.slot < invSize) contents[it.slot] = ItemSerialization.fromBytes(it.item);
-                }
-
-                // Resolve owner name asynchronously using CompletableFuture, then open inventory on main thread
-                if (ownerUuid != null) {
-                    plugin.names().nameOf(ownerUuid).thenAccept(resolvedName -> {
-                        String ownerDisplay = resolvedName.filter(name -> !name.isBlank())
-                                .orElse(ownerUuid.toString());
-                        Bukkit.getScheduler().runTask(plugin, () ->
-                                openOnMain(player, vaultId, ownerDisplay, action, contents, invSize, reopenCallback));
-                    });
-                } else {
-                    String ownerDisplay = "Unknown";
-                    Bukkit.getScheduler().runTask(plugin, () ->
-                            openOnMain(player, vaultId, ownerDisplay, action, contents, invSize, reopenCallback));
-                }
-            }
-        }.runTaskAsynchronously(plugin);
-    }
-
-    private void openOnMain(Player player, UUID vaultId, String ownerDisplay, VaultAction action, ItemStack[] contents, int size, Runnable reopenCallback) {
-        Component title = Component.text("Owner: ", NamedTextColor.WHITE)
-                .append(Component.text(ownerDisplay, NamedTextColor.GOLD))
-                .append(Component.text(" - " + action.name(), NamedTextColor.GRAY));
-
-        Inventory inv = Bukkit.createInventory(null, size, title);
-        for (int i = 0; i < Math.min(size, contents.length); i++) {
-            ItemStack it = contents[i];
-            if (it != null) inv.setItem(i, it.clone());
-        }
-
-        // Use a standalone DynamicListener to avoid overwriting the session's listener
-        // (which may be in use by capture/placement modes).
-        DynamicListener dyn = new DynamicListener();
-
-        Listener listener = new Listener() {
-            @EventHandler
-            public void onClick(InventoryClickEvent event) {
-                if (!event.getWhoClicked().getUniqueId().equals(player.getUniqueId())) return;
-                if (event.getView().getTopInventory() != inv) return;
-                switch (action) {
-                    case VIEW -> event.setCancelled(true);
-                    case COPY -> {
-                        if (event.getClickedInventory() == inv) {
-                            ItemStack current = event.getCurrentItem();
-                            if (current != null) {
-                                event.setCancelled(true);
-                                ItemStack copy = current.clone();
-                                Map<Integer, ItemStack> notFit = player.getInventory().addItem(copy);
-                                if (!notFit.isEmpty()) {
-                                    for (ItemStack leftover : notFit.values()) {
-                                        if (leftover != null) player.getWorld().dropItemNaturally(player.getLocation(), leftover);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    case EDIT -> {
-                        // allow edits
-                    }
-                }
-            }
-            @EventHandler
-            public void onDrag(InventoryDragEvent event) {
-                if (!event.getWhoClicked().getUniqueId().equals(player.getUniqueId())) return;
-                if (event.getView().getTopInventory() != inv) return;
-                if (action == VaultAction.VIEW) {
-                    event.setCancelled(true);
-                } else if (action == VaultAction.COPY) {
-                    boolean affectsTop = event.getRawSlots().stream().anyMatch(slot -> slot < inv.getSize());
-                    if (affectsTop) event.setCancelled(true);
-                }
-            }
-            @EventHandler
-            public void onClose(InventoryCloseEvent event) {
-                if (!event.getPlayer().getUniqueId().equals(player.getUniqueId())) return;
-                if (event.getInventory() != inv) return;
-                if (action == VaultAction.EDIT) {
-                    ItemStack[] newContents = inv.getContents();
-                    new BukkitRunnable() {
-                        @Override public void run() {
-                            saveToDb(vaultId, newContents);
-                        }
-                    }.runTaskAsynchronously(VaultStoragePlugin.getInstance());
-                }
-                dyn.close();  // Use close() to fully clean up the standalone listener
-                if (reopenCallback != null) {
-                    Bukkit.getScheduler().runTask(VaultStoragePlugin.getInstance(), reopenCallback);
-                }
-            }
-        };
-
-        dyn.setListener(listener);
-        dyn.start();
-        player.openInventory(inv);
-    }
-
-    private void saveToDb(UUID vaultId, ItemStack[] contents) {
-        VaultService vs = VaultStoragePlugin.getInstance().getVaultService();
-        // Batch re-insert items to minimize DB round-trips
-        List<VaultItemEntity> batch = new ArrayList<>();
-        for (int i = 0; i < contents.length; i++) {
-            ItemStack it = contents[i];
-            if (it == null) continue;
-            VaultItemEntity vie = new VaultItemEntity();
-            vie.vaultUuid = vaultId;
-            vie.slot = i;
-            vie.amount = it.getAmount();
-            vie.item = ItemSerialization.toBytes(it);
-            batch.add(vie);
-        }
-        // One transaction: the old contents go and the new ones arrive together.
-        vs.replaceItems(vaultId, batch);
     }
 }
