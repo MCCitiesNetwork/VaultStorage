@@ -17,7 +17,6 @@ import com.minecraftcitiesnetwork.vaultstorage.database.WorldEntity;
 import com.minecraftcitiesnetwork.vaultstorage.autovault.RealtyOccupantChangeListener;
 import com.minecraftcitiesnetwork.vaultstorage.autovault.AutoVaultService;
 import com.minecraftcitiesnetwork.vaultstorage.bolt.BoltServiceImp;
-import com.minecraftcitiesnetwork.vaultstorage.chestshop.adapter.ChestShopServiceImp;
 import com.minecraftcitiesnetwork.vaultstorage.capture.VaultCaptureService;
 import com.minecraftcitiesnetwork.vaultstorage.vault.VaultInventoryService;
 import com.minecraftcitiesnetwork.vaultstorage.placement.VaultPlacementService;
@@ -145,11 +144,6 @@ public final class VaultStoragePlugin extends JavaPlugin {
             this.essentials = ess;
         }
 
-        // ChestShop soft dependency: real impl when present, no-op otherwise.
-        var chestShop = getServer().getPluginManager().getPlugin("ChestShop");
-        if (chestShop != null) {
-            this.integrations.chestShop(new ChestShopServiceImp());
-        }
 
         // Domain services
         this.captureService = new VaultCaptureService();
