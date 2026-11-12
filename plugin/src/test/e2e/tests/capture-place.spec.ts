@@ -1,34 +1,11 @@
-import { expect, sleep, test, type PlayerWrapper } from '@plugwright/runner';
-import { Dialogs, type Dialog } from './dialogs.js';
+import { expect, test } from '@plugwright/runner';
+import { Dialogs } from './dialogs.js';
+import { dialogTitled, lockedChest } from './vaults.js';
 import { startDatabase, stopDatabase } from './database.js';
 import { expectBlock, expectItem, FLOOR, freshSpot, GROUND, rightClick, standAt } from './world.js';
 
 // Captures a locked chest into a vault and places it back, the way players do it: commands,
 // clicks on blocks, and the dialog menus. Wording is the plugin's default text.
-
-/** Reads dialogs until one has this title; the loading dialog comes in between. */
-async function dialogTitled(dialogs: Dialogs, title: string): Promise<Dialog> {
-    for (let attempt = 0; attempt < 5; attempt++) {
-        const dialog = await dialogs.next();
-        if (dialog.title === title) {
-            return dialog;
-        }
-    }
-    throw new Error(`No dialog titled "${title}" was shown`);
-}
-
-/** A chest at the spot with a diamond stack in slot 0 and stone in slot 13, locked by its owner. */
-async function lockedChest(server: any, owner: PlayerWrapper, x: number, z: number): Promise<void> {
-    await server.execute(`setblock ${x} ${FLOOR} ${z} minecraft:chest`);
-    await server.execute(`minecraft:item replace block ${x} ${FLOOR} ${z} container.0 with minecraft:diamond 3`);
-    await server.execute(`minecraft:item replace block ${x} ${FLOOR} ${z} container.13 with minecraft:stone 5`);
-    // Bolt answers on the action bar, which a bot's chat log does not hold, so nothing is asserted
-    // here. A chest that is not locked cannot be captured, so the capture below proves the lock.
-    owner.chat('/lock');
-    await sleep(500);
-    await rightClick(owner, x, FLOOR, z);
-    await sleep(500);
-}
 
 test('a locked chest is captured into a vault and placed back with its items in their slots',
     { requires: { consoleOutput: 'full' } }, async ({ player, createPlayer, server }) => {

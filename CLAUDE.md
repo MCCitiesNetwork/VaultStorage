@@ -136,9 +136,13 @@ part of `build`. It needs Docker and Node.
 
 Covered live: `/vault` opening and being refused; capturing a locked chest, finding it in the
 menus and placing it back with items in their slots; a capture during a database outage leaving
-the chest untouched and working again afterwards. Everything else since step 1 is covered by unit
-and database tests only: the vault inventory, sweeps, scans, hangings, ChestShop, GriefPrevention
-placement, and a non-operator's region rules.
+the chest untouched and working again afterwards; viewing a vault without being able to take from
+it; editing a vault and the change being saved; a second editor being refused until the first
+closes.
+
+Not covered live: sweeps, scans, hangings, double chests, ChestShop, GriefPrevention placement,
+and a non-operator's region rules (every bot so far is an operator, which bypasses them). Shared
+steps are in `tests/vaults.ts`.
 
 ## Rules for the capture and placement code
 
