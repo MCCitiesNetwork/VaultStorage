@@ -261,7 +261,7 @@ public final class VaultCapturePolicy {
 
     /**
      * Evaluate whether the actor may remove a ChestShop sign on the given container.
-     * Same region participation rule as {@link #evaluate(Player, Block)}, but does not require a Bolt owner.
+     * Only the override permission allows it.
      */
     public static Decision evaluateChestShopSignRemoval(Player actor, Block containerBlock) {
         BoltService bolt = VaultStoragePlugin.getInstance().getBoltService();
@@ -279,8 +279,9 @@ public final class VaultCapturePolicy {
         boolean actorIsContainerOwner = originalOwner != null && originalOwner.equals(actor.getUniqueId());
         RegionParticipation participation = computeRegionParticipation(actor, containerBlock, originalOwner);
 
-        // Same region gate as capture, but no Bolt-owner requirement.
-        boolean allowed = (participation.inAnyRegion() && participation.actorParticipantAny()) || hasOverride;
+        // Region membership is not enough: the plugin cannot tell whose shop it is, and a member
+        // could otherwise remove the region owner's or another member's shop sign.
+        boolean allowed = hasOverride;
 
         Decision.Reason reason = allowed
                 ? Decision.Reason.ALLOWED

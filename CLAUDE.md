@@ -119,8 +119,10 @@ Step 3 so far, on `refactor/capture-placement` (plan: `docs/superpowers/plans/20
   admin delete works; `database.legacy` is deleted and every caller uses `VaultRepository`.
 - Also done: scans load chunks off the main thread, always answer, and correct their cache
   after a capture instead of rescanning.
-- Not done: shop owners from Treasury and the ChestShop sign rule; stored sweeps and one
-  notification per sweep.
+- Also done: a shop sign is removed on region rights no longer, only with the override; a
+  lock owner's broken id aborts the capture instead of giving the vault to the capturer.
+- Not done: shop owners from Treasury's registry (see the step 3 spec's known limitations);
+  stored sweeps and one notification per sweep.
 
 ## Live-server tests
 

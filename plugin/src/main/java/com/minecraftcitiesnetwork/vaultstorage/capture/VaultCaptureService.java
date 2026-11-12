@@ -90,8 +90,15 @@ public class VaultCaptureService {
             return CompletableFuture.completedFuture(candidateUUID);
         }
 
-        // UUID is invalid (null or all-zeros), attempt to resolve by player name
         var plugin = VaultStoragePlugin.getInstance();
+        if (VaultOwners.choose(candidateUUID, actor.getUniqueId()) == VaultOwners.Choice.ABORT) {
+            plugin.getLogger().warning("[VaultCaptureService] The lock owner's id (" + candidateUUID
+                    + ") is not usable. Nothing was captured for " + actor.getName()
+                    + "; the vault will not be given to whoever clicked.");
+            return CompletableFuture.completedFuture(null);
+        }
+
+        // The actor's own id is unusable (a Bedrock conversion error): look it up by their name.
         var resolver = new UniqueIdentifierResolver(plugin.names());
 
         VaultStoragePlugin.getInstance().getLogger().warning(
@@ -481,7 +488,8 @@ public class VaultCaptureService {
                 VaultCapturePolicy.Decision decision = VaultCapturePolicy.evaluate(actor, captureBlock);
                 UUID originalOwner = decision.containerOwner();
                 if (!decision.allowed()) {
-                    // A shop sign on an empty, unprotected container can still be removed on region rights alone.
+                    // A shop sign on an empty container that cannot be captured is removed only with the
+                    // override permission. Region membership alone let any member remove anyone's shop sign.
                     if (chestShop.isAvailable() && isContainerEmpty(captureBlock)) {
                         List<Block> shopSigns = chestShop.findShopSigns(captureBlock);
                         if (!shopSigns.isEmpty()
