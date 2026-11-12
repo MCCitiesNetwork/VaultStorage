@@ -7,8 +7,6 @@ import com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin;
 import com.minecraftcitiesnetwork.vaultstorage.capture.PlayerVaultEvent;
 import com.minecraftcitiesnetwork.vaultstorage.bolt.BoltService;
 import com.minecraftcitiesnetwork.vaultstorage.chestshop.ChestShopService;
-import com.minecraftcitiesnetwork.vaultstorage.vault.VaultDtoImp;
-import com.minecraftcitiesnetwork.vaultstorage.vault.VaultImp;
 import com.minecraftcitiesnetwork.vaultstorage.vault.ItemSerialization;
 import com.minecraftcitiesnetwork.vaultstorage.names.UniqueIdentifierResolver;
 import net.kyori.adventure.text.Component;
@@ -40,12 +38,9 @@ import org.bukkit.block.data.type.WallSign;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -56,7 +51,6 @@ import com.minecraftcitiesnetwork.vaultstorage.database.NewVault;
 import com.minecraftcitiesnetwork.vaultstorage.database.VaultItem;
 import org.bukkit.Chunk;
 import java.util.function.Consumer;
-import java.util.stream.Collectors;
 import com.minecraftcitiesnetwork.vaultstorage.capture.VaultCapturePolicy;
 import com.minecraftcitiesnetwork.vaultstorage.permission.Permissions;
 import com.minecraftcitiesnetwork.vaultstorage.session.VaultSessionManager;
@@ -146,35 +140,7 @@ public class VaultCaptureService {
         return true;
     }
 
-    /**
-     * Describes the container as the vault it would become: its items, material, location and
-     * block data. Reads only; the block is removed by {@link #storeThenRemove} once the vault is
-     * stored. Must be called on the main thread.
-     */
-    public VaultImp describeAsVault(Player actor, Block block) {
-        return describeAsVault(actor.getUniqueId(), block);
-    }
 
-    /** Player-free variant of {@link #describeAsVault(Player, Block)}. */
-    public VaultImp describeAsVault(UUID vaultOwnerUuid, Block block) {
-        if (!(block.getState() instanceof Container container)) {
-            throw new IllegalArgumentException("Target block is not a container.");
-        }
-        Inventory captureInv = (container instanceof Chest chest) ? chest.getBlockInventory() : container.getInventory();
-        List<ItemStack> stacks = Arrays.stream(captureInv.getContents())
-                .filter(Objects::nonNull)
-                .filter(is -> is.getType() != Material.AIR && is.getAmount() > 0)
-                .collect(Collectors.toList());
-
-        // Reads only. The block is removed by the capture pipeline, after the vault is stored.
-        Material material = block.getType();
-        var location = block.getLocation();
-        Instant when = Instant.now();
-        String blockDataString = block.getBlockData().getAsString();
-
-        UUID vaultId = UUID.randomUUID();
-        return new VaultImp(vaultOwnerUuid, vaultId, stacks, material, location, when, blockDataString);
-    }
 
     /**
      * Immutable outcome produced by {@link #captureWithDoubleChestSupport(Player, Block, UUID)}.
@@ -184,7 +150,7 @@ public class VaultCaptureService {
      * <li>{@code protectionRemoved}: true if Bolt protection was stripped, false if action was canceled/warned.</li>
      * </ul>
      */
-    public record CaptureOutcome(boolean empty, boolean protectionRemoved, VaultImp vault, UUID originalOwner, UUID finalOwner, List<Block> reProtectedHalves) {}
+    public record CaptureOutcome(boolean empty, boolean protectionRemoved, UUID originalOwner, UUID finalOwner, List<Block> reProtectedHalves) {}
 
     /**
      * Captures a block into a vault while preserving protection rules.
@@ -215,7 +181,7 @@ public class VaultCaptureService {
             if (bolt != null) {
                 try { bolt.removeProtection(block); } catch (Throwable ignored) {}
             }
-            return new CaptureOutcome(true, true, null, originalOwner, finalOwner, List.of());
+            return new CaptureOutcome(true, true, originalOwner, finalOwner, List.of());
         }
 
         List<Block> otherHalves = getHalves(block, container);
@@ -233,7 +199,7 @@ public class VaultCaptureService {
                     warn.accept(Text.of(MessageKeys.CAPTURE_DOUBLE_CHEST_ORDER));
                 }
                 // Return empty=true so no vault is made, but protectionRemoved=false so we don't spam "Protection Removed".
-                return new CaptureOutcome(true, false, null, originalOwner, finalOwner, List.of());
+                return new CaptureOutcome(true, false, originalOwner, finalOwner, List.of());
             }
 
             // If both halves of the double chest are empty, we proceed to remove the protection
@@ -244,7 +210,7 @@ public class VaultCaptureService {
                         bolt.removeProtection(block); // bolt handles 1 protection for double chests
                     } catch (Throwable ignored) {}
                 }
-                return new CaptureOutcome(true, true, null, originalOwner, finalOwner, List.of());
+                return new CaptureOutcome(true, true, originalOwner, finalOwner, List.of());
             }
         }
 
@@ -255,14 +221,12 @@ public class VaultCaptureService {
             if (bolt != null) {
                 try { bolt.removeProtection(block); } catch (Throwable ignored) {}
             }
-            return new CaptureOutcome(true, true, null, originalOwner, finalOwner, List.of());
+            return new CaptureOutcome(true, true, originalOwner, finalOwner, List.of());
         }
 
         // Nothing is removed here. The caller stores the vault through storeThenRemove, which
         // drops this block's protection and re-protects the other half once the items are safe.
-        VaultImp vault = describeAsVault(finalOwnerFallback, block);
-
-        return new CaptureOutcome(false, false, vault, originalOwner, finalOwner, List.copyOf(otherHalves));
+        return new CaptureOutcome(false, false, originalOwner, finalOwner, List.copyOf(otherHalves));
     }
 
     /**
@@ -470,7 +434,6 @@ public class VaultCaptureService {
                 }
 
                 final Block finalCaptureBlock = captureBlock;
-                VaultImp vault = outcome.vault();
                 var plugin = VaultStoragePlugin.getInstance();
                 UUID finalOwner = outcome.finalOwner();
 
@@ -497,13 +460,10 @@ public class VaultCaptureService {
                         busy[0] = false;
                         switch (result) {
                             case CaptureResult.Vaulted vaulted -> {
-                                var dto = new VaultDtoImp(vaulted.vault(), validatedOwner, List.of(),
-                                        vault.blockMaterial() == null ? null : vault.blockMaterial().name(),
-                                        null, System.currentTimeMillis());
-                                plugin.getSessionManager().getOrCreate(actor.getUniqueId()).setLastVaultDto(dto);
                                 actor.sendMessage(Text.of(MessageKeys.CAPTURE_CAPTURED_OK));
                                 mailOwner(finalCaptureBlock, actor.getUniqueId(), validatedOwner);
-                                new PlayerVaultEvent(actor, vault).callEvent();
+                                new PlayerVaultEvent(actor, vaulted.vault(), validatedOwner,
+                                        finalCaptureBlock.getLocation()).callEvent();
                             }
                             case CaptureResult.ChangedMeanwhile changed ->
                                     actor.sendMessage(Text.of(CHANGED_MEANWHILE));
@@ -574,14 +534,8 @@ public class VaultCaptureService {
                                 if (hang.isValid()) {
                                     hang.remove();
                                 }
-                                Material vm = stacks.get(0).getType();
-                                VaultImp vaultEvt = new VaultImp(validatedOwner, vaultUuid, stacks, vm,
-                                        supporting.getLocation(), Instant.now(), supporting.getBlockData().getAsString());
-                                plugin.getSessionManager().getOrCreate(actor.getUniqueId())
-                                        .setLastVaultDto(new VaultDtoImp(vaultUuid, validatedOwner, List.of(),
-                                                vm.name(), null, System.currentTimeMillis()));
                                 actor.sendMessage(Text.of(MessageKeys.CAPTURE_CAPTURED_OK));
-                                new PlayerVaultEvent(actor, vaultEvt).callEvent();
+                                new PlayerVaultEvent(actor, vaultUuid, validatedOwner, supporting.getLocation()).callEvent();
                             }, plugin.getServer().getScheduler().getMainThreadExecutor(plugin))
                             .exceptionally(failure -> {
                                 plugin.getLogger().log(Level.SEVERE, "Hanging capture failed for " + actor.getName()
@@ -737,7 +691,6 @@ public class VaultCaptureService {
         if (originalOwner == null && decision.hasOverride()) {
             actor.sendMessage(Text.of(MessageKeys.CAPTURE_NO_BOLT_OWNER));
         }
-        VaultImp vault = outcome.vault();
         UUID finalOwner = outcome.finalOwner();
         var plugin = VaultStoragePlugin.getInstance();
 
@@ -757,13 +710,9 @@ public class VaultCaptureService {
             storeThenRemove(block, validatedOwner, outcome.reProtectedHalves()).thenAccept(result -> {
                 switch (result) {
                     case CaptureResult.Vaulted vaulted -> {
-                        plugin.getSessionManager().getOrCreate(actor.getUniqueId())
-                                .setLastVaultDto(new VaultDtoImp(vaulted.vault(), validatedOwner, List.of(),
-                                        vault.blockMaterial() == null ? null : vault.blockMaterial().name(),
-                                        null, System.currentTimeMillis()));
                         actor.sendMessage(Text.of(MessageKeys.CAPTURE_CAPTURED_OK));
                         mailOwner(block, actor.getUniqueId(), validatedOwner);
-                        new PlayerVaultEvent(actor, vault).callEvent();
+                        new PlayerVaultEvent(actor, vaulted.vault(), validatedOwner, block.getLocation()).callEvent();
                         onDoneMain.accept(true);
                     }
                     case CaptureResult.ChangedMeanwhile changed -> {

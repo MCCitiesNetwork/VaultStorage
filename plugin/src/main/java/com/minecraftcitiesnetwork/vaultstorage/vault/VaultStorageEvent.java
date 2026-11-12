@@ -4,10 +4,7 @@ import org.bukkit.event.Event;
 import org.bukkit.event.HandlerList;
 import org.jetbrains.annotations.NotNull;
 
-/**
- * Base of the plugin's events. They share one handler list; Bukkit calls a listener only for
- * the event type it asked for.
- */
+/** Base of every event this plugin fires. All are fired on the main thread. */
 public abstract class VaultStorageEvent extends Event {
 
     private static final HandlerList HANDLERS = new HandlerList();
@@ -17,7 +14,7 @@ public abstract class VaultStorageEvent extends Event {
         return HANDLERS;
     }
 
-    /** Bukkit looks this up by name when a listener registers; without it, registering fails. */
+    /** Bukkit finds the handler list through this name. */
     public static @NotNull HandlerList getHandlerList() {
         return HANDLERS;
     }

@@ -3,7 +3,6 @@ package com.minecraftcitiesnetwork.vaultstorage.capture;
 import com.minecraftcitiesnetwork.vaultstorage.permission.Permissions;
 
 import com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin;
-import com.minecraftcitiesnetwork.vaultstorage.vault.Dto;
 import com.minecraftcitiesnetwork.vaultstorage.region.VaultRegion;
 import com.minecraftcitiesnetwork.vaultstorage.bolt.BoltService;
 import com.minecraftcitiesnetwork.vaultstorage.region.WorldGuardService;
@@ -14,7 +13,6 @@ import org.bukkit.entity.Hanging;
 import org.bukkit.entity.Player;
 import org.bukkit.util.BoundingBox;
 
-import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -32,7 +30,7 @@ public final class VaultCapturePolicy {
     public record Decision(boolean allowed, boolean hasOverride, boolean actorParticipantAny,
                            boolean containerOwnerParticipantAny, boolean actorIsContainerOwner,
                            boolean disallowedOwnerSelf, boolean baseAllowed, UUID containerOwner, Reason reason,
-                           List<RegionStatus> regionStatuses) implements Dto, Serializable {
+                           List<RegionStatus> regionStatuses) {
         public enum Reason {
             /**
              * Allowed (no blocking condition).
@@ -65,7 +63,7 @@ public final class VaultCapturePolicy {
         }
     }
 
-    public record RegionStatus(String regionId, boolean actorParticipant, boolean containerOwnerParticipates) implements Dto, Serializable {
+    public record RegionStatus(String regionId, boolean actorParticipant, boolean containerOwnerParticipates) {
         /*
          * Per-region participation snapshot.
          * actorParticipant: true if the actor is owner or member of this specific region.

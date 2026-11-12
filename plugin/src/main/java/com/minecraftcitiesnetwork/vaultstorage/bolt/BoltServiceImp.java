@@ -2,7 +2,6 @@ package com.minecraftcitiesnetwork.vaultstorage.bolt;
 
 import com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin;
 import com.minecraftcitiesnetwork.vaultstorage.bolt.BoltService;
-import org.bukkit.Chunk;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Entity;
@@ -14,10 +13,8 @@ import org.popcraft.bolt.protection.BlockProtection;
 import org.popcraft.bolt.protection.EntityProtection;
 import org.popcraft.bolt.protection.Protection;
 
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
@@ -46,14 +43,6 @@ public class BoltServiceImp implements BoltService {
         this.api = loaded;
     }
 
-    /**
-     * Returns the underlying BoltAPI instance.
-     *
-     * @return the BoltAPI instance (never null)
-     */
-    public @NotNull BoltAPI getApi() {
-        return api;
-    }
 
     /**
      * Gets the owner of the given block's protection, if one exists.
@@ -113,44 +102,6 @@ public class BoltServiceImp implements BoltService {
         return playerUUID.equals(owner);
     }
 
-    /**
-     * Returns all blocks protected by the specified player within the given bounding box and world.
-     *
-     * @param playerUUID  the owner's UUID (not null)
-     * @param boundingBox the search area (not null)
-     * @param world       the world (not null)
-     * @return list of protected blocks (never null)
-     */
-    @Override
-    public @NotNull List<Block> getProtectedBlocks(@NotNull UUID playerUUID, @NotNull BoundingBox boundingBox, @NotNull World world) {
-        Objects.requireNonNull(playerUUID, "playerUUID");
-        Objects.requireNonNull(boundingBox, "boundingBox");
-        Objects.requireNonNull(world, "world");
-
-        Collection<Protection> protections = api.findProtections(world, boundingBox);
-        if (protections == null || protections.isEmpty()) {
-            return List.of();
-        }
-
-        List<Block> protectedBlocks = new ArrayList<>();
-        for (Protection protection : protections) {
-            if (protection instanceof BlockProtection blockProtection && playerUUID.equals(protection.getOwner())) {
-                int x = blockProtection.getX();
-                int y = blockProtection.getY();
-                int z = blockProtection.getZ();
-
-                if (y < world.getMinHeight() || y >= world.getMaxHeight()) continue;
-
-                Chunk chunk = world.getChunkAt(Math.floorDiv(x, 16), Math.floorDiv(z, 16));
-                if (!chunk.isLoaded()) chunk.load();
-
-                Block b = chunk.getBlock(x & 15, y, z & 15);
-                protectedBlocks.add(b);
-            }
-        }
-
-        return protectedBlocks;
-    }
 
     /**
      * Checks if any entities within the given bounding box and world are protected.
@@ -160,18 +111,6 @@ public class BoltServiceImp implements BoltService {
      * @return list of protected entities (never null)
      */
 
-    @Override
-    public List<EntityProtection> getEntityProtections(@NotNull World world, @NotNull BoundingBox boundingBox) {
-        Objects.requireNonNull(world, "world");
-        Objects.requireNonNull(boundingBox, "boundingBox");
-
-        Collection<Protection> protections = api.findProtections(world, boundingBox);
-
-        return protections.stream()
-                 .filter(protection -> protection instanceof EntityProtection)
-                 .map(protection -> (EntityProtection) protection)
-                 .toList();
-    }
 
     @Override
     public Map<EntityProtection, Entity> getProtectedEntities(@NotNull World world, @NotNull BoundingBox boundingBox) {
@@ -198,42 +137,6 @@ public class BoltServiceImp implements BoltService {
     }
 
 
-    /**
-     * Returns all protected blocks within the given bounding box and world, regardless of owner.
-     *
-     * @param boundingBox the search area (not null)
-     * @param world       the world (not null)
-     * @return list of protected blocks (never null)
-     */
-    @Override
-    public @NotNull List<Block> getProtectedBlocksIn(@NotNull BoundingBox boundingBox, @NotNull World world) {
-        Objects.requireNonNull(boundingBox, "boundingBox");
-        Objects.requireNonNull(world, "world");
-
-        Collection<Protection> protections = api.findProtections(world, boundingBox);
-        if (protections == null || protections.isEmpty()) {
-            return List.of();
-        }
-
-        List<Block> protectedBlocks = new ArrayList<>();
-        for (Protection protection : protections) {
-            if (protection instanceof BlockProtection bp) {
-                int x = bp.getX();
-                int y = bp.getY();
-                int z = bp.getZ();
-
-                if (y < world.getMinHeight() || y >= world.getMaxHeight()) continue;
-
-                Chunk chunk = world.getChunkAt(Math.floorDiv(x, 16), Math.floorDiv(z, 16));
-                if (!chunk.isLoaded()) chunk.load();
-
-                Block b = chunk.getBlock(x & 15, y, z & 15);
-                protectedBlocks.add(b);
-            }
-        }
-
-        return protectedBlocks;
-    }
 
     /**
      * Removes a protection for the given block using BoltAPI.

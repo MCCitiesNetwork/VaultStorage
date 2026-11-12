@@ -4,8 +4,8 @@ import com.minecraftcitiesnetwork.vaultstorage.database.VaultEntity;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 
-/** Fired on the main thread just before an admin deletes a vault. */
-public class PlayerDeleteVaultEvent extends PlayerVaultStorageEvent {
+/** A player is deleting a vault. Fired before the delete, while the vault still exists. */
+public final class PlayerDeleteVaultEvent extends PlayerVaultStorageEvent {
 
     private final @NotNull VaultEntity vault;
 
@@ -14,7 +14,7 @@ public class PlayerDeleteVaultEvent extends PlayerVaultStorageEvent {
         this.vault = vault;
     }
 
-    public @NotNull VaultEntity getVault() {
+    public @NotNull VaultEntity vault() {
         return this.vault;
     }
 }

@@ -31,13 +31,7 @@ public class AutoDialog {
         this.internal = internal;
     }
 
-    public Dialog dialog() {
-        return internal;
-    }
 
-    public void show(Player player) {
-        player.showDialog(internal);
-    }
 
     public static Builder builder(ParentMenu parentMenu) {
         return new Builder(parentMenu);
@@ -65,16 +59,8 @@ public class AutoDialog {
             this.title = title;
             return this;
         }
-        public Builder externalTitle(Component externalTitle) {
-            this.externalTitle = externalTitle;
-            return this;
-        }
         public Builder canCloseWithEscape(boolean value) {
             this.canCloseWithEscape = value;
-            return this;
-        }
-        public Builder pause(boolean value) {
-            this.pause = value;
             return this;
         }
         public Builder afterAction(DialogBase.DialogAfterAction value) {
@@ -82,28 +68,16 @@ public class AutoDialog {
             return this;
         }
 
-        public Builder body(List<DialogBody> elements) {
-            this.body.addAll(elements);
-            return this;
-        }
         public Builder addBody(DialogBody element) {
             this.body.add(element);
             return this;
         }
 
-        public Builder inputs(List<DialogInput> elements) {
-            this.inputs.addAll(elements);
-            return this;
-        }
         public Builder addInput(DialogInput element) {
             this.inputs.add(element);
             return this;
         }
 
-        public Builder addButton(ActionButton button) {
-            this.buttons.add(button);
-            return this;
-        }
 
         public ParentMenu getParentMenu() {
             return parentMenu;
@@ -168,24 +142,6 @@ public class AutoDialog {
             return button(label, null, Duration.ofMinutes(5), 10, handler);
         }
 
-        public Builder buttonWithResponse(Component label, Component tooltip, Duration expireAfter, int maxUses, BiConsumer<DialogResponseView, Audience> handler) {
-            ClickCallback.Options options = ClickCallback.Options.builder()
-                    .lifetime(expireAfter)
-                    .uses(maxUses)
-                    .build();
-
-            DialogActionCallback callback = (response, audience) -> handler.accept(response, audience);
-
-            DialogAction action = DialogInstancesProvider.instance().register(callback, options);
-
-            ActionButton btn = ActionButton.builder(label)
-                    .tooltip(tooltip)
-                    .action(action)
-                    .build();
-
-            this.buttons.add(btn);
-            return this;
-        }
 
         public Builder buttonWithPlayer(Component label, Component tooltip, Duration expireAfter, int maxUses, BiConsumer<Player, DialogResponseView> handler) {
             ClickCallback.Options options = ClickCallback.Options.builder()
@@ -210,24 +166,7 @@ public class AutoDialog {
             return this;
         }
 
-        public Builder commandButton(Component label, Component tooltip, String commandTemplate) {
-            DialogAction action = DialogAction.commandTemplate(commandTemplate);
-            ActionButton btn = ActionButton.builder(label)
-                    .tooltip(tooltip)
-                    .action(action)
-                    .build();
-            this.buttons.add(btn);
-            return this;
-        }
 
-        public Builder staticButton(Component label, Component tooltip, DialogAction.StaticAction staticAction) {
-            ActionButton btn = ActionButton.builder(label)
-                    .tooltip(tooltip)
-                    .action(staticAction)
-                    .build();
-            this.buttons.add(btn);
-            return this;
-        }
 
         public Dialog build() {
             DialogBase.Builder baseBuilder = DialogBase.builder(title)

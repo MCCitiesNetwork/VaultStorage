@@ -2,12 +2,9 @@ package com.minecraftcitiesnetwork.vaultstorage.menu;
 
 import io.papermc.paper.dialog.Dialog;
 import com.minecraftcitiesnetwork.vaultstorage.menu.AutoDialog;
-import com.minecraftcitiesnetwork.vaultstorage.menu.ChildMenu;
 import com.minecraftcitiesnetwork.vaultstorage.menu.ParentMenu;
 import org.bukkit.entity.Player;
 
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * Base implementation of a ParentMenu used to build Paper Dialog UIs.
@@ -17,7 +14,6 @@ public abstract class ParentMenuImp implements ParentMenu {
     protected final Player player;
     private final String id;
     private Dialog dialog;
-    private final List<ChildMenu> children = new ArrayList<>();
 
     protected ParentMenuImp(Player player, String id) {
         this.player = player;
@@ -44,12 +40,6 @@ public abstract class ParentMenuImp implements ParentMenu {
     @Override
     public AutoDialog.Builder getAutoDialogBuilder() { return AutoDialog.builder(this); }
 
-    @Override
-    public List<ChildMenu> getChildMenus() { return children; }
 
-    @Override
-    public void addChildMenu(ChildMenu childMenu) { children.add(childMenu); }
 
-    @Override
-    public void addChildMenus(List<ChildMenu> childMenus) { children.addAll(childMenus); }
 }

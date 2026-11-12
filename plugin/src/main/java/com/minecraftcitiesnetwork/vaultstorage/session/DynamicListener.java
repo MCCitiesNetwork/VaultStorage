@@ -3,7 +3,6 @@ package com.minecraftcitiesnetwork.vaultstorage.session;
 import com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin;
 import org.bukkit.event.HandlerList;
 import org.bukkit.event.Listener;
-import org.bukkit.scheduler.BukkitRunnable;
 
 /**
  * Manages a Bukkit {@link Listener} dynamically,
@@ -14,7 +13,6 @@ import org.bukkit.scheduler.BukkitRunnable;
 public class DynamicListener {
 
     private final VaultStoragePlugin plugin = VaultStoragePlugin.getInstance();
-    private boolean activeListener = false;
     private Listener listener;
 
     /**
@@ -24,7 +22,6 @@ public class DynamicListener {
     private void unRegisterListener() {
         if (listener != null) {
             HandlerList.unregisterAll(listener);
-            activeListener = false;
         }
     }
 
@@ -35,7 +32,6 @@ public class DynamicListener {
     private void registerListener() {
         if (listener != null) {
             plugin.getServer().getPluginManager().registerEvents(listener, plugin);
-            activeListener = true;
         }
     }
 
@@ -52,15 +48,6 @@ public class DynamicListener {
         return false;
     }
 
-    /**
-     * Unregisters the current listener (if any) and sets it to null.
-     */
-    public void deleteListener() {
-        if (listener != null) {
-            unRegisterListener();
-        }
-        listener = null;
-    }
 
     /**
      * Stops (unregisters) the current listener.
@@ -88,42 +75,9 @@ public class DynamicListener {
         this.listener = listener;
     }
 
-    /**
-     * Checks if a listener is currently set.
-     * @return True if a listener is set, false otherwise.
-     */
-    public boolean isPresent() {
-        return listener != null;
-    }
 
-    /**
-     * Gets the currently managed Listener.
-     * @return The current Listener, or null if none is set.
-     */
-    public Listener getListener() {
-        return listener;
-    }
 
-    /**
-     * Checks if the managed listener is currently active (registered).
-     * @return True if the listener is active, false otherwise.
-     */
-    public boolean isActive() {
-        return activeListener;
-    }
 
-    /**
-     * Stops (unregisters) the current listener after a delay.
-     * @param time Delay in ticks.
-     */
-    public void stopListenerAfter(long time) {
-        new BukkitRunnable() {
-            @Override
-            public void run() {
-                stop();
-            }
-        }.runTaskLater(plugin, time);
-    }
 
     /**
      * Fully closes and cleans the listener reference.

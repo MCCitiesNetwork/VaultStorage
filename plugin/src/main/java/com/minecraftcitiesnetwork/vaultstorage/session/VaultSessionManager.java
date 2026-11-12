@@ -1,8 +1,5 @@
 package com.minecraftcitiesnetwork.vaultstorage.session;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-import com.minecraftcitiesnetwork.vaultstorage.vault.VaultDto;
 import com.minecraftcitiesnetwork.vaultstorage.session.DynamicListener;
 import org.bukkit.scheduler.BukkitTask;
 
@@ -24,16 +21,12 @@ public class VaultSessionManager {
 
     public static class Session {
         private final DynamicListener dynamicListener = new DynamicListener();
-        private VaultDto lastVaultDto;
         private BukkitTask actionBarTask;
         private Mode mode = Mode.NONE;
         private long lastScanTime = 0;
 
         /** Returns the dynamic listener holder for this session. */
         public DynamicListener getDynamicListener() { return dynamicListener; }
-        /** Returns the last created or interacted vault DTO for convenience. */
-        public VaultDto getLastVaultDto() { return lastVaultDto; }
-        public void setLastVaultDto(VaultDto dto) { this.lastVaultDto = dto; }
 
         /** Returns current session mode. */
         public Mode getMode() { return mode; }
@@ -69,7 +62,6 @@ public class VaultSessionManager {
     }
 
     private final Map<UUID, Session> sessions = new HashMap<>();
-    private final Gson gson = new GsonBuilder().setPrettyPrinting().create();
 
     public Session getOrCreate(UUID playerId) {
         return sessions.computeIfAbsent(playerId, id -> new Session());
@@ -85,5 +77,4 @@ public class VaultSessionManager {
         }
     }
 
-    public String toJson(VaultDto dto) { return gson.toJson(dto); }
 }

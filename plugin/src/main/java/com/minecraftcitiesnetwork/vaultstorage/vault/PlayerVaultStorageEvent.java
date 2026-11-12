@@ -1,15 +1,18 @@
 package com.minecraftcitiesnetwork.vaultstorage.vault;
 
 import org.bukkit.entity.Player;
+import org.jetbrains.annotations.NotNull;
 
-public class PlayerVaultStorageEvent extends VaultStorageEvent {
-    private final Player player;
+/** Something a player did to a vault. */
+public abstract class PlayerVaultStorageEvent extends VaultStorageEvent {
 
-    public PlayerVaultStorageEvent(Player player) {
+    private final @NotNull Player player;
+
+    protected PlayerVaultStorageEvent(@NotNull Player player) {
         this.player = player;
     }
 
-    public Player getPlayer() {
-        return player;
+    public @NotNull Player player() {
+        return this.player;
     }
 }

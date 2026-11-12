@@ -19,7 +19,4 @@ public interface Menu {
     AutoDialog.Builder getAutoDialogBuilder();
 
 
-    default String getMenuConfigFileName() {
-        return this.getClass().getSimpleName();
-    }
 }

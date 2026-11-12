@@ -110,19 +110,6 @@ public final class VaultRepository implements VaultStore {
         }
     }
 
-    /** Adds items at the slots they name, beside what the vault already holds. */
-    public @NotNull ReplaceResult addItems(@NotNull UUID vault, @NotNull List<VaultItem> items) {
-        try (SqlSessionWrapper wrapper = this.database.openSession()) {
-            if (wrapper.vaults().touch(vault, now()) == 0) {
-                return new ReplaceResult.NoSuchVault();
-            }
-            if (!items.isEmpty()) {
-                wrapper.items().insertAll(rows(vault, items, 0));
-            }
-            wrapper.session().commit();
-            return new ReplaceResult.Replaced();
-        }
-    }
 
     /** Swaps a vault's whole contents in one transaction. */
     public @NotNull ReplaceResult replaceItems(@NotNull UUID vault, @NotNull List<VaultItem> items) {

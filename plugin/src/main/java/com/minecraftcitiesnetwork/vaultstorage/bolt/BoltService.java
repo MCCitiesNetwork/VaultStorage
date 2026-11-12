@@ -11,7 +11,6 @@ import org.popcraft.bolt.protection.EntityProtection;
 import org.popcraft.bolt.protection.Protection;
 
 import java.util.Collection;
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -23,12 +22,7 @@ public interface BoltService extends Service {
     boolean isOwner(UUID playerUUID, Block block);
     boolean isOwner(UUID playerUUID, Entity entity);
 
-    List<Block> getProtectedBlocks(UUID playerUUID, BoundingBox boundingBox, World world);
 
-    /**
-     * Returns all protected blocks within the given bounding box in a world, regardless of owner.
-     */
-    List<Block> getProtectedBlocksIn(BoundingBox boundingBox, World world);
 
     /**
      * Removes the Bolt protection for the given block if one exists.
@@ -38,7 +32,6 @@ public interface BoltService extends Service {
     void removeProtection(Block block);
 
 
-    List<EntityProtection> getEntityProtections(@NotNull World world, @NotNull BoundingBox boundingBox);
 
 
     Map<EntityProtection, Entity> getProtectedEntities(@NotNull World world, @NotNull BoundingBox boundingBox);
