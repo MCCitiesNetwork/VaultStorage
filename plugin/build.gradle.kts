@@ -10,6 +10,8 @@ dependencies {
     compileOnly(libs.paper.api)
     // Bundled and relocated; modules reach it through the host's class loader.
     implementation(libs.plugin.infrastructure)
+    implementation(libs.mybatis)
+    implementation(libs.mariadb.java.client)
     compileOnly(libs.bolt.bukkit)
     compileOnly(libs.bolt.common)
     compileOnly(libs.worldguard)
@@ -18,6 +20,9 @@ dependencies {
     }
     // compileOnly is on neither test classpath; tests name Paper's profile type.
     testImplementation(libs.paper.api)
+    // Database tests run against the real engine and need a running Docker daemon.
+    testImplementation(libs.testcontainers.mariadb)
+    testImplementation(libs.testcontainers.junit.jupiter)
 }
 
 // Module jars, for the run directory.
@@ -41,6 +46,24 @@ val installModules by tasks.registering(Sync::class) {
 }
 
 tasks {
+    test {
+        // A Gradle test JVM inherits no shell environment, so Testcontainers needs the socket named.
+        val dockerSocket = listOf(
+            File(System.getProperty("user.home"), ".docker/run/docker.sock"),
+            File(System.getProperty("user.home"), ".colima/default/docker.sock"),
+            File("/var/run/docker.sock"),
+        ).firstOrNull { it.exists() }
+        if (System.getenv("DOCKER_HOST") == null && dockerSocket != null) {
+            environment("DOCKER_HOST", "unix://${dockerSocket.absolutePath}")
+            environment("TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE", dockerSocket.absolutePath)
+        }
+        // Docker Engine 29 rejects API versions below 1.44.
+        if (System.getenv("DOCKER_API_VERSION") == null) {
+            environment("DOCKER_API_VERSION", "1.44")
+            systemProperty("api.version", "1.44")
+        }
+    }
+
     runServer {
         dependsOn(installModules)
         // The plugins the host requires. Optional ones are added by hand when a module is tested.
