@@ -1,7 +1,6 @@
 package com.minecraftcitiesnetwork.vaultstorage;
 
 import com.earth2me.essentials.Essentials;
-import com.minecraftcitiesnetwork.vaultstorage.database.legacy.VaultDAO;
 import com.minecraftcitiesnetwork.vaultstorage.bolt.BoltService;
 import com.minecraftcitiesnetwork.vaultstorage.chestshop.ChestShopService;
 import com.minecraftcitiesnetwork.vaultstorage.scan.VaultScanService;
@@ -10,10 +9,6 @@ import com.minecraftcitiesnetwork.vaultstorage.region.WorldGuardService;
 import com.minecraftcitiesnetwork.vaultstorage.command.LegacyVaultCommand;
 import com.minecraftcitiesnetwork.vaultstorage.command.VaultCommand;
 import io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents;
-import com.minecraftcitiesnetwork.vaultstorage.database.legacy.DatabaseSchema;
-import com.minecraftcitiesnetwork.vaultstorage.database.legacy.MySQLManager;
-import com.minecraftcitiesnetwork.vaultstorage.database.legacy.VaultDAOImpl;
-import com.minecraftcitiesnetwork.vaultstorage.database.legacy.WorldEntity;
 import com.minecraftcitiesnetwork.vaultstorage.bolt.BoltServiceImp;
 import com.minecraftcitiesnetwork.vaultstorage.capture.VaultCaptureService;
 import com.minecraftcitiesnetwork.vaultstorage.vault.VaultInventoryService;
@@ -36,12 +31,20 @@ import com.minecraftcitiesnetwork.vaultstorage.names.Names;
 import com.minecraftcitiesnetwork.vaultstorage.names.PaperProfileNameSource;
 import com.minecraftcitiesnetwork.pluginInfrastructure.modules.ModuleLifecycleManager;
 import com.minecraftcitiesnetwork.pluginInfrastructure.modules.ModuleLoader;
+import com.minecraftcitiesnetwork.vaultstorage.config.ConfigPaths;
+import com.minecraftcitiesnetwork.vaultstorage.database.DatabaseSettings;
+import com.minecraftcitiesnetwork.vaultstorage.database.VaultDatabase;
+import com.minecraftcitiesnetwork.vaultstorage.database.VaultRepository;
+import com.minecraftcitiesnetwork.vaultstorage.database.VaultStorageSchemaMigrator;
 import java.io.IOException;
+import java.sql.SQLException;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.logging.Level;
-import org.bukkit.Bukkit;
-import org.bukkit.World;
 import org.bukkit.permissions.Permission;
 import org.bukkit.plugin.RegisteredServiceProvider;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -66,15 +69,15 @@ public final class VaultStoragePlugin extends JavaPlugin {
     private ModuleLifecycleManager<VaultStoragePlugin> modules;
     private Names names;
     private VaultService vaultService;
+    private VaultDatabase database;
+    private VaultRepository repository;
+    private ExecutorService databaseExecutor;
     private WorldGuardService worldGuardService;
     private BoltService boltService;
     private MailService mailService;
     private Essentials essentials;
 
     // Database wiring
-    private MySQLManager mysql;
-    private DatabaseSchema schema;
-    private VaultDAO vaultDAO;
 
     public static VaultStoragePlugin getInstance() {
         return instance;
@@ -83,6 +86,12 @@ public final class VaultStoragePlugin extends JavaPlugin {
     public VaultSessionManager getSessionManager() { return sessionManager; }
 
     public VaultService getVaultService() { return vaultService; }
+
+    /** Every read and write of vaults. Blocking: call it on {@link #databaseExecutor()}. */
+    public VaultRepository repository() { return repository; }
+
+    /** The pool database work runs on. */
+    public Executor databaseExecutor() { return databaseExecutor; }
 
     public WorldGuardService getWorldGuardService() { return worldGuardService; }
 
@@ -112,18 +121,12 @@ public final class VaultStoragePlugin extends JavaPlugin {
         // Ensure config exists and has defaults
         ConfigInitializer.ensureMysqlDefaults(this);
 
-        // Init DB and schema
-        this.mysql = new MySQLManager(this);
-        this.mysql.setupDatabase();
-        this.schema = new DatabaseSchema(mysql);
-        this.schema.createAll();
-        this.schema.verifyIntegrity();
-        // Bootstrap worlds dictionary to satisfy FK on vaults/worlds
-        bootstrapWorlds();
-
-        // DAO + Service
-        this.vaultDAO = new VaultDAOImpl(schema);
-        this.vaultService = new VaultServiceImpl(vaultDAO);
+        // Database first: nothing may register against a database that cannot store a vault.
+        if (!startDatabase()) {
+            getServer().getPluginManager().disablePlugin(this);
+            return;
+        }
+        this.vaultService = new VaultServiceImpl(this.repository);
         // Register VaultService in Bukkit services
 
         // Integration services
@@ -207,16 +210,35 @@ public final class VaultStoragePlugin extends JavaPlugin {
         }
     }
 
-    private void bootstrapWorlds() {
+    /**
+     * Connects, migrates the schema and builds the repository. A failure is logged and reported
+     * to the caller, which disables the plugin: a half-started plugin would remove blocks it
+     * cannot store.
+     */
+    private boolean startDatabase() {
+        var config = getConfig();
+        DatabaseSettings settings = new DatabaseSettings(
+                config.getString(ConfigPaths.MYSQL_HOST.getPath(), "localhost"),
+                config.getInt(ConfigPaths.MYSQL_PORT.getPath(), 3306),
+                config.getString(ConfigPaths.MYSQL_DATABASE.getPath(), "vault_storage"),
+                config.getString(ConfigPaths.MYSQL_USER.getPath(), "root"),
+                config.getString(ConfigPaths.MYSQL_PASSWORD.getPath(), ""),
+                config.getBoolean(ConfigPaths.MYSQL_USE_SSL.getPath(), false));
         try {
-            for (World w : Bukkit.getWorlds()) {
-                WorldEntity e = new WorldEntity();
-                e.uuid = w.getUID();
-                e.name = w.getName();
-                schema.worlds().insertOrUpdateSync(e);
-            }
-        } catch (Exception ex) {
-            getLogger().warning("Failed to bootstrap worlds table: " + ex.getMessage());
+            this.database = new VaultDatabase(settings);
+            new VaultStorageSchemaMigrator().migrate(this.database.dataSource(), getLogger());
+            this.repository = new VaultRepository(this.database);
+            this.databaseExecutor = Executors.newFixedThreadPool(VaultDatabase.POOL_SIZE, task -> {
+                Thread thread = new Thread(task, "vaultstorage-db");
+                thread.setDaemon(true);
+                return thread;
+            });
+            return true;
+        } catch (SQLException | RuntimeException ex) {
+            getLogger().log(Level.SEVERE, "Could not connect to or migrate the database at "
+                    + settings.host() + ":" + settings.port() + "/" + settings.database()
+                    + ". VaultStorage is disabled.", ex);
+            return false;
         }
     }
 
@@ -225,7 +247,19 @@ public final class VaultStoragePlugin extends JavaPlugin {
         if (this.modules != null) {
             this.modules.stop();
         }
-        if (this.mysql != null) this.mysql.disconnect();
+        if (this.databaseExecutor != null) {
+            this.databaseExecutor.shutdownNow();
+            try {
+                if (!this.databaseExecutor.awaitTermination(10, TimeUnit.SECONDS)) {
+                    getLogger().severe("Database tasks were still running after 10 seconds.");
+                }
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+            }
+        }
+        if (this.database != null) {
+            this.database.close();
+        }
     }
 
     public MailService getMailService() {

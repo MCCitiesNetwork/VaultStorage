@@ -1,50 +1,43 @@
 package com.minecraftcitiesnetwork.vaultstorage.database.legacy;
 
-import com.minecraftcitiesnetwork.vaultstorage.Service;
-
-import com.minecraftcitiesnetwork.vaultstorage.database.legacy.VaultEntity;
-import com.minecraftcitiesnetwork.vaultstorage.database.legacy.VaultItemEntity;
-import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
-
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 /**
- * Public API: High-level service for managing Vault persistence.
+ * The persistence calls the capture, placement, menu and command code still makes. It is an
+ * adapter over {@code VaultRepository} that exists only until those callers are rewritten to
+ * use the repository directly. Every method blocks on the database.
  */
-public interface VaultService extends Service {
-    /**
-     * Creates a vault record at the given world coordinates.
-     * @return the persisted entity (never null)
-     */
-    @NotNull VaultEntity createVault(@NotNull UUID worldUuid, @NotNull UUID actor, int x, int y, int z, @NotNull UUID ownerUuid,
-                              @Nullable String material, @Nullable String blockData);
+public interface VaultService {
+
+    /** Creates an empty vault and mails its owner. Items are added with {@link #putItems}. */
+    @NotNull VaultEntity createVault(@NotNull UUID worldUuid, @NotNull UUID actor, int x, int y, int z,
+                                     @NotNull UUID ownerUuid, @Nullable String material, @Nullable String blockData);
 
     @NotNull Optional<VaultEntity> get(@NotNull UUID vaultUuid);
-    @Nullable VaultEntity findByLocation(@NotNull UUID worldUuid, int x, int y, int z);
+
     void delete(@NotNull UUID vaultUuid);
 
     void setOwner(@NotNull UUID vaultUuid, @NotNull UUID ownerUuid);
+
     @Nullable UUID getOwner(@NotNull UUID vaultUuid);
 
     @NotNull List<VaultEntity> listByOwner(@NotNull UUID ownerUuid);
+
     @NotNull List<VaultEntity> listInWorld(@NotNull UUID worldUuid);
+
     @NotNull List<VaultEntity> listByOwnerUuidString(@NotNull String ownerUuidString);
+
     @NotNull List<VaultEntity> listByVaultUuidString(@NotNull String vaultUuidString);
 
-    /**
-     * Inserts or updates a single item slot for a vault.
-     */
-    void putItem(@NotNull UUID vaultUuid, int slot, int amount, byte[] itemBytes);
-
-    /**
-     * Batch insert/update multiple item rows for the same vault.
-     * Implementations should minimize database round-trips.
-     */
+    /** Adds items at the slots they name. */
     void putItems(@NotNull UUID vaultUuid, @NotNull List<VaultItemEntity> items);
 
-    void removeItem(@NotNull UUID vaultUuid, int slot);
+    /** Swaps a vault's whole contents in one transaction. */
+    void replaceItems(@NotNull UUID vaultUuid, @NotNull List<VaultItemEntity> items);
+
     @NotNull List<VaultItemEntity> listItems(@NotNull UUID vaultUuid);
 }

@@ -188,6 +188,15 @@ class VaultRepositoryTest extends DatabaseTestBase {
     }
 
     @Test
+    void itemsCanBeAddedAtTheirOwnSlots() {
+        UUID vault = repository.create(vaultFor(OWNER, WORLD, 10), List.of(item(0)));
+        Assertions.assertInstanceOf(ReplaceResult.Replaced.class, repository.addItems(vault, List.of(item(4), item(9))));
+        Assertions.assertEquals(List.of(0, 4, 9), found(vault).items().stream().map(VaultItemEntity::slot).toList());
+        Assertions.assertInstanceOf(ReplaceResult.NoSuchVault.class,
+                repository.addItems(UUID.randomUUID(), List.of(item(0))));
+    }
+
+    @Test
     void replacingItemsSwapsTheWholeContents() {
         UUID vault = repository.create(vaultFor(OWNER, WORLD, 10), List.of(item(0), item(1), item(2)));
         Assertions.assertInstanceOf(ReplaceResult.Replaced.class, repository.replaceItems(vault, List.of(item(7))));

@@ -273,14 +273,18 @@ existing vault opens with its items.
   but capture still removes the block before calling it. Step 3 fixes the order.
 - **The vault list still loads on the main thread and without paging** until step 3, though it
   now costs two queries instead of two per vault.
-- **Upgrading takes the database offline for about 70 seconds** while the item table is rebuilt.
+- **Upgrading takes the database offline for about a minute** (40 seconds on the production snapshot through the plugin itself) while the item table is rebuilt.
   The plugin is not enabled yet at that point, so nothing is writing.
 - **The upgrade cannot be undone by the plugin.** Going back to 1.2.0 means restoring a backup
   taken before the upgrade. The README and the release notes say so.
 - **A database holding a vault with no owner row fails V4** and the plugin does not enable.
   Production has none. That is the safe outcome; the fix is to give the vault an owner by hand.
-- **Deep pages use `OFFSET`.** In the first trial, on the old column types, the last page of the
-  largest world took about 0.4 s off the main thread. Keyset paging would remove that; it is not
-  worth the extra code until someone pages that far. The figure is re-measured on the converted
-  schema as part of this step.
+- **Deep pages use `OFFSET`.** Measured on the converted production snapshot: the first page of
+  the largest world takes 0.04 s, the last (offset 60,000) 0.83 s, off the main thread. Keyset
+  paging would remove that; it is not worth the extra code until someone pages that far.
+- **The old two-call shape survives in `database.legacy.VaultService`.** Capture, placement,
+  menus and commands still create a vault and then add its items, as two transactions, through
+  an adapter that hands them the mutable entity classes they were written against. The adapter
+  and those classes go when step 3 and later rewrite the callers. This kept every caller
+  unchanged in this step, at the cost of a package that exists only to be deleted.
 - **MySQL servers are no longer supported.**

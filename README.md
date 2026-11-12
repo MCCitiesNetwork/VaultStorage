@@ -35,25 +35,23 @@ Command (in‑game):
 3) Stop the server to configure the database.
 4) For each optional integration you want, place its module jar in `plugins/VaultStorage/modules/` (see Integrations below). The startup log lists the modules that started.
 
-### Database Setup (MySQL)
-Edit the plugin config at: plugins/VaultStorage/config.yml
+### Database Setup (MariaDB)
+VaultStorage needs **MariaDB 10.11 or later**. MySQL is not supported.
 
-mysql keys you can set:
-- host: your MySQL host (e.g., 127.0.0.1)
-- port: 3306 (or your custom port)
-- database: vault_storage (or your chosen schema name)
-- user: a database user with create/select/insert/update/delete privileges
-- password: the user’s password
-- useSSL: true/false depending on your DB setup
+Edit `plugins/VaultStorage/config.yml`:
+- `mysql.host`, `mysql.port`, `mysql.database`: where the database is. The database must exist.
+- `mysql.user`, `mysql.password`: an account that may create and alter tables in it.
+- `mysql.useSSL`: true or false, depending on your database setup.
 
-Behavior on startup:
-- The plugin ensures the database exists (creates it if missing).
-- It connects and creates the necessary tables automatically.
+The keys keep their `mysql.` prefix for now.
 
-Best practices:
-- Use a dedicated DB user with minimum required privileges.
-- Keep regular backups of the database.
-- Monitor connectivity and latency; the plugin runs DB work off the main thread to keep gameplay smooth.
+The plugin creates and upgrades its tables itself when it starts. If it cannot connect, or an upgrade fails, it logs the reason and disables itself; it does not run without a working database.
+
+#### Upgrading from 1.x
+The first start of 2.0 converts the existing tables to a new layout. Every vault and item is kept.
+- **Take a database backup first.** The conversion cannot be undone by the plugin; going back to 1.x means restoring that backup.
+- It takes about a minute for a database of 80,000 vaults and a million items. The server finishes starting once it is done.
+- A vault that has no owner recorded stops the conversion with an error naming the problem. Give it an owner in the `vault_owners` table and start again.
 
 ### Permissions
 Assign via your permissions plugin (examples: LuckPerms, PermissionsEx):

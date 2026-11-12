@@ -175,8 +175,6 @@ public class VaultInventoryService {
 
     private void saveToDb(UUID vaultId, ItemStack[] contents) {
         VaultService vs = VaultStoragePlugin.getInstance().getVaultService();
-        var existing = vs.listItems(vaultId);
-        for (var row : existing) vs.removeItem(vaultId, row.slot);
         // Batch re-insert items to minimize DB round-trips
         List<VaultItemEntity> batch = new ArrayList<>();
         for (int i = 0; i < contents.length; i++) {
@@ -189,8 +187,7 @@ public class VaultInventoryService {
             vie.item = ItemSerialization.toBytes(it);
             batch.add(vie);
         }
-        if (!batch.isEmpty()) {
-            vs.putItems(vaultId, batch);
-        }
+        // One transaction: the old contents go and the new ones arrive together.
+        vs.replaceItems(vaultId, batch);
     }
 }
