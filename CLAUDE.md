@@ -10,6 +10,7 @@ changes hands, and lets the owner place them back.
 ./gradlew test                  # every project's tests
 ./gradlew :plugin:test          # the host only; the database tests need a running Docker daemon
 ./gradlew :plugin:runServer     # a Paper 26.3 test server with the module jars installed
+./gradlew :plugin:plugwrightTest   # live-server tests: starts the dev database and a Paper 26.3 server, runs bots
 ```
 
 Java 25, Paper 26.3, Gradle 9.8.2. Every version lives in `gradle/libs.versions.toml`; the
@@ -117,8 +118,27 @@ Step 3 so far, on `refactor/capture-placement` (plan: `docs/superpowers/plans/20
   still sends the mail); shop owners from Treasury; stored sweeps; scan fixes; paging the vault
   list; the event handler lists; deleting `database.legacy`.
 
-Nothing since step 1 has been exercised by a player. The boot check covers enabling, migrating
-and module loading only.
+## Live-server tests
+
+`./gradlew :plugin:plugwrightTest` starts MariaDB from `compose.dev.yml` (port 3309), provisions a
+Paper 26.3 server with Bolt, WorldGuard, WorldEdit, Essentials, ViaVersion and ViaBackwards,
+installs the host and module jars, and runs the specs in `plugin/src/test/e2e/tests/`. It is never
+part of `build`. It needs Docker and Node.
+
+- Bots join as 1.21.11 clients; `plugins/test-server.ts` keeps them connected and still.
+- Bots do not walk: place them with `standAt`. Click blocks with `rightClick` in `tests/world.ts`,
+  which writes the packet itself; mineflayer's `activateBlock` gets bots kicked here.
+- Use `minecraft:tp` and `minecraft:item`: Essentials shadows the short names.
+- Bolt answers on the action bar, which a bot's chat log does not hold.
+- Menus are Paper dialogs: `tests/dialogs.ts` reads and clicks them. A loading dialog comes
+  between most screens.
+- The test server's log is `plugin/src/test/e2e/generated/local/run/logs/latest.log`.
+
+Covered live: `/vault` opening and being refused; capturing a locked chest, finding it in the
+menus and placing it back with items in their slots; a capture during a database outage leaving
+the chest untouched and working again afterwards. Everything else since step 1 is covered by unit
+and database tests only: the vault inventory, sweeps, scans, hangings, ChestShop, GriefPrevention
+placement, and a non-operator's region rules.
 
 ## Rules for the capture and placement code
 

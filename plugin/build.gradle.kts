@@ -1,9 +1,14 @@
+import java.net.URI
+import java.security.MessageDigest
+import me.drownek.plugwright.local.LocalMode
+
 plugins {
     `java-library`
     id("vaultstorage-conventions")
     id("com.gradleup.shadow")
     id("vaultstorage-shared-relocation")
     alias(libs.plugins.run.paper)
+    alias(libs.plugins.plugwright)
 }
 
 dependencies {
@@ -104,4 +109,115 @@ tasks {
     runServer {
         minecraftVersion(libs.versions.minecraft.get())
     }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Live-server tests: ./gradlew :plugin:plugwrightTest. A separate task, never wired into test,
+// check or build: it starts a database and a Paper server and drives them with bots.
+// ---------------------------------------------------------------------------------------------
+
+val e2eRunDir = layout.projectDirectory.dir("src/test/e2e/generated/local/run")
+
+plugwright {
+    testsDir.set(file("src/test/e2e"))
+
+    environments {
+        create("local", LocalMode) {
+            minecraftVersion.set(libs.versions.minecraft.get())
+            // Records agreement to the Minecraft EULA on behalf of whoever runs the tests.
+            acceptEula.set(true)
+            // Ports of its own, so these tests can run while another project's test server is up.
+            port.set(25620)
+            rconPort.set(25621)
+            writeFiles {
+                // Paper 26.3 starts with its whitelist on, and the bots are not on it. A flat
+                // world, so every test knows what is under it.
+                file("server.properties", """
+                    white-list=false
+                    level-type=minecraft\:flat
+                    spawn-protection=0
+                """.trimIndent() + "\n")
+                // The dev database from compose.dev.yml.
+                file("plugins/VaultStorage/config.yml", """
+                    mysql:
+                      host: "127.0.0.1"
+                      port: 3309
+                      database: "vault_storage"
+                      user: "vaultstorage"
+                      password: "vaultstorage"
+                      useSSL: false
+                    auto-vault:
+                      enabled: true
+                      delay-ticks: 20
+                      include-hangings: true
+                      notify-occupant: true
+                      notify-message: "<yellow>Cleared.</yellow>"
+                """.trimIndent() + "\n")
+            }
+
+            downloadPlugins {
+                // What the host requires.
+                url("https://cdn.modrinth.com/data/1u6JkXh5/versions/YFnqiUlL/worldedit-bukkit-7.4.6.jar")
+                url("https://cdn.modrinth.com/data/DKY9btbd/versions/9YdeGXiK/worldguard-bukkit-7.0.20.jar")
+                url("https://cdn.modrinth.com/data/YqbUofZE/versions/oWPMxWDV/Bolt-1.2.37.jar")
+                url("https://cdn.modrinth.com/data/hXiIvTyT/versions/nY6VN1XH/EssentialsX-2.22.0.jar")
+                // The bots join as 1.21.11 clients; these let them join a 26.3 server.
+                // See src/test/e2e/plugins/test-server.ts.
+                url("https://cdn.modrinth.com/data/P1OZGk5p/versions/Fkfcr89K/ViaVersion-5.12.2.jar")
+                url("https://cdn.modrinth.com/data/NpvuJQoq/versions/WFO37e8T/ViaBackwards-5.12.2.jar")
+            }
+            plugins { local("test-server") }
+        }
+    }
+}
+
+val startE2eDatabase by tasks.registering(Exec::class) {
+    description = "Starts the MariaDB from compose.dev.yml for the live-server tests."
+    commandLine("docker", "compose", "-f", rootProject.file("compose.dev.yml").absolutePath, "up", "-d", "--wait")
+}
+
+// Plugwright installs the host jar only; the modules go where the host looks for them.
+val installE2eModules by tasks.registering(Sync::class) {
+    from(moduleJars)
+    into(e2eRunDir.dir("plugins/VaultStorage/modules"))
+    preserve { exclude("*.jar") }
+}
+
+// plugwright 3.0.0 installs Paper 26.3 build 3, an alpha whose spawn finder crashes the server
+// when several bots join at once. Swap in a stable build after plugwright provisions the server
+// and before any test runs. Remove this once plugwright installs the latest stable build.
+val paperStableServerSha256 = "9601f9a26a2a52a0f2c807cf1abf691f96ee4fb287878313b601cebc2c51eabf"
+val paperStableServerUrl = "https://fill-data.papermc.io/v1/objects/$paperStableServerSha256/paper-26.3-244.jar"
+
+val usePaperStableBuild by tasks.registering {
+    description = "Replaces the plugwright test server jar with Paper 26.3 build 244."
+    val serverJar = e2eRunDir.file("server.jar").asFile
+    val url = paperStableServerUrl
+    val expected = paperStableServerSha256
+    doLast {
+        fun sha256(file: File): String = MessageDigest.getInstance("SHA-256")
+            .digest(file.readBytes()).joinToString("") { "%02x".format(it) }
+        if (serverJar.exists() && sha256(serverJar) == expected) {
+            return@doLast
+        }
+        val download = File(serverJar.parentFile, "server.jar.download")
+        URI(url).toURL().openStream().use { input ->
+            download.outputStream().use { input.copyTo(it) }
+        }
+        check(sha256(download) == expected) { "Paper download failed its checksum" }
+        download.copyTo(serverJar, overwrite = true)
+        download.delete()
+    }
+}
+
+// Plugwright registers its tasks late, so they are matched by name instead of tasks.named(...).
+tasks.matching { it.name == "plugwrightProvisionLocal" }.configureEach {
+    dependsOn(startE2eDatabase)
+    finalizedBy(usePaperStableBuild, installE2eModules)
+}
+tasks.matching { it.name == "plugwrightTestLocal" || it.name == "plugwrightRunServerLocal" }.configureEach {
+    dependsOn(usePaperStableBuild, installE2eModules)
+}
+listOf(usePaperStableBuild, installE2eModules).forEach { task ->
+    task.configure { mustRunAfter(tasks.matching { it.name == "plugwrightProvisionLocal" }) }
 }

@@ -7,6 +7,7 @@ junit = "5.14.3"
 checkstyle = "14.4.0"
 shadow = "9.4.1"
 run-paper = "3.1.0"
+plugwright = "3.0.0"
 plugin-infrastructure = "1.0.0-SNAPSHOT"
 namebook-api = "1.0.0-SNAPSHOT"
 bolt = "1.1.33"
@@ -45,3 +46,4 @@ testcontainers-junit-jupiter = { module = "org.testcontainers:testcontainers-jun
 
 [plugins]
 run-paper = { id = "xyz.jpenilla.run-paper", version.ref = "run-paper" }
+plugwright = { id = "io.github.drownek.plugwright", version.ref = "plugwright" }

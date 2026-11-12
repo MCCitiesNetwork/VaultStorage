@@ -400,7 +400,6 @@ Decisions to settle when their step is specified:
 Deliberately left unaligned with the playbook:
 
 - **No `deploy.yml`.** Nothing is published; no other plugin compiles against this one.
-- **No live-server test tier.** The playbook makes it opt-in, and it has not been asked for.
 
 ## Working arrangement
 
