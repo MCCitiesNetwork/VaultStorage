@@ -1,6 +1,5 @@
 package com.minecraftcitiesnetwork.vaultstorage;
 
-import com.earth2me.essentials.Essentials;
 import com.minecraftcitiesnetwork.vaultstorage.bolt.BoltService;
 import com.minecraftcitiesnetwork.vaultstorage.chestshop.ChestShopService;
 import com.minecraftcitiesnetwork.vaultstorage.scan.VaultScanService;
@@ -26,7 +25,6 @@ import com.minecraftcitiesnetwork.vaultstorage.menu.VaultRegionListMenu;
 import com.minecraftcitiesnetwork.vaultstorage.menu.VaultPlacementMenu;
 import com.minecraftcitiesnetwork.vaultstorage.menu.LoadingMenu;
 import com.minecraftcitiesnetwork.vaultstorage.permission.VaultPermission;
-import net.essentialsx.api.v2.services.mail.MailService;
 import com.minecraftcitiesnetwork.vaultstorage.names.Names;
 import com.minecraftcitiesnetwork.vaultstorage.names.PaperProfileNameSource;
 import com.minecraftcitiesnetwork.pluginInfrastructure.modules.ModuleLifecycleManager;
@@ -38,6 +36,10 @@ import com.minecraftcitiesnetwork.vaultstorage.database.VaultRepository;
 import com.minecraftcitiesnetwork.vaultstorage.database.VaultStorageSchemaMigrator;
 import com.minecraftcitiesnetwork.vaultstorage.session.SessionQuitListener;
 import com.minecraftcitiesnetwork.vaultstorage.placement.WorldGuardPlacementGrant;
+import com.minecraftcitiesnetwork.vaultstorage.config.AutoYML;
+import com.minecraftcitiesnetwork.vaultstorage.config.DataFolder;
+import com.minecraftcitiesnetwork.vaultstorage.config.MailConfig;
+import com.minecraftcitiesnetwork.vaultstorage.vault.OwnerNotifications;
 import java.io.IOException;
 import java.util.concurrent.CompletableFuture;
 import java.sql.SQLException;
@@ -49,7 +51,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.logging.Level;
 import org.bukkit.permissions.Permission;
-import org.bukkit.plugin.RegisteredServiceProvider;
 import org.bukkit.plugin.java.JavaPlugin;
 
 /**
@@ -71,14 +72,13 @@ public final class VaultStoragePlugin extends JavaPlugin {
     private final Integrations integrations = new Integrations();
     private ModuleLifecycleManager<VaultStoragePlugin> modules;
     private Names names;
+    private OwnerNotifications ownerNotifications;
     private VaultService vaultService;
     private VaultDatabase database;
     private VaultRepository repository;
     private ExecutorService databaseExecutor;
     private WorldGuardService worldGuardService;
     private BoltService boltService;
-    private MailService mailService;
-    private Essentials essentials;
 
     // Database wiring
 
@@ -118,6 +118,9 @@ public final class VaultStoragePlugin extends JavaPlugin {
     /** Player name and UUID lookups. */
     public Names names() { return names; }
 
+    /** Tells a vault's owner about it, through whichever notification module is loaded. */
+    public OwnerNotifications ownerNotifications() { return ownerNotifications; }
+
     @Override
     public void onEnable() {
         instance = this;
@@ -146,15 +149,6 @@ public final class VaultStoragePlugin extends JavaPlugin {
         this.integrations.addPlacementGrant(new WorldGuardPlacementGrant(this.worldGuardService));
         this.boltService = new BoltServiceImp(this);
 
-        RegisteredServiceProvider<MailService> mailService = getServer().getServicesManager().getRegistration(MailService.class);
-        if(mailService != null) {
-            this.mailService = mailService.getProvider();
-        }
-
-        var essentials = getServer().getPluginManager().getPlugin("Essentials");
-        if (essentials instanceof Essentials ess) {
-            this.essentials = ess;
-        }
 
 
         // Domain services
@@ -165,6 +159,11 @@ public final class VaultStoragePlugin extends JavaPlugin {
 
         // External lookup services
         this.names = new Names(new PaperProfileNameSource(), this.integrations);
+        // Texts come from the old mail.yml until all text moves to messages.yml.
+        AutoYML<MailConfig> notificationTexts = AutoYML.create(MailConfig.class, "mail", DataFolder.MAIL, MailConfig.HEADER);
+        this.ownerNotifications = new OwnerNotifications(this.names, this.integrations::ownerNotifier,
+                () -> notificationTexts.loadOrCreate(MailConfig::new).notificationTitle,
+                () -> notificationTexts.loadOrCreate(MailConfig::new).vaultCreatedMessage, getLogger());
 
         // Ensure menu YAMLs exist at startup
         VaultCaptureMenu.ensureConfig();
@@ -282,13 +281,6 @@ public final class VaultStoragePlugin extends JavaPlugin {
         }
     }
 
-    public MailService getMailService() {
-        return mailService;
-    }
-
-    public Essentials getEssentials() {
-        return essentials;
-    }
 
     /** ChestShop integration; returns a no-op implementation when ChestShop is not installed. */
     public ChestShopService getChestShopService() {

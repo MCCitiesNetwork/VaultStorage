@@ -26,6 +26,8 @@ test('a locked chest is captured into a vault and placed back with its items in 
         await rightClick(player, chestX, FLOOR, z);
         await expect(player).toHaveReceivedMessage('Vault captured.');
         await expectBlock(server, chestX, FLOOR, z, 'air', 'chest-is-gone');
+        // No notification module is installed on the test server, and the log says so.
+        await expect(server).toHaveReceivedMessage('was not told about their new vault');
 
         // Placement: the owner finds the vault in the menu and places it two blocks away.
         const dialogs = new Dialogs(owner);

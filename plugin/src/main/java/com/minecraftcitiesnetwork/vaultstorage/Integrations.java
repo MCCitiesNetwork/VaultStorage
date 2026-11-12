@@ -4,6 +4,7 @@ import com.minecraftcitiesnetwork.vaultstorage.chestshop.ChestShopService;
 import com.minecraftcitiesnetwork.vaultstorage.chestshop.NoOpChestShopService;
 import com.minecraftcitiesnetwork.vaultstorage.names.NameSource;
 import com.minecraftcitiesnetwork.vaultstorage.placement.PlacementGrant;
+import com.minecraftcitiesnetwork.vaultstorage.vault.OwnerNotifier;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -27,6 +28,7 @@ public final class Integrations {
     private volatile @Nullable NameSource bedrockNames;
     private volatile @Nullable Predicate<UUID> bedrockClient;
     private volatile @Nullable ChestShopService chestShop;
+    private volatile @Nullable OwnerNotifier ownerNotifier;
     private final List<PlacementGrant> placementGrants = new CopyOnWriteArrayList<>();
 
     public void primaryNames(@Nullable NameSource source) {
@@ -53,6 +55,15 @@ public final class Integrations {
     public boolean isBedrockClient(@NotNull UUID player) {
         Predicate<UUID> check = this.bedrockClient;
         return check != null && check.test(player);
+    }
+
+    public void ownerNotifier(@Nullable OwnerNotifier notifier) {
+        this.ownerNotifier = notifier;
+    }
+
+    /** How a vault's owner is told about it; null when no notification module is loaded. */
+    public @Nullable OwnerNotifier ownerNotifier() {
+        return this.ownerNotifier;
     }
 
     public void addPlacementGrant(@NotNull PlacementGrant grant) {

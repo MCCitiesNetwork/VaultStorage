@@ -274,18 +274,12 @@ public class VaultCaptureService {
         return pipeline.capture(block, owner);
     }
 
-    /** Mails the owner off the main thread; a failed mail is logged and changes nothing else. */
+    /** Tells the owner their container was vaulted. A failed notification changes nothing else. */
     private static void mailOwner(@NotNull Block block, @NotNull UUID actor, @NotNull UUID owner) {
         var plugin = VaultStoragePlugin.getInstance();
-        UUID world = block.getWorld().getUID();
-        int x = block.getX();
-        int y = block.getY();
-        int z = block.getZ();
-        CompletableFuture.runAsync(() -> plugin.getVaultService().mailOwner(world, actor, x, y, z, owner),
-                plugin.databaseExecutor()).exceptionally(failure -> {
-                    plugin.getLogger().log(Level.WARNING, "Could not mail " + owner + " about a new vault.", failure);
-                    return null;
-                });
+        String regionId = plugin.getWorldGuardService().getRegionsAt(block).stream()
+                .map(region -> region.id()).findFirst().orElse(null);
+        plugin.ownerNotifications().vaultCreated(owner, actor, regionId);
     }
 
     private static final String CHANGED_MEANWHILE =

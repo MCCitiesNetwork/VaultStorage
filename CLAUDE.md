@@ -26,6 +26,7 @@ project version lives in `gradle.properties`.
 | `:modules:chestshop-adapter` | `chestshop-adapter-<version>.jar` | ChestShop sign handling |
 | `:modules:realty-autovault` | `realty-autovault-<version>.jar` | Auto-vault on a Realty occupant change |
 | `:modules:griefprevention-adapter` | `griefprevention-adapter-<version>.jar` | Placing vaults on GriefPrevention claims |
+| `:modules:player-notifications-adapter` | `player-notifications-adapter-<version>.jar` | Telling owners about new vaults |
 
 The host goes in `plugins/`; module jars go in `plugins/VaultStorage/modules/`.
 
@@ -61,8 +62,8 @@ step of the programme below.
 
 ## Rules
 
-- **The host knows Bolt, WorldGuard, WorldEdit and Essentials. Every other plugin is reached
-  through a module.** The host owns the interface; the module supplies the implementation by
+- **The host knows Bolt, WorldGuard and WorldEdit. Every other plugin is reached through a
+  module.** The host owns the interface; the module supplies the implementation by
   filling a slot in `Integrations`.
 - **Host code reads `Integrations` at use time, never once at construction.** Modules start
   after the host's services exist and can stop while it runs.
@@ -114,21 +115,22 @@ Step 3 so far, on `refactor/capture-placement` (plan: `docs/superpowers/plans/20
 - Done: exact region lookups; `CapturePipeline` (every capture saves before it removes); sessions
   end on quit; placement claims the vault and asks `Integrations.mayPlace`; the vault inventory
   claims while editing and saves in one transaction; the GriefPrevention module.
-- Not done: owner notifications through PlayerNotifications (Essentials is still required and
-  still sends the mail); shop owners from Treasury; stored sweeps; scan fixes; paging the vault
+- Also done: owner notifications through the PlayerNotifications module; Essentials is gone.
+- Not done: shop owners from Treasury; stored sweeps; scan fixes; paging the vault
   list; the event handler lists; deleting `database.legacy`.
 
 ## Live-server tests
 
 `./gradlew :plugin:plugwrightTest` starts MariaDB from `compose.dev.yml` (port 3309), provisions a
-Paper 26.3 server with Bolt, WorldGuard, WorldEdit, Essentials, ViaVersion and ViaBackwards,
+Paper 26.3 server with Bolt, WorldGuard, WorldEdit, ViaVersion and ViaBackwards,
 installs the host and module jars, and runs the specs in `plugin/src/test/e2e/tests/`. It is never
 part of `build`. It needs Docker and Node.
 
 - Bots join as 1.21.11 clients; `plugins/test-server.ts` keeps them connected and still.
 - Bots do not walk: place them with `standAt`. Click blocks with `rightClick` in `tests/world.ts`,
   which writes the packet itself; mineflayer's `activateBlock` gets bots kicked here.
-- Use `minecraft:tp` and `minecraft:item`: Essentials shadows the short names.
+- Use `minecraft:tp` and `minecraft:item`, so another plugin's command of the same name cannot
+  shadow them.
 - Bolt answers on the action bar, which a bot's chat log does not hold.
 - Menus are Paper dialogs: `tests/dialogs.ts` reads and clicks them. A loading dialog comes
   between most screens.

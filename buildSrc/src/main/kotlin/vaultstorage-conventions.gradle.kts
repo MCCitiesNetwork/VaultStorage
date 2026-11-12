@@ -18,11 +18,10 @@ repositories {
     maven("https://repo.papermc.io/repository/maven-public/") { name = "papermc" }
     maven("https://repo.codemc.io/repository/maven-public/") { name = "codemc" }
     maven("https://maven.enginehub.org/repo/") { name = "enginehub" }
-    maven("https://repo.essentialsx.net/releases/") { name = "essentialsx" }
-    maven("https://repo.essentialsx.net/snapshots/") { name = "essentialsx-snapshots" }
     maven("https://repo.opencollab.dev/main/") { name = "opencollab" }
     maven("https://repo.minebench.de/") { name = "minebench" }
     maven("https://maven.democracycraft.net/releases") { name = "democracycraft" }
+    maven("https://maven.minecraftcitiesnetwork.com/releases") { name = "mccities-releases" }
     maven("https://maven.minecraftcitiesnetwork.com/snapshots") { name = "mccities-snapshots" }
     // GriefPrevention is published only here. Filtered, so nothing else resolves from it.
     maven("https://jitpack.io") {

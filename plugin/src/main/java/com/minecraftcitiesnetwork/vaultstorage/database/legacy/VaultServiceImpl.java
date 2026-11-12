@@ -1,12 +1,5 @@
 package com.minecraftcitiesnetwork.vaultstorage.database.legacy;
 
-import com.earth2me.essentials.Essentials;
-import com.earth2me.essentials.User;
-import com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin;
-import com.minecraftcitiesnetwork.vaultstorage.config.AutoYML;
-import com.minecraftcitiesnetwork.vaultstorage.config.DataFolder;
-import com.minecraftcitiesnetwork.vaultstorage.config.MailConfig;
-import com.minecraftcitiesnetwork.vaultstorage.config.MiniMessageUtil;
 import com.minecraftcitiesnetwork.vaultstorage.database.FindResult;
 import com.minecraftcitiesnetwork.vaultstorage.database.NewVault;
 import com.minecraftcitiesnetwork.vaultstorage.database.StoredVault;
@@ -17,17 +10,12 @@ import com.minecraftcitiesnetwork.vaultstorage.database.VaultSummary;
 import com.minecraftcitiesnetwork.vaultstorage.database.legacy.VaultEntity;
 import com.minecraftcitiesnetwork.vaultstorage.database.legacy.VaultItemEntity;
 import com.minecraftcitiesnetwork.vaultstorage.database.legacy.VaultService;
-import com.minecraftcitiesnetwork.vaultstorage.region.VaultRegion;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
-import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import org.bukkit.Bukkit;
-import org.bukkit.Location;
 import org.bukkit.World;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -115,48 +103,6 @@ public final class VaultServiceImpl implements VaultService {
         vaultEntity.blockData = blockData;
 
         return vaultEntity;
-    }
-
-    @Override
-    public void mailOwner(@NotNull UUID worldUuid, @NotNull UUID actor, int x, int y, int z,
-                          @NotNull UUID ownerUuid) {
-        Essentials essentials = VaultStoragePlugin.getInstance().getEssentials();
-        User sender = essentials.getUser(actor);
-
-
-
-        User recipient = essentials.getUser(ownerUuid);
-        if(sender == null || recipient == null) {
-            return;
-        }
-        String senderName = sender.getName();
-        String recipientName = recipient.getName();
-
-        // Load configurable MiniMessage template and apply placeholders
-        AutoYML<MailConfig> yml = AutoYML.create(MailConfig.class, "mail", DataFolder.MAIL, MailConfig.HEADER);
-        MailConfig cfg = yml.loadOrCreate(MailConfig::new);
-        Map<String, String> placeholders = new HashMap<>();
-        placeholders.put("%sender%", senderName);
-        placeholders.put("%recipient%", recipientName);
-        addRegionPlaceHolder(worldUuid, x, y, z, placeholders);
-
-        String message = LegacyComponentSerializer.legacySection()
-                .serialize(MiniMessageUtil.parseOrPlain(cfg.vaultCreatedMessage, placeholders));
-
-        VaultStoragePlugin.getInstance().getMailService().sendMail(recipient, sender, message);
-    }
-
-    private void addRegionPlaceHolder(@NotNull UUID worldUuid, int x, int y, int z, Map<String, String> placeholders) {
-        World world = Bukkit.getWorld(worldUuid);
-        if(world != null) {
-            Location location = new Location(world, x, y, z);
-            List<VaultRegion> regions = VaultStoragePlugin.getInstance().getWorldGuardService().getRegionsAt(location.getBlock());
-            String regionName = "N/A";
-            if(!regions.isEmpty()) {
-                regionName = regions.getFirst().id();
-            }
-            placeholders.put("%region%", regionName);
-        }
     }
 
     @Override

@@ -20,9 +20,6 @@ dependencies {
     compileOnly(libs.bolt.bukkit)
     compileOnly(libs.bolt.common)
     compileOnly(libs.worldguard)
-    compileOnly(libs.essentialsx) {
-        exclude(group = "org.spigotmc", module = "spigot-api")
-    }
     // compileOnly is on neither test classpath; tests name Paper's profile type.
     testImplementation(libs.paper.api)
     // Database tests run against the real engine and need a running Docker daemon.
@@ -42,6 +39,7 @@ dependencies {
     moduleJars(project(path = ":modules:chestshop-adapter", configuration = "moduleJar"))
     moduleJars(project(path = ":modules:realty-autovault", configuration = "moduleJar"))
     moduleJars(project(path = ":modules:griefprevention-adapter", configuration = "moduleJar"))
+    moduleJars(project(path = ":modules:player-notifications-adapter", configuration = "moduleJar"))
 }
 
 val installModules by tasks.registering(Sync::class) {
@@ -78,9 +76,6 @@ tasks {
             modrinth("worldedit", "YFnqiUlL") // 7.4.6, bukkit
             modrinth("worldguard", "7.0.20")
             modrinth("bolt", "1.2.37")
-            // 2.21.2 loads but fails to enable on 26.3. It is enough to satisfy the dependency for a
-            // boot check; replace it with a 26.3 build to exercise mail.
-            github("EssentialsX", "Essentials", "2.21.2", "EssentialsX-2.21.2.jar")
         }
     }
 
@@ -160,7 +155,6 @@ plugwright {
                 url("https://cdn.modrinth.com/data/1u6JkXh5/versions/YFnqiUlL/worldedit-bukkit-7.4.6.jar")
                 url("https://cdn.modrinth.com/data/DKY9btbd/versions/9YdeGXiK/worldguard-bukkit-7.0.20.jar")
                 url("https://cdn.modrinth.com/data/YqbUofZE/versions/oWPMxWDV/Bolt-1.2.37.jar")
-                url("https://cdn.modrinth.com/data/hXiIvTyT/versions/nY6VN1XH/EssentialsX-2.22.0.jar")
                 // The bots join as 1.21.11 clients; these let them join a 26.3 server.
                 // See src/test/e2e/plugins/test-server.ts.
                 url("https://cdn.modrinth.com/data/P1OZGk5p/versions/Fkfcr89K/ViaVersion-5.12.2.jar")

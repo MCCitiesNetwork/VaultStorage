@@ -11,12 +11,12 @@ dependencies:
     Bolt:       { load: BEFORE, required: true,  join-classpath: true }
     WorldGuard: { load: BEFORE, required: true,  join-classpath: true }
     WorldEdit:  { load: BEFORE, required: true,  join-classpath: true }
-    Essentials: { load: BEFORE, required: true,  join-classpath: true }
     floodgate:  { load: BEFORE, required: false, join-classpath: true }
     Namebook:   { load: BEFORE, required: false, join-classpath: true }
     ChestShop:  { load: BEFORE, required: false, join-classpath: true }
     Realty:     { load: BEFORE, required: false, join-classpath: true }
     GriefPrevention: { load: BEFORE, required: false, join-classpath: true }
+    PlayerNotifications: { load: BEFORE, required: false, join-classpath: true }
 
 # Every permission is declared here with a description and a default.
 permissions:

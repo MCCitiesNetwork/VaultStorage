@@ -13,12 +13,6 @@ import org.jetbrains.annotations.Nullable;
  */
 public interface VaultService {
 
-    /**
-     * Mails a vault's owner that it was created at the given block. Reads Essentials' user
-     * files, so it is called off the main thread.
-     */
-    void mailOwner(@NotNull UUID worldUuid, @NotNull UUID actor, int x, int y, int z, @NotNull UUID ownerUuid);
-
     /** Creates an empty vault. Items are added with {@link #putItems}. */
     @NotNull VaultEntity createVault(@NotNull UUID worldUuid, @NotNull UUID actor, int x, int y, int z,
                                      @NotNull UUID ownerUuid, @Nullable String material, @Nullable String blockData);

@@ -12,7 +12,7 @@ plugin-infrastructure = "1.0.0-SNAPSHOT"
 namebook-api = "1.0.0-SNAPSHOT"
 bolt = "1.1.33"
 worldguard = "7.0.20"
-essentialsx = "2.21.2"
+player-notifications-api = "1.2.0"
 floodgate-api = "2.2.5-SNAPSHOT"
 chestshop = "3.12.2"
 realty-paper-api = "1.4.0"
@@ -34,7 +34,7 @@ namebook-api = { module = "com.minecraftcitiesnetwork:namebook-api", version.ref
 bolt-bukkit = { module = "org.popcraft:bolt-bukkit", version.ref = "bolt" }
 bolt-common = { module = "org.popcraft:bolt-common", version.ref = "bolt" }
 worldguard = { module = "com.sk89q.worldguard:worldguard-bukkit", version.ref = "worldguard" }
-essentialsx = { module = "net.essentialsx:EssentialsX", version.ref = "essentialsx" }
+player-notifications-api = { module = "io.github.md5sha256:player-notifications-api", version.ref = "player-notifications-api" }
 floodgate-api = { module = "org.geysermc.floodgate:api", version.ref = "floodgate-api" }
 chestshop = { module = "com.acrobot.chestshop:chestshop", version.ref = "chestshop" }
 realty-paper-api = { module = "io.github.md5sha256:realty-paper-api", version.ref = "realty-paper-api" }

@@ -34,6 +34,9 @@ public class MailConfig implements Serializable {
      */
     public String vaultCreatedMessage = "<gold>%sender%</gold> created a new vault for you:  <yellow>%recipient%</yellow> <gray>in region</gray> <yellow>%region%</yellow>";
 
+    /** MiniMessage title of the notification, shown where the delivery medium has one. */
+    public String notificationTitle = "<gold>Vault storage</gold>";
+
     /** No-arg constructor required by the AutoYML loader. */
     public MailConfig() {}
 }

@@ -27,7 +27,7 @@ Command (in‑game):
 ### Requirements
 - Paper 26.3
 - Java 25
-- WorldEdit, WorldGuard, Bolt and Essentials installed
+- WorldEdit, WorldGuard and Bolt installed
 
 ### Installation and first run
 1) Place `VaultStorage-<version>.jar` in your server's `plugins` folder.
@@ -114,8 +114,11 @@ Every other integration is a module: a separate jar in `plugins/VaultStorage/mod
 | `chestshop-adapter` | ChestShop | Shop sign handling during capture |
 | `realty-autovault` | Realty | Automatic vaulting when a region changes occupant |
 | `griefprevention-adapter` | GriefPrevention | Placing a vault on a claim where the player may build |
+| `player-notifications-adapter` | PlayerNotifications | Telling a vault's owner that a container of theirs was vaulted |
 
 Module jars must come from the same build as the plugin jar.
+
+Essentials is no longer used. Before 2.0 the plugin mailed vault owners through it; without the `player-notifications-adapter` module, owners are not told and the server log records each case. PlayerNotifications can itself deliver by Essentials mail.
 
 ### Operations and troubleshooting
 Health signals in console:
