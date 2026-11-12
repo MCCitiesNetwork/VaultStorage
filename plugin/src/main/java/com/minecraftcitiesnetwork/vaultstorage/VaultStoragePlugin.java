@@ -1,5 +1,7 @@
 package com.minecraftcitiesnetwork.vaultstorage;
 
+import com.minecraftcitiesnetwork.vaultstorage.capture.VaultCapturePolicy;
+import com.minecraftcitiesnetwork.vaultstorage.config.Text;
 import com.minecraftcitiesnetwork.vaultstorage.bolt.BoltService;
 import com.minecraftcitiesnetwork.vaultstorage.chestshop.ChestShopService;
 import com.minecraftcitiesnetwork.vaultstorage.scan.VaultScanService;
@@ -54,8 +56,8 @@ import org.bukkit.plugin.java.JavaPlugin;
  */
 public final class VaultStoragePlugin extends JavaPlugin {
 
-    private static VaultStoragePlugin instance;
-    private final VaultSessionManager sessionManager = new VaultSessionManager();
+    private final VaultSessionManager sessionManager = new VaultSessionManager(
+            listener -> getServer().getPluginManager().registerEvents(listener, this));
 
     // Domain services
     private VaultCaptureService captureService;
@@ -68,6 +70,8 @@ public final class VaultStoragePlugin extends JavaPlugin {
     private final Integrations integrations = new Integrations();
     private final AtomicReference<PluginSettings> settings = new AtomicReference<>();
     private final MessageContainer messages = new MessageContainer();
+    private final Text text = new Text(this.messages);
+    private final VaultCapturePolicy capturePolicy = new VaultCapturePolicy(this);
     private ModuleLifecycleManager<VaultStoragePlugin> modules;
     private Names names;
     private OwnerNotifications ownerNotifications;
@@ -79,11 +83,8 @@ public final class VaultStoragePlugin extends JavaPlugin {
 
     // Database wiring
 
-    public static VaultStoragePlugin getInstance() {
-        return instance;
-    }
 
-    public VaultSessionManager getSessionManager() { return sessionManager; }
+    public VaultSessionManager sessionManager() { return sessionManager; }
 
 
     /** Every read and write of vaults. Blocking: call it on {@link #databaseExecutor()}. */
@@ -95,24 +96,30 @@ public final class VaultStoragePlugin extends JavaPlugin {
     /** The pool database work runs on. */
     public Executor databaseExecutor() { return databaseExecutor; }
 
-    public WorldGuardService getWorldGuardService() { return worldGuardService; }
+    public WorldGuardService worldGuard() { return worldGuardService; }
 
-    public BoltService getBoltService() { return boltService; }
+    public BoltService bolt() { return boltService; }
 
     /** Reusable capture domain service. */
-    public VaultCaptureService getCaptureService() { return captureService; }
+    public VaultCaptureService captureService() { return captureService; }
 
     /** Reusable placement domain service. */
-    public VaultPlacementService getPlacementService() { return placementService; }
+    public VaultPlacementService placementService() { return placementService; }
 
     /** Reusable inventory domain service. */
-    public VaultInventoryService getInventoryService() { return inventoryService; }
+    public VaultInventoryService inventoryService() { return inventoryService; }
 
     /** Reusable scan domain service. */
-    public VaultScanService getScanService() { return scanService; }
+    public VaultScanService scanService() { return scanService; }
 
     /** What feature modules supply; read at use time. */
     public Integrations integrations() { return integrations; }
+
+    /** Messages with their placeholders given as a map. */
+    public Text text() { return text; }
+
+    /** Who may vault what. */
+    public VaultCapturePolicy capturePolicy() { return capturePolicy; }
 
     /** messages.yml. One instance, reloaded in place. */
     public MessageContainer messages() { return messages; }
@@ -128,7 +135,6 @@ public final class VaultStoragePlugin extends JavaPlugin {
 
     @Override
     public void onEnable() {
-        instance = this;
         // Settings first: the plugin cannot run without them, and the server is still starting.
         DatabaseSettings databaseSettings;
         try {
@@ -162,10 +168,10 @@ public final class VaultStoragePlugin extends JavaPlugin {
 
 
         // Domain services
-        this.captureService = new VaultCaptureService();
-        this.placementService = new VaultPlacementService();
-        this.inventoryService = new VaultInventoryService();
-        this.scanService = new VaultScanServiceImpl();
+        this.captureService = new VaultCaptureService(this);
+        this.placementService = new VaultPlacementService(this);
+        this.inventoryService = new VaultInventoryService(this);
+        this.scanService = new VaultScanServiceImpl(this);
 
         // External lookup services
         this.names = new Names(new PaperProfileNameSource(), this.integrations);
@@ -342,7 +348,7 @@ public final class VaultStoragePlugin extends JavaPlugin {
 
 
     /** ChestShop integration; returns a no-op implementation when ChestShop is not installed. */
-    public ChestShopService getChestShopService() {
+    public ChestShopService chestShop() {
         return this.integrations.chestShop();
     }
 

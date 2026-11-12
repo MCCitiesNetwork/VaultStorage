@@ -1,5 +1,6 @@
 package com.minecraftcitiesnetwork.vaultstorage.capture;
 
+import org.jetbrains.annotations.NotNull;
 import com.minecraftcitiesnetwork.vaultstorage.permission.Permissions;
 
 import com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin;
@@ -25,7 +26,12 @@ import java.util.UUID;
  */
 public final class VaultCapturePolicy {
 
-    private VaultCapturePolicy() {}
+    private final @NotNull VaultStoragePlugin plugin;
+
+    public VaultCapturePolicy(@NotNull VaultStoragePlugin plugin) {
+        this.plugin = plugin;
+    }
+
 
     public record Decision(boolean allowed, boolean hasOverride, boolean actorParticipantAny,
                            boolean containerOwnerParticipantAny, boolean actorIsContainerOwner,
@@ -76,14 +82,14 @@ public final class VaultCapturePolicy {
      * Rules recap: requires Bolt owner; requires region participation unless override is present.
      *
      */
-    public static Decision evaluate(Player actor, Block block) {
-        BoltService bolt = VaultStoragePlugin.getInstance().getBoltService();
+    public Decision evaluate(Player actor, Block block) {
+        BoltService bolt = plugin.bolt();
         UUID originalOwner = null;
         if (bolt != null) {
             try {
                 originalOwner = bolt.getOwner(block);
             } catch (Throwable t) {
-                VaultStoragePlugin.getInstance().getLogger().warning("[VaultCapturePolicy] Error obtaining Bolt owner for block in "
+                plugin.getLogger().warning("[VaultCapturePolicy] Error obtaining Bolt owner for block in "
                         + formatBlock(block) + ": " + t.getClass().getSimpleName() + " - " + t.getMessage());
             }
         }
@@ -91,7 +97,7 @@ public final class VaultCapturePolicy {
         // Log actor UUID for debugging Bedrock player issues
         UUID actorUUID = actor.getUniqueId();
         if (actorUUID.toString().matches("0{8}-0{4}-0{4}-0{4}-0{12}")) {
-            VaultStoragePlugin.getInstance().getLogger().warning("[VaultCapturePolicy] Invalid actor UUID for player " + actor.getName() + ": " + actorUUID);
+            plugin.getLogger().warning("[VaultCapturePolicy] Invalid actor UUID for player " + actor.getName() + ": " + actorUUID);
         }
 
         return evaluateBlockPolicy(actor, block, originalOwner, false);
@@ -104,8 +110,8 @@ public final class VaultCapturePolicy {
      * @param hanging the hanging entity being captured
      * @param supportingBlock block the hanging is attached to
      */
-    public static Decision evaluateHangingCapture(Player actor, Hanging hanging, Block supportingBlock) {
-        BoltService bolt = VaultStoragePlugin.getInstance().getBoltService();
+    public Decision evaluateHangingCapture(Player actor, Hanging hanging, Block supportingBlock) {
+        BoltService bolt = plugin.bolt();
         UUID originalOwner = null;
         if (bolt != null) {
             try {
@@ -114,20 +120,20 @@ public final class VaultCapturePolicy {
                     originalOwner = bolt.getOwner(supportingBlock);
                 }
             } catch (Throwable t) {
-                VaultStoragePlugin.getInstance().getLogger().warning("[VaultCapturePolicy] Error obtaining Bolt owner for hanging entity in "
+                plugin.getLogger().warning("[VaultCapturePolicy] Error obtaining Bolt owner for hanging entity in "
                         + formatBlock(supportingBlock) + ": " + t.getClass().getSimpleName() + " - " + t.getMessage());
             }
         }
 
         UUID actorUUID = actor.getUniqueId();
         if (actorUUID.toString().matches("0{8}-0{4}-0{4}-0{4}-0{12}")) {
-            VaultStoragePlugin.getInstance().getLogger().warning("[VaultCapturePolicy] Invalid actor UUID for player " + actor.getName() + ": " + actorUUID);
+            plugin.getLogger().warning("[VaultCapturePolicy] Invalid actor UUID for player " + actor.getName() + ": " + actorUUID);
         }
 
         return evaluateBlockPolicy(actor, supportingBlock, originalOwner, false);
     }
 
-    private static Decision evaluateBlockPolicy(Player actor, Block block, UUID originalOwner, boolean hangableRestricted) {
+    private Decision evaluateBlockPolicy(Player actor, Block block, UUID originalOwner, boolean hangableRestricted) {
         boolean hasOverride = actor.hasPermission(Permissions.BYPASS_REGION);
         boolean actorIsContainerOwner = originalOwner != null && originalOwner.equals(actor.getUniqueId());
 
@@ -184,8 +190,8 @@ public final class VaultCapturePolicy {
                                        boolean containerOwnerParticipantAny, List<RegionStatus> perRegionDebug) {}
 
     /** Scans WorldGuard regions at the block and computes actor/owner participation flags. */
-    private static RegionParticipation computeRegionParticipation(Player actor, Block block, UUID originalOwner) {
-        WorldGuardService wgs = VaultStoragePlugin.getInstance().getWorldGuardService();
+    private RegionParticipation computeRegionParticipation(Player actor, Block block, UUID originalOwner) {
+        WorldGuardService wgs = plugin.worldGuard();
 
         boolean actorParticipantAny = false;
         boolean containerOwnerParticipantAny = false;
@@ -197,7 +203,7 @@ public final class VaultCapturePolicy {
             try {
                 regions = wgs.getRegionsAt(block);
             } catch (Throwable t) {
-                VaultStoragePlugin.getInstance().getLogger().warning("[VaultCapturePolicy] Error obtaining WorldGuard regions for block in "
+                plugin.getLogger().warning("[VaultCapturePolicy] Error obtaining WorldGuard regions for block in "
                         + formatBlock(block) + ": " + t.getClass().getSimpleName() + " - " + t.getMessage());
             }
 
@@ -214,7 +220,7 @@ public final class VaultCapturePolicy {
                         containerOwnerParticipates = region.isPartOfRegion(originalOwner);
                     }
                 } catch (Throwable t) {
-                    VaultStoragePlugin.getInstance().getLogger().warning("[VaultCapturePolicy] Error evaluating participation for region "
+                    plugin.getLogger().warning("[VaultCapturePolicy] Error evaluating participation for region "
                             + region.id() + " para bloque en " + formatBlock(block) + ": " + t.getClass().getSimpleName() + " - " + t.getMessage());
                 }
 
@@ -222,7 +228,7 @@ public final class VaultCapturePolicy {
                 try {
                     box = region.boundingBox();
                 } catch (Throwable t) {
-                    VaultStoragePlugin.getInstance().getLogger().warning("[VaultCapturePolicy] Error obtaining boundingBox for region "
+                    plugin.getLogger().warning("[VaultCapturePolicy] Error obtaining boundingBox for region "
                             + region.id() + ": " + t.getClass().getSimpleName() + " - " + t.getMessage());
                     debugList.add(new RegionStatus(region.id(), actorParticipant, containerOwnerParticipates));
                     if (actorParticipant) actorParticipantAny = true;
@@ -235,7 +241,7 @@ public final class VaultCapturePolicy {
                 try {
                     isParent = regions.stream().anyMatch(r -> r != region && safeContains(currentBox, r));
                 } catch (Throwable t) {
-                    VaultStoragePlugin.getInstance().getLogger().warning("[VaultCapturePolicy] Error evaluating parent/child for region "
+                    plugin.getLogger().warning("[VaultCapturePolicy] Error evaluating parent/child for region "
                             + region.id() + ": " + t.getClass().getSimpleName() + " - " + t.getMessage());
                 }
 
@@ -261,14 +267,14 @@ public final class VaultCapturePolicy {
      * Evaluate whether the actor may remove a ChestShop sign on the given container.
      * Only the override permission allows it.
      */
-    public static Decision evaluateChestShopSignRemoval(Player actor, Block containerBlock) {
-        BoltService bolt = VaultStoragePlugin.getInstance().getBoltService();
+    public Decision evaluateChestShopSignRemoval(Player actor, Block containerBlock) {
+        BoltService bolt = plugin.bolt();
         UUID originalOwner = null;
         if (bolt != null) {
             try {
                 originalOwner = bolt.getOwner(containerBlock);
             } catch (Throwable t) {
-                VaultStoragePlugin.getInstance().getLogger().warning("[VaultCapturePolicy] Error obtaining Bolt owner for block in "
+                plugin.getLogger().warning("[VaultCapturePolicy] Error obtaining Bolt owner for block in "
                         + formatBlock(containerBlock) + ": " + t.getClass().getSimpleName() + " - " + t.getMessage());
             }
         }
@@ -302,7 +308,7 @@ public final class VaultCapturePolicy {
     /**
      * Evaluate vaulting permission for a specific entity (e.g. from Scan Menu).
      */
-    public static Decision evaluate(Player actor, Entity entity) {
+    public Decision evaluate(Player actor, Entity entity) {
         if (entity instanceof Hanging hanging) {
             Block supporting = HangingVaultSupport.resolveSupportingBlock(hanging);
             return evaluateHangingCapture(actor, hanging, supporting);
@@ -327,12 +333,12 @@ public final class VaultCapturePolicy {
         return block.getWorld().getName() + "@" + block.getX() + "," + block.getY() + "," + block.getZ() + "[" + block.getType() + "]";
     }
 
-    private static boolean safeContains(BoundingBox outer, VaultRegion innerRegion) {
+    private boolean safeContains(BoundingBox outer, VaultRegion innerRegion) {
         try {
             BoundingBox inner = innerRegion.boundingBox();
             return outer.contains(inner);
         } catch (Throwable t) {
-            VaultStoragePlugin.getInstance().getLogger().warning("[VaultCapturePolicy] Error in safeContains for region "
+            plugin.getLogger().warning("[VaultCapturePolicy] Error in safeContains for region "
                     + innerRegion.id() + ": " + t.getClass().getSimpleName() + " - " + t.getMessage());
             return false;
         }

@@ -10,7 +10,7 @@ class SessionQuitListenerTest {
 
     @Test
     void aPlayerWhoLeavesInCaptureModeComesBackWithNoSession() {
-        VaultSessionManager sessions = new VaultSessionManager();
+        VaultSessionManager sessions = new VaultSessionManager(listener -> { });
         sessions.getOrCreate(PLAYER).switchTo(VaultSessionManager.Mode.CAPTURE);
 
         new SessionQuitListener(sessions).playerLeft(PLAYER);
@@ -21,7 +21,7 @@ class SessionQuitListenerTest {
 
     @Test
     void aPlayerWithNoSessionCanLeave() {
-        VaultSessionManager sessions = new VaultSessionManager();
+        VaultSessionManager sessions = new VaultSessionManager(listener -> { });
         new SessionQuitListener(sessions).playerLeft(PLAYER);
         Assertions.assertNull(sessions.get(PLAYER));
     }

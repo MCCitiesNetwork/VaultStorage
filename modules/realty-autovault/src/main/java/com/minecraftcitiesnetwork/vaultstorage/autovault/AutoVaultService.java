@@ -155,7 +155,7 @@ public class AutoVaultService {
             // The world is not loaded. The stored sweep stays and is tried again after a restart.
             return;
         }
-        WorldGuardService wgs = plugin.getWorldGuardService();
+        WorldGuardService wgs = plugin.worldGuard();
         // Resolve every region once: the swept region plus the sweep filter both come from this single list.
         List<VaultRegion> regions = wgs.getRegionsIn(world);
         VaultRegion region = regions.stream().filter(r -> r.id().equals(key.regionId())).findFirst().orElse(null);
@@ -170,7 +170,7 @@ public class AutoVaultService {
         Runnable onVaulted = vaultedNotifier(initiator);
         Sweep sweep = new Sweep();
 
-        List<DisplacedContainer> displaced = OfflineRegionScanner.scan(key.worldId(), region.boundingBox(), filter);
+        List<DisplacedContainer> displaced = OfflineRegionScanner.scan(plugin.bolt(), key.worldId(), region.boundingBox(), filter);
         CompletableFuture<Void> blocksDispatched = displaced == null || displaced.isEmpty()
                 ? CompletableFuture.completedFuture(null)
                 : vaultBlocks(key.worldId(), displaced, initiator, onVaulted, sweep);
@@ -231,7 +231,7 @@ public class AutoVaultService {
     private @NotNull CompletableFuture<Void> vaultBlocks(@NotNull UUID worldId, @NotNull List<DisplacedContainer> displaced,
                                                         @NotNull UUID initiator, @NotNull Runnable onVaulted,
                                                         @NotNull Sweep sweep) {
-        VaultCaptureService captureService = plugin.getCaptureService();
+        VaultCaptureService captureService = plugin.captureService();
         return forEachChunkPaced(worldId, displaced,
                 dc -> new int[]{dc.x() >> 4, dc.z() >> 4},
                 (world, chunk, dc) ->
@@ -247,8 +247,8 @@ public class AutoVaultService {
     private @NotNull CompletableFuture<Void> vaultHangings(@NotNull UUID worldId, @NotNull BoundingBox box,
                                                           @NotNull SweepFilter filter, @NotNull UUID initiator,
                                                           @NotNull Runnable onVaulted, @NotNull Sweep sweep) {
-        VaultCaptureService captureService = plugin.getCaptureService();
-        BoltService bolt = plugin.getBoltService();
+        VaultCaptureService captureService = plugin.captureService();
+        BoltService bolt = plugin.bolt();
 
         List<int[]> chunks = new ArrayList<>();
         int minChunkX = (int) Math.floor(box.getMinX()) >> 4;

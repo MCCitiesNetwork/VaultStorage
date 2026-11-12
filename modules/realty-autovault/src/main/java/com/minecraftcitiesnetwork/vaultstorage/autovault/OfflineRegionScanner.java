@@ -1,6 +1,5 @@
 package com.minecraftcitiesnetwork.vaultstorage.autovault;
 
-import com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin;
 import com.minecraftcitiesnetwork.vaultstorage.bolt.BoltService;
 import com.minecraftcitiesnetwork.vaultstorage.autovault.SweepFilter;
 import org.bukkit.Bukkit;
@@ -27,9 +26,9 @@ public final class OfflineRegionScanner {
     public record DisplacedContainer(int x, int y, int z, UUID owner) {}
 
     /** Filters the region's Bolt protections to displaced containers, or {@code null} if services are unavailable. */
-    public static List<DisplacedContainer> scan(UUID worldId, BoundingBox boundingBox, SweepFilter filter) {
+    public static List<DisplacedContainer> scan(BoltService boltService, UUID worldId, BoundingBox boundingBox,
+                                                SweepFilter filter) {
         World world = Bukkit.getWorld(worldId);
-        BoltService boltService = VaultStoragePlugin.getInstance().getBoltService();
         if (world == null || boltService == null) {
             return null;
         }

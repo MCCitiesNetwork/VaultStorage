@@ -1,8 +1,6 @@
 package com.minecraftcitiesnetwork.vaultstorage.menu;
 
 import com.minecraftcitiesnetwork.vaultstorage.config.MessageKeys;
-import com.minecraftcitiesnetwork.vaultstorage.config.Text;
-import com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin;
 import io.papermc.paper.dialog.Dialog;
 import io.papermc.paper.registry.data.dialog.DialogBase;
 import io.papermc.paper.registry.data.dialog.body.DialogBody;
@@ -38,17 +36,17 @@ public class LoadingMenu extends ChildMenuImp {
 
     private Dialog build() {
         AutoDialog.Builder builder = getAutoDialogBuilder();
-        builder.title(Text.of(MessageKeys.LOADING_TITLE, placeholders));
+        builder.title(plugin.text().of(MessageKeys.LOADING_TITLE, placeholders));
         builder.canCloseWithEscape(true);
         builder.afterAction(DialogBase.DialogAfterAction.CLOSE);
-        builder.addBody(DialogBody.plainMessage(Text.of(MessageKeys.LOADING_MESSAGE, placeholders)));
+        builder.addBody(DialogBody.plainMessage(plugin.text().of(MessageKeys.LOADING_MESSAGE, placeholders)));
         return builder.build();
     }
 
     @Override
     public void open() {
-        if(VaultStoragePlugin.getInstance().integrations().isBedrockClient(player.getUniqueId())){
-            player.sendMessage(Text.of(MessageKeys.LOADING_BEDROCK));
+        if(plugin.integrations().isBedrockClient(player.getUniqueId())){
+            player.sendMessage(plugin.text().of(MessageKeys.LOADING_BEDROCK));
         }else{
             setDialog(build());
             super.open();

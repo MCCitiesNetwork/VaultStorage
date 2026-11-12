@@ -1,7 +1,6 @@
 package com.minecraftcitiesnetwork.vaultstorage.vault;
 
 import com.minecraftcitiesnetwork.vaultstorage.config.MessageKeys;
-import com.minecraftcitiesnetwork.vaultstorage.config.Text;
 import com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin;
 import com.minecraftcitiesnetwork.vaultstorage.database.ClaimResult;
 import com.minecraftcitiesnetwork.vaultstorage.database.FindResult;
@@ -40,6 +39,12 @@ import org.jetbrains.annotations.Nullable;
  */
 public class VaultInventoryService implements Listener {
 
+    private final @NotNull VaultStoragePlugin plugin;
+
+    public VaultInventoryService(@NotNull VaultStoragePlugin plugin) {
+        this.plugin = plugin;
+    }
+
     private static final int MAX_SIZE = 54;
     private static final int ROW = 9;
 
@@ -54,7 +59,6 @@ public class VaultInventoryService implements Listener {
      */
     public void openVirtualInventory(@NotNull Player player, @NotNull UUID vaultId, @NotNull VaultAction action,
                                      @Nullable ParentMenu parentMenu, @Nullable Runnable reopenCallback) {
-        VaultStoragePlugin plugin = VaultStoragePlugin.getInstance();
         Executor mainThread = plugin.getServer().getScheduler().getMainThreadExecutor(plugin);
         if (parentMenu != null) {
             Map<String, String> placeholders = Map.of("%player%", player.getName(), "%vault%", String.valueOf(vaultId));
@@ -75,7 +79,7 @@ public class VaultInventoryService implements Listener {
                     Loaded loaded = entry.getKey();
                     if (loaded.vault().isEmpty()) {
                         closeLoading(player, parentMenu);
-                        player.sendMessage(Text.of(loaded.refusal()));
+                        player.sendMessage(plugin.text().of(loaded.refusal()));
                         return;
                     }
                     if (!player.isOnline()) {
@@ -89,7 +93,7 @@ public class VaultInventoryService implements Listener {
                     releaseIfEditing(plugin, vaultId, editing);
                     mainThread.execute(() -> {
                         closeLoading(player, parentMenu);
-                        player.sendMessage(Text.of(MessageKeys.INVENTORY_OPEN_FAILED));
+                        player.sendMessage(plugin.text().of(MessageKeys.INVENTORY_OPEN_FAILED));
                     });
                     return null;
                 });
@@ -131,11 +135,11 @@ public class VaultInventoryService implements Listener {
                 });
     }
 
-    private static void show(@NotNull Player player, @NotNull StoredVault stored, @NotNull String ownerName,
+    private void show(@NotNull Player player, @NotNull StoredVault stored, @NotNull String ownerName,
                              @NotNull VaultAction action, @Nullable Runnable reopenCallback) {
         int highestSlot = stored.items().stream().mapToInt(VaultItemEntity::slot).max().orElse(-1);
         int size = Math.min(MAX_SIZE, Math.max(ROW, ((highestSlot + 1 + ROW - 1) / ROW) * ROW));
-        Component title = Text.of(MessageKeys.INVENTORY_TITLE, Map.of("owner", ownerName, "action", action.name()));
+        Component title = plugin.text().of(MessageKeys.INVENTORY_TITLE, Map.of("owner", ownerName, "action", action.name()));
         VaultView view = new VaultView(stored.vault().uuid(), action, reopenCallback);
         Inventory inventory = Bukkit.createInventory(view, size, title);
         view.inventory(inventory);
@@ -182,7 +186,6 @@ public class VaultInventoryService implements Listener {
         if (!(event.getInventory().getHolder() instanceof VaultView view)) {
             return;
         }
-        VaultStoragePlugin plugin = VaultStoragePlugin.getInstance();
         Runnable afterClose = view.afterClose();
         Executor mainThread = plugin.getServer().getScheduler().getMainThreadExecutor(plugin);
         if (!VaultViewRules.savesOnClose(view.action())) {
@@ -197,7 +200,7 @@ public class VaultInventoryService implements Listener {
                     plugin.getLogger().log(Level.SEVERE, "Vault " + view.vault() + " could not be saved after "
                             + event.getPlayer().getName() + " edited it. It keeps its previous contents; what they"
                             + " put in is lost and what they took out exists twice.", failure);
-                    event.getPlayer().sendMessage(Text.of(MessageKeys.INVENTORY_SAVE_FAILED));
+                    event.getPlayer().sendMessage(plugin.text().of(MessageKeys.INVENTORY_SAVE_FAILED));
                     return null;
                 })
                 .thenRunAsync(() -> {
@@ -233,7 +236,6 @@ public class VaultInventoryService implements Listener {
      * pool is about to close, so the save cannot be handed to it.
      */
     public void saveOpenViews() {
-        VaultStoragePlugin plugin = VaultStoragePlugin.getInstance();
         for (Player player : Bukkit.getOnlinePlayers()) {
             Inventory open = player.getOpenInventory().getTopInventory();
             if (!(open.getHolder() instanceof VaultView view) || !VaultViewRules.savesOnClose(view.action())) {

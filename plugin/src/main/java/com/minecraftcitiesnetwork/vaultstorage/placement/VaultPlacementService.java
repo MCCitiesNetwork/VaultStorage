@@ -40,6 +40,12 @@ import org.jetbrains.annotations.Nullable;
  */
 public class VaultPlacementService {
 
+    private final @NotNull VaultStoragePlugin plugin;
+
+    public VaultPlacementService(@NotNull VaultStoragePlugin plugin) {
+        this.plugin = plugin;
+    }
+
     /** Immutable result for placement operations. */
     /** {@code messageKey} names the line in messages.yml that tells the player what happened. */
     public record Result(boolean success, String messageKey) {}
@@ -53,7 +59,6 @@ public class VaultPlacementService {
      */
     public void placeFromDatabaseRelativeAsync(@NotNull UUID vaultUuid, @NotNull Location targetLoc,
                                                @Nullable Consumer<Result> callback) {
-        VaultStoragePlugin plugin = VaultStoragePlugin.getInstance();
         VaultRepository repository = plugin.repository();
         Executor database = plugin.databaseExecutor();
         Executor mainThread = plugin.getServer().getScheduler().getMainThreadExecutor(plugin);
@@ -92,7 +97,7 @@ public class VaultPlacementService {
                 return refused;
             }, database);
         }
-        BoltService bolt = plugin.getBoltService();
+        BoltService bolt = plugin.bolt();
         if (bolt != null) {
             try {
                 bolt.createProtection(targetLoc.getBlock(), stored.vault().ownerUuid());

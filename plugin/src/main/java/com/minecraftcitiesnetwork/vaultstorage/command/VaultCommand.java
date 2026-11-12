@@ -89,7 +89,7 @@ public final class VaultCommand {
             return Command.SINGLE_SUCCESS;
         }
         if (ownerName == null) {
-            new VaultCaptureMenu(player).open();
+            new VaultCaptureMenu(plugin, player).open();
             return Command.SINGLE_SUCCESS;
         }
         MessageContainer messages = plugin.messages();
@@ -102,9 +102,9 @@ public final class VaultCommand {
                     if (!UniqueIdentifierResolver.isValidUUID(owner)) {
                         player.sendMessage(messages.messageFor(MessageKeys.COMMAND_MENU_PLAYER_NOT_FOUND));
                     } else if (owner.equals(player.getUniqueId())) {
-                        new VaultCaptureMenu(player).open();
+                        new VaultCaptureMenu(plugin, player).open();
                     } else {
-                        new VaultCaptureMenu(player, VaultUIContext.adminFiltered(player.getUniqueId(), owner)).open();
+                        new VaultCaptureMenu(plugin, player, VaultUIContext.adminFiltered(player.getUniqueId(), owner)).open();
                     }
                 }, mainThread(plugin))
                 .exceptionally(failure -> {
@@ -120,7 +120,7 @@ public final class VaultCommand {
         if (player == null) {
             return Command.SINGLE_SUCCESS;
         }
-        plugin.getCaptureService().startCaptureSession(player);
+        plugin.captureService().startCaptureSession(player);
         player.sendMessage(plugin.messages().messageFor(MessageKeys.COMMAND_CAPTURE_STARTED));
         return Command.SINGLE_SUCCESS;
     }
@@ -128,7 +128,7 @@ public final class VaultCommand {
     private static int admin(@NotNull VaultStoragePlugin plugin, @NotNull CommandContext<CommandSourceStack> context) {
         Player player = playerOrTell(plugin, context);
         if (player != null) {
-            new VaultCaptureMenu(player, VaultUIContext.admin(player.getUniqueId())).open();
+            new VaultCaptureMenu(plugin, player, VaultUIContext.admin(player.getUniqueId())).open();
         }
         return Command.SINGLE_SUCCESS;
     }
@@ -164,7 +164,7 @@ public final class VaultCommand {
                 .thenAcceptAsync(outcome -> {
                     switch (outcome) {
                         case OpenOutcome.Allowed allowed ->
-                                plugin.getInventoryService().openVirtualInventory(player, vault, action.get());
+                                plugin.inventoryService().openVirtualInventory(player, vault, action.get());
                         case OpenOutcome.NoSuchVault missing ->
                                 player.sendMessage(messages.messageFor(MessageKeys.INVENTORY_NOT_FOUND));
                         case OpenOutcome.NotYours notYours ->

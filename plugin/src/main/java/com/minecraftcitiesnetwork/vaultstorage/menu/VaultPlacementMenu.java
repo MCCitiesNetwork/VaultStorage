@@ -1,14 +1,12 @@
 package com.minecraftcitiesnetwork.vaultstorage.menu;
 
 import com.minecraftcitiesnetwork.vaultstorage.config.MessageKeys;
-import com.minecraftcitiesnetwork.vaultstorage.config.Text;
 import com.minecraftcitiesnetwork.vaultstorage.database.VaultFilter;
 import java.util.concurrent.CompletableFuture;
 import java.util.logging.Level;
 import io.papermc.paper.dialog.Dialog;
 import io.papermc.paper.registry.data.dialog.DialogBase;
 import io.papermc.paper.registry.data.dialog.body.DialogBody;
-import com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin;
 import com.minecraftcitiesnetwork.vaultstorage.placement.PlayerPlaceVaultEvent;
 import com.minecraftcitiesnetwork.vaultstorage.menu.AutoDialog;
 import com.minecraftcitiesnetwork.vaultstorage.permission.Permissions;
@@ -51,13 +49,13 @@ public class VaultPlacementMenu extends ChildMenuImp {
 
     private Dialog build() {
         AutoDialog.Builder builder = getAutoDialogBuilder();
-        builder.title(Text.of(MessageKeys.PLACEMENT_TITLE, Map.of("%player%", getPlayer().getName())));
+        builder.title(plugin.text().of(MessageKeys.PLACEMENT_TITLE, Map.of("%player%", getPlayer().getName())));
         builder.canCloseWithEscape(true);
         builder.afterAction(DialogBase.DialogAfterAction.CLOSE);
 
-        builder.addBody(DialogBody.plainMessage(Text.of(MessageKeys.PLACEMENT_INSTRUCTION, Map.of("%player%", getPlayer().getName()))));
-        builder.button(Text.of(MessageKeys.PLACEMENT_START_BTN), ctx -> startPlacement(ctx.player()));
-        builder.button(Text.of(MessageKeys.PLACEMENT_BACK_BTN), ctx -> getParentMenu().open());
+        builder.addBody(DialogBody.plainMessage(plugin.text().of(MessageKeys.PLACEMENT_INSTRUCTION, Map.of("%player%", getPlayer().getName()))));
+        builder.button(plugin.text().of(MessageKeys.PLACEMENT_START_BTN), ctx -> startPlacement(ctx.player()));
+        builder.button(plugin.text().of(MessageKeys.PLACEMENT_BACK_BTN), ctx -> getParentMenu().open());
         return builder.build();
     }
 
@@ -79,7 +77,7 @@ public class VaultPlacementMenu extends ChildMenuImp {
      * </p>
      */
     private void startPlacement(Player actor) {
-        VaultSessionManager.Session session = VaultStoragePlugin.getInstance().getSessionManager().getOrCreate(actor.getUniqueId());
+        VaultSessionManager.Session session = plugin.sessionManager().getOrCreate(actor.getUniqueId());
         // Switch to PLACEMENT mode, cancelling any prior capture/placement state
         session.switchTo(Mode.PLACEMENT);
         final BukkitTask[] actionbarTask = new BukkitTask[1];
@@ -102,7 +100,7 @@ public class VaultPlacementMenu extends ChildMenuImp {
                     if (actionbarTask[0] != null) actionbarTask[0].cancel();
                     session.clearActionBarTask();
                     session.switchTo(Mode.NONE);
-                    actor.sendMessage(Text.of(MessageKeys.PLACEMENT_PLACEMENT_CANCELLED));
+                    actor.sendMessage(plugin.text().of(MessageKeys.PLACEMENT_PLACEMENT_CANCELLED));
                     return; // Do NOT reopen menu
                 }
                 if (action != Action.RIGHT_CLICK_BLOCK) return;
@@ -115,17 +113,17 @@ public class VaultPlacementMenu extends ChildMenuImp {
 
                 // The place permission, and somewhere the player may place: any grant, or the override.
                 if (!actor.hasPermission(Permissions.ACTION_PLACE)) {
-                    actor.sendMessage(Text.of(MessageKeys.PLACEMENT_NO_PERMISSION));
+                    actor.sendMessage(plugin.text().of(MessageKeys.PLACEMENT_NO_PERMISSION));
                     return;
                 }
                 boolean allowed = actor.hasPermission(Permissions.BYPASS_REGION)
-                        || VaultStoragePlugin.getInstance().integrations().mayPlace(actor.getUniqueId(), targetLoc);
+                        || plugin.integrations().mayPlace(actor.getUniqueId(), targetLoc);
                 if (!allowed) {
-                    actor.sendMessage(Text.of(MessageKeys.PLACEMENT_NOT_ALLOWED));
+                    actor.sendMessage(plugin.text().of(MessageKeys.PLACEMENT_NOT_ALLOWED));
                     return; // Stay in placement mode
                 }
 
-                VaultPlacementService placement = VaultStoragePlugin.getInstance().getPlacementService();
+                VaultPlacementService placement = plugin.placementService();
                 new LoadingMenu(actor, getParentMenu(), Map.of("%player%", actor.getName(), "%vault%", String.valueOf(vaultId))).open();
                 // Stop session listener and actionbar (single placement then exit mode)
                 session.getDynamicListener().stop();
@@ -134,10 +132,9 @@ public class VaultPlacementMenu extends ChildMenuImp {
                 session.switchTo(Mode.NONE);
 
                 placement.placeFromDatabaseRelativeAsync(vaultId, targetLoc, result -> {
-                    var plugin = VaultStoragePlugin.getInstance();
                     new BukkitRunnable() {
                         @Override public void run() {
-                            actor.sendMessage(Text.of(result.messageKey()));
+                            actor.sendMessage(plugin.text().of(result.messageKey()));
                             if (result.success()) {
                                 // Fire Vault placed event
                                 new PlayerPlaceVaultEvent(actor, targetLoc).callEvent();
@@ -149,7 +146,7 @@ public class VaultPlacementMenu extends ChildMenuImp {
                                             if (left > 0) {
                                                 new VaultListMenu(actor, (ParentMenuImp) getParentMenu(), context, "").open();
                                             } else {
-                                                actor.sendMessage(Text.of(MessageKeys.PLACEMENT_NONE_LEFT));
+                                                actor.sendMessage(plugin.text().of(MessageKeys.PLACEMENT_NONE_LEFT));
                                                 actor.closeDialog();
                                             }
                                         }, plugin.getServer().getScheduler().getMainThreadExecutor(plugin))
@@ -176,16 +173,16 @@ public class VaultPlacementMenu extends ChildMenuImp {
                 }
                 Block target = actor.getTargetBlockExact(6);
                 if (target == null) {
-                    actor.sendActionBar(Text.of(MessageKeys.PLACEMENT_ACTION_BAR_IDLE));
+                    actor.sendActionBar(plugin.text().of(MessageKeys.PLACEMENT_ACTION_BAR_IDLE));
                     return;
                 }
                 boolean allowed = actor.hasPermission(Permissions.ACTION_PLACE)
                         && (actor.hasPermission(Permissions.BYPASS_REGION)
-                        || VaultStoragePlugin.getInstance().integrations().mayPlace(actor.getUniqueId(), target.getLocation()));
-                actor.sendActionBar(Text.of(allowed
+                        || plugin.integrations().mayPlace(actor.getUniqueId(), target.getLocation()));
+                actor.sendActionBar(plugin.text().of(allowed
                         ? MessageKeys.PLACEMENT_ACTION_BAR_PLACEABLE : MessageKeys.PLACEMENT_ACTION_BAR_NOT_PLACEABLE));
             }
-        }.runTaskTimer(VaultStoragePlugin.getInstance(), 0L, 5L);
+        }.runTaskTimer(plugin, 0L, 5L);
         session.setActionBarTask(actionbarTask[0]);
 
         session.getDynamicListener().start();

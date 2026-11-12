@@ -5,7 +5,6 @@ import net.kyori.adventure.text.Component;
 import java.util.function.Consumer;
 import com.minecraftcitiesnetwork.pluginInfrastructure.configurate.MessageContainer;
 import com.minecraftcitiesnetwork.vaultstorage.config.MessageKeys;
-import com.minecraftcitiesnetwork.vaultstorage.config.Text;
 import com.minecraftcitiesnetwork.vaultstorage.database.DeleteResult;
 import com.minecraftcitiesnetwork.vaultstorage.database.FindResult;
 import java.util.concurrent.CompletableFuture;
@@ -18,7 +17,6 @@ import io.papermc.paper.registry.data.dialog.DialogBase;
 import io.papermc.paper.registry.data.dialog.body.DialogBody;
 import io.papermc.paper.registry.data.dialog.input.DialogInput;
 import io.papermc.paper.registry.data.dialog.input.SingleOptionDialogInput;
-import com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin;
 import com.minecraftcitiesnetwork.vaultstorage.vault.PlayerDeleteVaultEvent;
 import com.minecraftcitiesnetwork.vaultstorage.menu.AutoDialog;
 import com.minecraftcitiesnetwork.vaultstorage.permission.Permissions;
@@ -65,10 +63,10 @@ public class VaultActionMenu extends ChildMenuImp {
 
     private Dialog build() {
         AutoDialog.Builder builder = getAutoDialogBuilder();
-        builder.title(Text.of(MessageKeys.ACTION_TITLE));
+        builder.title(plugin.text().of(MessageKeys.ACTION_TITLE));
         builder.canCloseWithEscape(true);
         builder.afterAction(DialogBase.DialogAfterAction.CLOSE);
-        builder.addBody(DialogBody.plainMessage(VaultStoragePlugin.getInstance().messages().messageFor(
+        builder.addBody(DialogBody.plainMessage(plugin.messages().messageFor(
                 MessageKeys.ACTION_DESCRIPTION, MessageContainer.markup("vault", this.description))));
 
         // Build SingleOption with available actions filtered by permissions
@@ -81,39 +79,39 @@ public class VaultActionMenu extends ChildMenuImp {
                 boolean selected = firstValue == null; // preselect first permitted
                 if (firstValue == null) firstValue = value;
                 Map<String,String> ph = Map.of("%action%", cap(vaultAction.name()));
-                entries.add(SingleOptionDialogInput.OptionEntry.create(value, Text.of(MessageKeys.ACTION_ACTION_OPTION_FORMAT, ph), selected));
+                entries.add(SingleOptionDialogInput.OptionEntry.create(value, plugin.text().of(MessageKeys.ACTION_ACTION_OPTION_FORMAT, ph), selected));
             }
         }
         if (entries.isEmpty()) {
-            builder.addBody(DialogBody.plainMessage(Text.of(MessageKeys.ACTION_NO_ACTIONS)));
-            builder.button(Text.of(MessageKeys.ACTION_BACK_BTN), ctx -> this.back.accept(ctx.player()));
+            builder.addBody(DialogBody.plainMessage(plugin.text().of(MessageKeys.ACTION_NO_ACTIONS)));
+            builder.button(plugin.text().of(MessageKeys.ACTION_BACK_BTN), ctx -> this.back.accept(ctx.player()));
             return builder.build();
         }
 
-        builder.addInput(DialogInput.singleOption(KEY_ACTION, Text.of(MessageKeys.ACTION_ACTION_LABEL), entries).build());
+        builder.addInput(DialogInput.singleOption(KEY_ACTION, plugin.text().of(MessageKeys.ACTION_ACTION_LABEL), entries).build());
 
         String defaultValue = firstValue; // fallback when dialog returns null
-        builder.buttonWithPlayer(Text.of(MessageKeys.ACTION_OPEN_BTN), null, java.time.Duration.ofMinutes(5), 1, (actor, response) -> {
+        builder.buttonWithPlayer(plugin.text().of(MessageKeys.ACTION_OPEN_BTN), null, java.time.Duration.ofMinutes(5), 1, (actor, response) -> {
             String selected = Optional.ofNullable(response.getText(KEY_ACTION)).orElse(defaultValue);
             VaultAction action = parseAction(selected);
-            actor.sendMessage(Text.of(MessageKeys.ACTION_LOADING));
+            actor.sendMessage(plugin.text().of(MessageKeys.ACTION_LOADING));
             openInventoryAsync(actor, action);
         });
 
         // Place block button (relative placement UI)
-        builder.buttonWithPlayer(Text.of(MessageKeys.ACTION_PLACE_BTN), null, java.time.Duration.ofMinutes(5), 1, (actor, response) -> {
+        builder.buttonWithPlayer(plugin.text().of(MessageKeys.ACTION_PLACE_BTN), null, java.time.Duration.ofMinutes(5), 1, (actor, response) -> {
             new VaultPlacementMenu(actor, (ParentMenuImp) getParentMenu(), vaultId, uiContext).open();
         });
 
         // Admin-only delete button
 
         if (player.hasPermission(Permissions.ADMIN)) {
-            builder.buttonWithPlayer(Text.of(MessageKeys.ACTION_DELETE_BTN), null, Duration.ofMinutes(2), 1, (actor, response) -> {
+            builder.buttonWithPlayer(plugin.text().of(MessageKeys.ACTION_DELETE_BTN), null, Duration.ofMinutes(2), 1, (actor, response) -> {
                 if (!actor.hasPermission(Permissions.ADMIN)) {
-                    actor.sendMessage(Text.of(MessageKeys.COMMAND_NO_PERMISSION));
+                    actor.sendMessage(plugin.text().of(MessageKeys.COMMAND_NO_PERMISSION));
                     return;
                 }
-                MessageContainer messages = VaultStoragePlugin.getInstance().messages();
+                MessageContainer messages = plugin.messages();
                 new ConfirmMenu(actor, getParentMenu(),
                         messages.messageFor(MessageKeys.ACTION_DELETE_CONFIRM_TITLE),
                         messages.messageFor(MessageKeys.ACTION_DELETE_CONFIRM_BODY,
@@ -126,18 +124,17 @@ public class VaultActionMenu extends ChildMenuImp {
             });
         }
 
-        builder.button(Text.of(MessageKeys.ACTION_BACK_BTN), ctx -> this.back.accept(ctx.player()));
+        builder.button(plugin.text().of(MessageKeys.ACTION_BACK_BTN), ctx -> this.back.accept(ctx.player()));
         return builder.build();
     }
 
     /** Deletes the vault for good. Reached only through the confirmation. */
     private void delete(@NotNull Player actor) {
         if (!actor.hasPermission(Permissions.ADMIN)) {
-            actor.sendMessage(Text.of(MessageKeys.COMMAND_NO_PERMISSION));
+            actor.sendMessage(plugin.text().of(MessageKeys.COMMAND_NO_PERMISSION));
             return;
         }
-        actor.sendMessage(Text.of(MessageKeys.ACTION_DELETE_LOADING));
-        var plugin = VaultStoragePlugin.getInstance();
+        actor.sendMessage(plugin.text().of(MessageKeys.ACTION_DELETE_LOADING));
         Executor mainThread = plugin.getServer().getScheduler().getMainThreadExecutor(plugin);
         CompletableFuture.supplyAsync(() -> plugin.repository().find(vaultId), plugin.databaseExecutor())
                 .thenComposeAsync(found -> {
@@ -155,7 +152,7 @@ public class VaultActionMenu extends ChildMenuImp {
                     return false;
                 })
                 .thenAcceptAsync(deleted -> {
-                    actor.sendMessage(Text.of(deleted ? MessageKeys.ACTION_DELETE_OK : MessageKeys.ACTION_DELETE_FAIL));
+                    actor.sendMessage(plugin.text().of(deleted ? MessageKeys.ACTION_DELETE_OK : MessageKeys.ACTION_DELETE_FAIL));
                     this.back.accept(actor);
                 }, mainThread);
     }
@@ -171,7 +168,7 @@ public class VaultActionMenu extends ChildMenuImp {
     private static String cap(String s) { return s.substring(0,1).toUpperCase(Locale.ROOT) + s.substring(1).toLowerCase(Locale.ROOT); }
 
     private void openInventoryAsync(Player player, VaultAction action) {
-        VaultInventoryService invSvc = VaultStoragePlugin.getInstance().getInventoryService();
+        VaultInventoryService invSvc = plugin.inventoryService();
         invSvc.openVirtualInventory(player, vaultId, action, getParentMenu(), () -> new VaultActionMenu(player, (ParentMenuImp) getParentMenu(), uiContext, vaultId, this.description, this.back).open());
     }
 

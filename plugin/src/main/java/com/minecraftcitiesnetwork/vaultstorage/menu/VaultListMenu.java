@@ -4,7 +4,6 @@ import org.bukkit.World;
 import org.bukkit.Bukkit;
 import com.minecraftcitiesnetwork.pluginInfrastructure.configurate.MessageContainer;
 import com.minecraftcitiesnetwork.vaultstorage.config.MessageKeys;
-import com.minecraftcitiesnetwork.vaultstorage.config.Text;
 import com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin;
 import com.minecraftcitiesnetwork.vaultstorage.database.FindResult;
 import com.minecraftcitiesnetwork.vaultstorage.database.VaultFilter;
@@ -43,8 +42,8 @@ import org.jetbrains.annotations.Nullable;
 public class VaultListMenu extends ChildMenuImp {
 
     /** Vaults per page, from settings.yml; read each time, so a reload takes effect at the next open. */
-    private static int pageSize() {
-        return VaultStoragePlugin.getInstance().settings().get().vaultList().pageSize();
+    private int pageSize() {
+        return plugin.settings().get().vaultList().pageSize();
     }
 
     /** Wide enough for a whole label; the client shrinks it to the window. */
@@ -96,18 +95,18 @@ public class VaultListMenu extends ChildMenuImp {
     private Dialog build(@NotNull Loaded page) {
         AutoDialog.Builder builder = getAutoDialogBuilder();
         Map<String, String> phQuery = Map.of("%query%", this.query);
-        builder.title(Text.of(MessageKeys.LIST_TITLE, phQuery));
+        builder.title(plugin.text().of(MessageKeys.LIST_TITLE, phQuery));
         builder.canCloseWithEscape(true);
         builder.afterAction(DialogBase.DialogAfterAction.CLOSE);
         ParentMenuImp parent = (ParentMenuImp) getParentMenu();
 
         // Only someone who may see everyone's vaults has anything to search for.
         if (this.uiContext.filterOwner() == null) {
-            builder.addInput(DialogInput.text("QUERY", Text.of(MessageKeys.LIST_SEARCH_LABEL, phQuery))
+            builder.addInput(DialogInput.text("QUERY", plugin.text().of(MessageKeys.LIST_SEARCH_LABEL, phQuery))
                     .maxLength(255)
                     .labelVisible(true)
                     .build());
-            builder.buttonWithPlayer(Text.of(MessageKeys.LIST_SEARCH_BTN, phQuery), null, Duration.ofMinutes(5), 1,
+            builder.buttonWithPlayer(plugin.text().of(MessageKeys.LIST_SEARCH_BTN, phQuery), null, Duration.ofMinutes(5), 1,
                     (player, response) -> {
                         String typed = Optional.ofNullable(response.getText("QUERY")).orElse("").trim();
                         new VaultListMenu(player, parent, this.uiContext, typed).open();
@@ -116,9 +115,9 @@ public class VaultListMenu extends ChildMenuImp {
 
         Paging paging = page.paging();
         if (page.entries().isEmpty()) {
-            builder.addBody(DialogBody.plainMessage(Text.of(MessageKeys.LIST_NONE_FOUND, phQuery)));
+            builder.addBody(DialogBody.plainMessage(plugin.text().of(MessageKeys.LIST_NONE_FOUND, phQuery)));
         } else {
-            builder.addBody(DialogBody.plainMessage(Text.of(MessageKeys.LIST_PAGE_LABEL, Map.of(
+            builder.addBody(DialogBody.plainMessage(plugin.text().of(MessageKeys.LIST_PAGE_LABEL, Map.of(
                     "%page%", String.valueOf(paging.page() + 1),
                     "%pages%", String.valueOf(paging.pages()),
                     "%count%", String.valueOf(paging.total())))));
@@ -131,21 +130,21 @@ public class VaultListMenu extends ChildMenuImp {
             }
         }
         if (paging.hasPrevious()) {
-            builder.button(Text.of(MessageKeys.LIST_PREV_BTN),
+            builder.button(plugin.text().of(MessageKeys.LIST_PREV_BTN),
                     ctx -> new VaultListMenu(ctx.player(), parent, this.uiContext, this.query, paging.page() - 1).open());
         }
         if (paging.hasNext()) {
-            builder.button(Text.of(MessageKeys.LIST_NEXT_BTN),
+            builder.button(plugin.text().of(MessageKeys.LIST_NEXT_BTN),
                     ctx -> new VaultListMenu(ctx.player(), parent, this.uiContext, this.query, paging.page() + 1).open());
         }
-        builder.button(Text.of(MessageKeys.LIST_BACK_BTN), ctx -> getParentMenu().open());
+        builder.button(plugin.text().of(MessageKeys.LIST_BACK_BTN), ctx -> getParentMenu().open());
         return builder.build();
     }
 
     /** Who owns the vault, what it was, where it stood, how much it holds and when it was captured. */
-    private static Component label(@NotNull Entry entry) {
+    private Component label(@NotNull Entry entry) {
         VaultSummary vault = entry.vault();
-        MessageContainer messages = VaultStoragePlugin.getInstance().messages();
+        MessageContainer messages = plugin.messages();
         World world = Bukkit.getWorld(vault.worldUuid());
         Component items = messages.messageFor(VaultLabel.itemsKey(vault.itemCount()),
                 MessageContainer.value("count", String.valueOf(vault.itemCount())));
@@ -211,7 +210,6 @@ public class VaultListMenu extends ChildMenuImp {
 
     private void load() {
         Player player = getPlayer();
-        VaultStoragePlugin plugin = VaultStoragePlugin.getInstance();
         Executor mainThread = plugin.getServer().getScheduler().getMainThreadExecutor(plugin);
         scope(plugin)
                 .thenApplyAsync(scope -> read(plugin.repository(), scope), plugin.databaseExecutor())
@@ -247,7 +245,7 @@ public class VaultListMenu extends ChildMenuImp {
                 .exceptionally(failure -> {
                     plugin.getLogger().log(Level.SEVERE, "Could not load the vault list for " + player.getName() + ".", failure);
                     mainThread.execute(() -> {
-                        player.sendMessage(Text.of(MessageKeys.LIST_LOAD_FAILED));
+                        player.sendMessage(plugin.text().of(MessageKeys.LIST_LOAD_FAILED));
                         getParentMenu().open();
                     });
                     return null;

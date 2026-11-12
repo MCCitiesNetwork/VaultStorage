@@ -27,6 +27,12 @@ import java.util.function.Consumer;
 
 public class VaultScanServiceImpl implements VaultScanService {
 
+    private final @NotNull VaultStoragePlugin plugin;
+
+    public VaultScanServiceImpl(@NotNull VaultStoragePlugin plugin) {
+        this.plugin = plugin;
+    }
+
     private final Map<CacheKey, CacheEntry> cache = new ConcurrentHashMap<>();
     private final Map<CacheKey, List<Consumer<List<ScanResult>>>> pendingScans = new HashMap<>();
 
@@ -37,7 +43,7 @@ public class VaultScanServiceImpl implements VaultScanService {
         // Check cache
         if (cache.containsKey(key)) {
             CacheEntry entry = cache.get(key);
-            long ttlSeconds = VaultStoragePlugin.getInstance().settings().get().scan().cacheTtlSeconds();
+            long ttlSeconds = plugin.settings().get().scan().cacheTtlSeconds();
             if (Instant.now().isBefore(entry.timestamp.plusSeconds(ttlSeconds))) {
                 // Cache hit and valid
                 callback.accept(List.copyOf(entry.results));
@@ -60,13 +66,13 @@ public class VaultScanServiceImpl implements VaultScanService {
         }
 
         // Cache miss or expired, perform scan
-        new VaultRegionScanner(player, regionId, context, results -> {
+        new VaultRegionScanner(this.plugin, player, regionId, context, results -> {
             if (results != null) {
                 // A copy that can shrink: forget() removes blocks from it, from any thread.
                 cache.put(key, new CacheEntry(new CopyOnWriteArrayList<>(results), Instant.now()));
             }
             resolveOwnerNames(results).whenComplete((done, failure) -> Bukkit.getScheduler().runTask(
-                    VaultStoragePlugin.getInstance(), () -> answer(key, results)));
+                    plugin, () -> answer(key, results)));
         }).start();
     }
 
@@ -96,7 +102,7 @@ public class VaultScanServiceImpl implements VaultScanService {
         }
         List<CompletableFuture<Void>> lookups = new ArrayList<>();
         for (UUID owner : owners) {
-            lookups.add(VaultStoragePlugin.getInstance().names().nameOf(owner).thenAccept(name ->
+            lookups.add(plugin.names().nameOf(owner).thenAccept(name ->
                     name.filter(found -> !found.isBlank()).ifPresent(found -> VaultScanMenu.rememberName(owner, found))));
         }
         return CompletableFuture.allOf(lookups.toArray(new CompletableFuture[0]));

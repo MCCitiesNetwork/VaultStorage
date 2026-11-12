@@ -14,7 +14,7 @@ public abstract class ChildMenuImp extends ParentMenuImp implements ChildMenu {
     private final ParentMenu parent;
 
     protected ChildMenuImp(Player player, ParentMenu parent, String id) {
-        super(player, id);
+        super(parent.plugin(), player, id);
         this.parent = parent;
     }
 

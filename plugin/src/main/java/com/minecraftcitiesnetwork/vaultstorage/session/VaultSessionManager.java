@@ -1,5 +1,8 @@
 package com.minecraftcitiesnetwork.vaultstorage.session;
 
+import org.jetbrains.annotations.NotNull;
+import org.bukkit.event.Listener;
+import java.util.function.Consumer;
 import com.minecraftcitiesnetwork.vaultstorage.session.DynamicListener;
 import org.bukkit.scheduler.BukkitTask;
 
@@ -20,7 +23,11 @@ public class VaultSessionManager {
     public enum Mode { NONE, CAPTURE, PLACEMENT }
 
     public static class Session {
-        private final DynamicListener dynamicListener = new DynamicListener();
+        private final DynamicListener dynamicListener;
+
+        Session(@NotNull Consumer<Listener> register) {
+            this.dynamicListener = new DynamicListener(register);
+        }
         private BukkitTask actionBarTask;
         private Mode mode = Mode.NONE;
         private long lastScanTime = 0;
@@ -62,9 +69,15 @@ public class VaultSessionManager {
     }
 
     private final Map<UUID, Session> sessions = new HashMap<>();
+    private final @NotNull Consumer<Listener> register;
+
+    /** @param register registers a listener with the server, for this plugin */
+    public VaultSessionManager(@NotNull Consumer<Listener> register) {
+        this.register = register;
+    }
 
     public Session getOrCreate(UUID playerId) {
-        return sessions.computeIfAbsent(playerId, id -> new Session());
+        return sessions.computeIfAbsent(playerId, id -> new Session(this.register));
     }
 
     public Session get(UUID playerId) { return sessions.get(playerId); }

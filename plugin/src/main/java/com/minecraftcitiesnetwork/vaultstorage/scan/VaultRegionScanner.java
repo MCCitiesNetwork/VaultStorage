@@ -1,7 +1,7 @@
 package com.minecraftcitiesnetwork.vaultstorage.scan;
 
+import org.jetbrains.annotations.NotNull;
 import com.minecraftcitiesnetwork.vaultstorage.config.MessageKeys;
-import com.minecraftcitiesnetwork.vaultstorage.config.Text;
 import java.util.LinkedHashSet;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -31,6 +31,8 @@ import java.util.function.Consumer;
 
 public class VaultRegionScanner {
 
+    private final @NotNull VaultStoragePlugin plugin;
+
     private final Player player;
     private final String regionId;
     private final VaultUIContext uiContext;
@@ -39,7 +41,8 @@ public class VaultRegionScanner {
     /** Chunks held loaded for this scan. Main thread only. */
     private final List<Chunk> heldChunks = new ArrayList<>();
 
-    public VaultRegionScanner(Player player, String regionId, VaultUIContext uiContext, Consumer<List<ScanResult>> callback) {
+    public VaultRegionScanner(@NotNull VaultStoragePlugin plugin, Player player, String regionId, VaultUIContext uiContext, Consumer<List<ScanResult>> callback) {
+        this.plugin = plugin;
         this.player = player;
         this.regionId = regionId;
         this.uiContext = uiContext;
@@ -48,13 +51,13 @@ public class VaultRegionScanner {
 
     public void start() {
         World world = player.getWorld();
-        WorldGuardService worldGuardService = VaultStoragePlugin.getInstance().getWorldGuardService();
-        BoltService boltService = VaultStoragePlugin.getInstance().getBoltService();
+        WorldGuardService worldGuardService = plugin.worldGuard();
+        BoltService boltService = plugin.bolt();
 
         if (worldGuardService == null || boltService == null) {
             // The caller put up a loading dialog; nothing will replace it.
             player.closeDialog();
-            player.sendMessage(Text.of(MessageKeys.SCAN_SERVICES_MISSING));
+            player.sendMessage(plugin.text().of(MessageKeys.SCAN_SERVICES_MISSING));
             callback.accept(null);
             return;
         }
@@ -64,7 +67,7 @@ public class VaultRegionScanner {
         var target = regions.stream().filter(r -> r.id().equalsIgnoreCase(regionId)).findFirst();
         if (target.isEmpty()) {
             player.closeDialog();
-            player.sendMessage(Text.of(MessageKeys.SCAN_REGION_NOT_FOUND, Map.of("%region%", regionId)));
+            player.sendMessage(plugin.text().of(MessageKeys.SCAN_REGION_NOT_FOUND, Map.of("%region%", regionId)));
             callback.accept(null);
             return;
         }
@@ -88,7 +91,6 @@ public class VaultRegionScanner {
 
         // Every chunk the scan reads is loaded off the main thread first and held until the scan
         // ends, so reading a block never loads a chunk on the main thread.
-        VaultStoragePlugin plugin = VaultStoragePlugin.getInstance();
         Set<Long> chunkKeys = new LinkedHashSet<>();
         for (BlockProtection protection : blockProtections) {
             chunkKeys.add(Chunk.getChunkKey(protection.getX() >> 4, protection.getZ() >> 4));
@@ -128,7 +130,7 @@ public class VaultRegionScanner {
             this.protections = protections;
             this.world = world;
             this.actorOwnsRegion = actorOwnsRegion;
-            this.batchSize = VaultStoragePlugin.getInstance().settings().get().scan().batchSize();
+            this.batchSize = plugin.settings().get().scan().batchSize();
         }
 
         @Override
@@ -165,7 +167,7 @@ public class VaultRegionScanner {
                 Block block = world.getBlockAt(x, y, z);
 
                 // Policy check
-                VaultCapturePolicy.Decision decision = VaultCapturePolicy.evaluate(player, block);
+                VaultCapturePolicy.Decision decision = plugin.capturePolicy().evaluate(player, block);
                 if (!decision.allowed()) continue;
 
                 // Owner filter
@@ -185,7 +187,6 @@ public class VaultRegionScanner {
         /** Ends the scan: stops the task, lets the chunks go, and answers exactly once. */
         private void finish(List<ScanResult> answer) {
             this.cancel();
-            VaultStoragePlugin plugin = VaultStoragePlugin.getInstance();
             for (Chunk chunk : heldChunks) {
                 chunk.removePluginChunkTicket(plugin);
             }

@@ -1,7 +1,7 @@
 package com.minecraftcitiesnetwork.vaultstorage.menu;
 
+import org.jetbrains.annotations.NotNull;
 import com.minecraftcitiesnetwork.vaultstorage.config.MessageKeys;
-import com.minecraftcitiesnetwork.vaultstorage.config.Text;
 import io.papermc.paper.dialog.Dialog;
 import io.papermc.paper.registry.data.dialog.DialogBase;
 import io.papermc.paper.registry.data.dialog.body.DialogBody;
@@ -34,13 +34,13 @@ public class VaultCaptureMenu extends ParentMenuImp {
     private final VaultUIContext uiContext;
 
     /** Existing constructor kept: self-filter context */
-    public VaultCaptureMenu(Player player) {
-        this(player, VaultUIContext.self(player.getUniqueId()));
+    public VaultCaptureMenu(@NotNull VaultStoragePlugin plugin, Player player) {
+        this(plugin, player, VaultUIContext.self(player.getUniqueId()));
     }
 
     /** New constructor accepting UI context (admin or filtered). */
-    public VaultCaptureMenu(Player player, VaultUIContext context) {
-        super(player, "vault_capture");
+    public VaultCaptureMenu(@NotNull VaultStoragePlugin plugin, Player player, VaultUIContext context) {
+        super(plugin, player, "vault_capture");
         this.uiContext = context;
         setDialog(build());
     }
@@ -58,28 +58,28 @@ public class VaultCaptureMenu extends ParentMenuImp {
         } else if (uiContext.admin()) {
             phSelf.put("%filterOwner%", "ALL");
         }
-        builder.title(Text.of(MessageKeys.CAPTURE_MENU_TITLE, phSelf));
+        builder.title(plugin.text().of(MessageKeys.CAPTURE_MENU_TITLE, phSelf));
         builder.canCloseWithEscape(true);
         builder.afterAction(DialogBase.DialogAfterAction.CLOSE);
 
-        builder.addBody(DialogBody.plainMessage(Text.of(MessageKeys.CAPTURE_MENU_INSTRUCTION, phSelf)));
-        builder.addBody(DialogBody.plainMessage(Text.of(MessageKeys.CAPTURE_MENU_CANCEL_HINT, phSelf)));
+        builder.addBody(DialogBody.plainMessage(plugin.text().of(MessageKeys.CAPTURE_MENU_INSTRUCTION, phSelf)));
+        builder.addBody(DialogBody.plainMessage(plugin.text().of(MessageKeys.CAPTURE_MENU_CANCEL_HINT, phSelf)));
 
         // Start capture mode now delegates fully to VaultCaptureService
-        builder.button(Text.of(MessageKeys.CAPTURE_MENU_START_BTN, phSelf), ctx -> {
+        builder.button(plugin.text().of(MessageKeys.CAPTURE_MENU_START_BTN, phSelf), ctx -> {
             Player actor = ctx.player();
             if (!actor.hasPermission(Permissions.ACTION_CAPTURE)) {
-                actor.sendMessage(Text.of(MessageKeys.CAPTURE_NO_PERMISSION));
+                actor.sendMessage(plugin.text().of(MessageKeys.CAPTURE_NO_PERMISSION));
                 return;
             }
-            VaultCaptureService svc = VaultStoragePlugin.getInstance().getCaptureService();
+            VaultCaptureService svc = plugin.captureService();
             svc.startCaptureSession(actor); // centralized session (action bar + listener)
             actor.closeDialog();
         });
 
-        builder.button(Text.of(MessageKeys.CAPTURE_MENU_OPEN_SCAN_BTN, phSelf), ctx -> new VaultScanMenu(ctx.player(), this, uiContext).open());
-        builder.button(Text.of(MessageKeys.CAPTURE_MENU_BROWSE_BTN, phSelf), ctx -> new VaultListMenu(ctx.player(), this, uiContext, "").open());
-        builder.button(Text.of(MessageKeys.CAPTURE_MENU_CLOSE_BTN, phSelf), ctx -> {});
+        builder.button(plugin.text().of(MessageKeys.CAPTURE_MENU_OPEN_SCAN_BTN, phSelf), ctx -> new VaultScanMenu(ctx.player(), this, uiContext).open());
+        builder.button(plugin.text().of(MessageKeys.CAPTURE_MENU_BROWSE_BTN, phSelf), ctx -> new VaultListMenu(ctx.player(), this, uiContext, "").open());
+        builder.button(plugin.text().of(MessageKeys.CAPTURE_MENU_CLOSE_BTN, phSelf), ctx -> {});
         return builder.build();
     }
 
