@@ -20,3 +20,25 @@ export function startDatabase(): void {
     }
     throw new Error('the database did not come back');
 }
+
+/** Runs SQL against the dev database. */
+export function sql(statement: string): void {
+    execFileSync('docker', ['exec', CONTAINER, 'mariadb', '-uvaultstorage', '-pvaultstorage', 'vault_storage', '-e', statement],
+        { stdio: 'ignore' });
+}
+
+/**
+ * Stores empty vaults for an owner straight in the database, a minute apart so their order is
+ * fixed. For tests that need more vaults than it is reasonable to capture one by one.
+ */
+export function seedVaults(ownerUuid: string, count: number): void {
+    const world = '99999999-0000-0000-0000-000000000001';
+    sql(`INSERT INTO World (uuid, name) VALUES ('${world}', 'seeded') ON DUPLICATE KEY UPDATE name = name`);
+    const rows: string[] = [];
+    for (let i = 0; i < count; i++) {
+        rows.push(`(UUID(), '${ownerUuid}', '${world}', ${i}, 64, 0, 'CHEST', NULL, NULL, `
+            + `'2026-01-01 00:00:00' + INTERVAL ${i} MINUTE, '2026-01-01 00:00:00' + INTERVAL ${i} MINUTE)`);
+    }
+    sql('INSERT INTO Vault (uuid, ownerUuid, worldUuid, x, y, z, material, blockData, status, createdTime, updatedTime) VALUES '
+        + rows.join(', '));
+}
