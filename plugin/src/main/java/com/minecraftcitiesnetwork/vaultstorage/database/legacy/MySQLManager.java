@@ -1,4 +1,4 @@
-package com.minecraftcitiesnetwork.vaultstorage.database;
+package com.minecraftcitiesnetwork.vaultstorage.database.legacy;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;

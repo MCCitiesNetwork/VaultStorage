@@ -1,11 +1,11 @@
-package com.minecraftcitiesnetwork.vaultstorage.database;
+package com.minecraftcitiesnetwork.vaultstorage.database.legacy;
 
 import com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin;
-import com.minecraftcitiesnetwork.vaultstorage.database.VaultEntity;
-import com.minecraftcitiesnetwork.vaultstorage.database.VaultItemEntity;
-import com.minecraftcitiesnetwork.vaultstorage.database.VaultOwnerEntity;
-import com.minecraftcitiesnetwork.vaultstorage.database.WorldEntity;
-import com.minecraftcitiesnetwork.vaultstorage.database.AutoTable;
+import com.minecraftcitiesnetwork.vaultstorage.database.legacy.VaultEntity;
+import com.minecraftcitiesnetwork.vaultstorage.database.legacy.VaultItemEntity;
+import com.minecraftcitiesnetwork.vaultstorage.database.legacy.VaultOwnerEntity;
+import com.minecraftcitiesnetwork.vaultstorage.database.legacy.WorldEntity;
+import com.minecraftcitiesnetwork.vaultstorage.database.legacy.AutoTable;
 
 import java.sql.ResultSet;
 import java.util.logging.Level;

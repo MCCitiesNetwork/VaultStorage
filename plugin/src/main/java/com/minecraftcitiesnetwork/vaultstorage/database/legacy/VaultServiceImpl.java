@@ -1,13 +1,13 @@
-package com.minecraftcitiesnetwork.vaultstorage.database;
+package com.minecraftcitiesnetwork.vaultstorage.database.legacy;
 
 import com.earth2me.essentials.Essentials;
 import com.earth2me.essentials.User;
 import com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin;
-import com.minecraftcitiesnetwork.vaultstorage.database.VaultDAO;
+import com.minecraftcitiesnetwork.vaultstorage.database.legacy.VaultDAO;
 import com.minecraftcitiesnetwork.vaultstorage.region.VaultRegion;
-import com.minecraftcitiesnetwork.vaultstorage.database.VaultService;
-import com.minecraftcitiesnetwork.vaultstorage.database.VaultEntity;
-import com.minecraftcitiesnetwork.vaultstorage.database.VaultItemEntity;
+import com.minecraftcitiesnetwork.vaultstorage.database.legacy.VaultService;
+import com.minecraftcitiesnetwork.vaultstorage.database.legacy.VaultEntity;
+import com.minecraftcitiesnetwork.vaultstorage.database.legacy.VaultItemEntity;
 import com.minecraftcitiesnetwork.vaultstorage.config.MiniMessageUtil;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import org.bukkit.Bukkit;

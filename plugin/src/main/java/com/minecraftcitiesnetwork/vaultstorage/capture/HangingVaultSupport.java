@@ -1,9 +1,9 @@
 package com.minecraftcitiesnetwork.vaultstorage.capture;
 
 import io.papermc.paper.datacomponent.DataComponentTypes;
-import com.minecraftcitiesnetwork.vaultstorage.database.VaultService;
-import com.minecraftcitiesnetwork.vaultstorage.database.VaultEntity;
-import com.minecraftcitiesnetwork.vaultstorage.database.VaultItemEntity;
+import com.minecraftcitiesnetwork.vaultstorage.database.legacy.VaultService;
+import com.minecraftcitiesnetwork.vaultstorage.database.legacy.VaultEntity;
+import com.minecraftcitiesnetwork.vaultstorage.database.legacy.VaultItemEntity;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.entity.GlowItemFrame;

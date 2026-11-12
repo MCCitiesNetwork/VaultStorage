@@ -1,9 +1,9 @@
-package com.minecraftcitiesnetwork.vaultstorage.database;
+package com.minecraftcitiesnetwork.vaultstorage.database.legacy;
 
 import com.minecraftcitiesnetwork.vaultstorage.Service;
 
-import com.minecraftcitiesnetwork.vaultstorage.database.VaultEntity;
-import com.minecraftcitiesnetwork.vaultstorage.database.VaultItemEntity;
+import com.minecraftcitiesnetwork.vaultstorage.database.legacy.VaultEntity;
+import com.minecraftcitiesnetwork.vaultstorage.database.legacy.VaultItemEntity;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 

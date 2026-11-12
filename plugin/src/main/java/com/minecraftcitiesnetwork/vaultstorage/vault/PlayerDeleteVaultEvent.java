@@ -1,6 +1,6 @@
 package com.minecraftcitiesnetwork.vaultstorage.vault;
 
-import com.minecraftcitiesnetwork.vaultstorage.database.VaultEntity;
+import com.minecraftcitiesnetwork.vaultstorage.database.legacy.VaultEntity;
 import org.bukkit.entity.Player;
 
 public class PlayerDeleteVaultEvent extends PlayerVaultStorageEvent {

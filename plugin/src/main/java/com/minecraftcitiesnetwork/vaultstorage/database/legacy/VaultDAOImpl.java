@@ -1,10 +1,10 @@
-package com.minecraftcitiesnetwork.vaultstorage.database;
+package com.minecraftcitiesnetwork.vaultstorage.database.legacy;
 
-import com.minecraftcitiesnetwork.vaultstorage.database.VaultDAO;
-import com.minecraftcitiesnetwork.vaultstorage.database.DatabaseSchema;
-import com.minecraftcitiesnetwork.vaultstorage.database.VaultEntity;
-import com.minecraftcitiesnetwork.vaultstorage.database.VaultItemEntity;
-import com.minecraftcitiesnetwork.vaultstorage.database.VaultOwnerEntity;
+import com.minecraftcitiesnetwork.vaultstorage.database.legacy.VaultDAO;
+import com.minecraftcitiesnetwork.vaultstorage.database.legacy.DatabaseSchema;
+import com.minecraftcitiesnetwork.vaultstorage.database.legacy.VaultEntity;
+import com.minecraftcitiesnetwork.vaultstorage.database.legacy.VaultItemEntity;
+import com.minecraftcitiesnetwork.vaultstorage.database.legacy.VaultOwnerEntity;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 

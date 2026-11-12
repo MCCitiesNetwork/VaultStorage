@@ -1,10 +1,10 @@
 package com.minecraftcitiesnetwork.vaultstorage.placement;
 
 import com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin;
-import com.minecraftcitiesnetwork.vaultstorage.database.VaultService;
+import com.minecraftcitiesnetwork.vaultstorage.database.legacy.VaultService;
 import com.minecraftcitiesnetwork.vaultstorage.bolt.BoltService;
-import com.minecraftcitiesnetwork.vaultstorage.database.VaultEntity;
-import com.minecraftcitiesnetwork.vaultstorage.database.VaultItemEntity;
+import com.minecraftcitiesnetwork.vaultstorage.database.legacy.VaultEntity;
+import com.minecraftcitiesnetwork.vaultstorage.database.legacy.VaultItemEntity;
 import com.minecraftcitiesnetwork.vaultstorage.vault.ItemSerialization;
 import org.bukkit.Bukkit;
 import org.bukkit.Chunk;

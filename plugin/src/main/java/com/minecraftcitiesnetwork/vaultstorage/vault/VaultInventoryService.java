@@ -1,7 +1,7 @@
 package com.minecraftcitiesnetwork.vaultstorage.vault;
 
 import com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin;
-import com.minecraftcitiesnetwork.vaultstorage.database.VaultService;
+import com.minecraftcitiesnetwork.vaultstorage.database.legacy.VaultService;
 import com.minecraftcitiesnetwork.vaultstorage.menu.ParentMenu;
 import com.minecraftcitiesnetwork.vaultstorage.menu.LoadingMenu;
 import com.minecraftcitiesnetwork.vaultstorage.vault.VaultAction;
@@ -25,7 +25,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import com.minecraftcitiesnetwork.vaultstorage.database.VaultItemEntity;
+import com.minecraftcitiesnetwork.vaultstorage.database.legacy.VaultItemEntity;
 
 /**
  * Service to open a virtual inventory for a Vault with a specific action mode.

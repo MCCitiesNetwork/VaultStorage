@@ -1,18 +1,8 @@
 package com.minecraftcitiesnetwork.vaultstorage.database;
 
 import java.util.UUID;
+import org.jetbrains.annotations.NotNull;
 
-/**
- * Content entry for a vault at a specific slot.
- * Synthetic UUID as PK; enforce UNIQUE(vaultUuid, slot) in schema.
- */
-public class VaultItemEntity {
-    public UUID uuid;      // PK (synthetic row id)
-    public UUID vaultUuid; // FK -> VaultEntity.uuid
-    public int slot;       // slot index in the vault
-    public int amount;     // stack amount
-    public byte[] item;    // serialized ItemStack (BLOB)
-
-    public VaultItemEntity() {}
+/** A row of {@code VaultItem}: one serialized item stack in one slot of a vault. */
+public record VaultItemEntity(@NotNull UUID vaultUuid, int slot, int amount, byte @NotNull [] item) {
 }
-

@@ -1,6 +1,6 @@
-package com.minecraftcitiesnetwork.vaultstorage.database;
+package com.minecraftcitiesnetwork.vaultstorage.database.legacy;
 
-import com.minecraftcitiesnetwork.vaultstorage.database.MySQLManager;
+import com.minecraftcitiesnetwork.vaultstorage.database.legacy.MySQLManager;
 
 import java.sql.Connection;
 import java.sql.SQLException;

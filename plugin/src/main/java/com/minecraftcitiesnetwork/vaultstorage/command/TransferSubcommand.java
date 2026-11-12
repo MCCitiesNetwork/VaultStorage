@@ -1,7 +1,7 @@
 package com.minecraftcitiesnetwork.vaultstorage.command;
 
 import com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin;
-import com.minecraftcitiesnetwork.vaultstorage.database.VaultService;
+import com.minecraftcitiesnetwork.vaultstorage.database.legacy.VaultService;
 import com.minecraftcitiesnetwork.vaultstorage.command.CommandContext;
 import com.minecraftcitiesnetwork.vaultstorage.command.Subcommand;
 import com.minecraftcitiesnetwork.vaultstorage.permission.VaultPermission;

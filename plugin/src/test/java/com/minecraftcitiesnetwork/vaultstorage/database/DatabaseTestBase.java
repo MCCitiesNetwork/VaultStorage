@@ -76,6 +76,14 @@ abstract class DatabaseTestBase {
         }
     }
 
+    static void runStatements(String... statements) throws SQLException {
+        try (Connection connection = DATA_SOURCE.getConnection(); Statement statement = connection.createStatement()) {
+            for (String sql : statements) {
+                statement.execute(sql);
+            }
+        }
+    }
+
     static long queryLong(String sql) throws SQLException {
         try (Connection connection = DATA_SOURCE.getConnection(); Statement statement = connection.createStatement();
              ResultSet rows = statement.executeQuery(sql)) {

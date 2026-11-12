@@ -1,7 +1,7 @@
-package com.minecraftcitiesnetwork.vaultstorage.database;
+package com.minecraftcitiesnetwork.vaultstorage.database.legacy;
 
 import com.google.gson.Gson;
-import com.minecraftcitiesnetwork.vaultstorage.database.MySQLManager;
+import com.minecraftcitiesnetwork.vaultstorage.database.legacy.MySQLManager;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
