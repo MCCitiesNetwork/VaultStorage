@@ -33,7 +33,6 @@ public final class VaultCapturePolicy {
         this.plugin = plugin;
     }
 
-
     public record Decision(boolean allowed, boolean hasOverride, boolean actorParticipantAny,
                            boolean containerOwnerParticipantAny, boolean actorIsContainerOwner,
                            boolean disallowedOwnerSelf, boolean baseAllowed, @NotNull UUID containerOwner, @NotNull Reason reason,
@@ -156,7 +155,6 @@ public final class VaultCapturePolicy {
             // Can only vault their own blocks
             baseAllowed = actorIsContainerOwner;
         }
-
 
         boolean allowed = (originalOwner != null)
                 && !disallowedOwnerSelf

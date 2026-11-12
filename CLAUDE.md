@@ -41,7 +41,7 @@ Under `com.minecraftcitiesnetwork.vaultstorage`, grouped by feature:
 | Package | Holds |
 | --- | --- |
 | (root) | `VaultStoragePlugin` (owns and hands out every service), `Integrations` |
-| `capture` | capture service, capture policy, hanging support |
+| `capture` | `VaultCaptureService` (prepare, store, offline), `CaptureSession` (a player's capture mode), `CaptureActionBar`, `CaptureOwners`, `ContainerBlocks`, `DoubleChestRule`, the pipeline, the policy |
 | `placement` | placement service |
 | `vault` | vault types, the vault inventory, item serialization, events |
 | `scan` | region scan service and scanner |
@@ -77,7 +77,7 @@ step of the programme below.
   references to plugin-infrastructure land on the host's relocated copy.
 - **Every class meets the playbook's `code-style`.** There is no static way to the plugin: a
   class takes what it needs in its constructor, and a child menu takes the plugin from its
-  parent. `VaultCaptureService` is the one class still to be split; see the step 7 spec.
+  parent. `CaptureSession.onInteract` is still one long method; see the step 7 spec.
 - **`VaultRepository` is the only way to the database.** One method is one unit of work and one
   transaction. It blocks: call it on `VaultStoragePlugin.databaseExecutor()`, never on the main
   thread. Outcomes are sealed result types; only a broken database is an exception.
@@ -148,7 +148,7 @@ Specs and plans are in `docs/superpowers/`. One spec and one plan per step.
 | 4. Config and messages | done | Configurate records, `messages.yml`, reload |
 | 5. Commands and permissions | done | Brigadier, `vaultstorage.command.*` |
 | 6. Menus | done | vault labels, delete confirmation, loading dialogs that end, whole-sentence keys |
-| 7. Sweep | done, except splitting `VaultCaptureService` | no singleton, dead code removed, accessors, annotations |
+| 7. Sweep | done | no singleton, dead code removed, accessors, annotations, the capture service split |
 
 Step 3 so far, on `refactor/capture-placement` (plan: `docs/superpowers/plans/2026-11-12-capture-placement-autovault.md`):
 
@@ -217,6 +217,8 @@ Not covered live: sweeps (they need Realty to trigger one) and ChestShop. Shared
 
 ## Rules for the capture and placement code
 
+- **What a capture does with a block is `DoubleChestRule.decide`**: unprotect it, refuse because
+  the other half must go first, or capture. It names no Bukkit type and has its own test.
 - **Nothing removes a container except `CapturePipeline`**, through `BukkitContainerAccess.remove`.
   The order is: read, store, check it is unchanged, remove.
 - **Placement claims before it places and deletes after.** A vault is never deleted before its

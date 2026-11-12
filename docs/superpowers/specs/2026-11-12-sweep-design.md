@@ -1,7 +1,7 @@
 # Sweep — design
 
 Date: 2026-11-12
-Status: implemented, with the limits listed at the end
+Status: implemented, with the limits listed at the end; the capture service was split afterwards
 Step 7 of 7. Depends on step 6.
 
 ## Goal
@@ -39,9 +39,11 @@ the removed `addItems`. The sweep adds no behaviour, so it adds no tests.
 
 ## What the sweep did not do
 
-- **`VaultCaptureService` is still one class of about 880 lines** with its listeners written
-  inline. Its ChestShop and offline paths have no live test, so it was changed only mechanically.
-  Splitting it is its own piece of work, to be done with those tests first.
+- **`CaptureSession.onInteract` is still one method of about 170 lines.** The capture service was
+  split by moving code: `CaptureSession` (the per-player listener), `CaptureActionBar`,
+  `CaptureOwners`, `ContainerBlocks`, and `DoubleChestRule`, which is the one part that was
+  rewritten and has its own test. The click handler's ChestShop branches have no live test, so
+  they were moved as they were, not restructured.
 - **Menus and services hold the whole plugin**, not the two or three things each uses. That
   removed the singleton without rewriting every constructor chain; narrowing them is possible
   class by class.
