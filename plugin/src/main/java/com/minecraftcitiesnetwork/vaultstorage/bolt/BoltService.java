@@ -16,11 +16,11 @@ import java.util.UUID;
 
 public interface BoltService extends Service {
 
-    UUID getOwner(Block block);
-    UUID getOwner(Entity entity);
+    @NotNull UUID getOwner(@NotNull Block block);
+    @NotNull UUID getOwner(@NotNull Entity entity);
 
-    boolean isOwner(UUID playerUUID, Block block);
-    boolean isOwner(UUID playerUUID, Entity entity);
+    boolean isOwner(@NotNull UUID playerUUID, @NotNull Block block);
+    boolean isOwner(@NotNull UUID playerUUID, @NotNull Entity entity);
 
 
 
@@ -29,12 +29,12 @@ public interface BoltService extends Service {
      * Implementations should be safe to call on the main thread.
      * @param block target block
      */
-    void removeProtection(Block block);
+    void removeProtection(@NotNull Block block);
 
 
 
 
-    Map<EntityProtection, Entity> getProtectedEntities(@NotNull World world, @NotNull BoundingBox boundingBox);
+    @NotNull Map<EntityProtection, Entity> getProtectedEntities(@NotNull World world, @NotNull BoundingBox boundingBox);
 
     /**
      * Creates a Bolt protection for the given block owned by the specified player.
@@ -42,10 +42,10 @@ public interface BoltService extends Service {
      * @param block target block
      * @param ownerUuid owner of the protection
      */
-    void createProtection(Block block, UUID ownerUuid);
+    void createProtection(@NotNull Block block, @NotNull UUID ownerUuid);
 
-    void removeProtection(Protection protection);
+    void removeProtection(@NotNull Protection protection);
 
-    Collection<Protection> getProtections(BoundingBox boundingBox, World world);
+    @NotNull Collection<Protection> getProtections(@NotNull BoundingBox boundingBox, @NotNull World world);
 
 }

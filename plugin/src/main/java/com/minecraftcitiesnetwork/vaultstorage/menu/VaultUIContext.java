@@ -1,5 +1,6 @@
 package com.minecraftcitiesnetwork.vaultstorage.menu;
 
+import org.jetbrains.annotations.NotNull;
 import java.util.UUID;
 
 /**
@@ -22,7 +23,7 @@ public record VaultUIContext(UUID actorUuid, UUID filterOwner, boolean admin) {
      * Actor/player UUID who initiated the UI.
      */
     @Override
-    public UUID actorUuid() {
+    public @NotNull UUID actorUuid() {
         return actorUuid;
     }
 
@@ -30,7 +31,7 @@ public record VaultUIContext(UUID actorUuid, UUID filterOwner, boolean admin) {
      * Optional filter owner; null means no filter (only valid with admin=true).
      */
     @Override
-    public UUID filterOwner() {
+    public @NotNull UUID filterOwner() {
         return filterOwner;
     }
 
@@ -45,7 +46,7 @@ public record VaultUIContext(UUID actorUuid, UUID filterOwner, boolean admin) {
     /**
      * Builds a self-filtered context (non-admin).
      */
-    public static VaultUIContext self(UUID actorUuid) {
+    public static @NotNull VaultUIContext self(@NotNull UUID actorUuid) {
         return new VaultUIContext(actorUuid, actorUuid, false);
 
     }
@@ -53,14 +54,14 @@ public record VaultUIContext(UUID actorUuid, UUID filterOwner, boolean admin) {
     /**
      * Builds an admin, no-filter context.
      */
-    public static VaultUIContext admin(UUID actorUuid) {
+    public static @NotNull VaultUIContext admin(@NotNull UUID actorUuid) {
         return new VaultUIContext(actorUuid, null, true);
     }
 
     /**
      * Builds an admin context filtering by a specific owner UUID.
      */
-    public static VaultUIContext adminFiltered(UUID actorUuid, UUID ownerUuid) {
+    public static @NotNull VaultUIContext adminFiltered(@NotNull UUID actorUuid, @NotNull UUID ownerUuid) {
         return new VaultUIContext(actorUuid, ownerUuid, true);
     }
 }

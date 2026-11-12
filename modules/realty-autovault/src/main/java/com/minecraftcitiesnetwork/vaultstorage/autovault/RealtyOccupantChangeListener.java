@@ -27,22 +27,22 @@ public final class RealtyOccupantChangeListener implements Listener {
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
-    public void onTitleTransferred(TitleTransferredEvent event) {
+    public void onTitleTransferred(@NotNull TitleTransferredEvent event) {
         submit(event, event.getNewTitleHolderId());
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
-    public void onRegionBought(RegionBoughtEvent event) {
+    public void onRegionBought(@NotNull RegionBoughtEvent event) {
         submit(event, event.getBuyerId());
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
-    public void onRegionRented(RegionRentedEvent event) {
+    public void onRegionRented(@NotNull RegionRentedEvent event) {
         submit(event, event.getTenantId());
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
-    public void onTenantSet(TenantSetEvent event) {
+    public void onTenantSet(@NotNull TenantSetEvent event) {
         // A null new tenant means the tenancy was cleared (out of scope); skip.
         submit(event, event.getNewTenantId());
     }

@@ -27,7 +27,7 @@ public interface VaultScanService extends Service {
      * @param config   The scan menu configuration.
      * @param callback The consumer to accept the list of found blocks.
      */
-    void scan(Player player, String regionId, VaultUIContext context, Consumer<List<ScanResult>> callback);
+    void scan(@NotNull Player player, @NotNull String regionId, @NotNull VaultUIContext context, @NotNull Consumer<List<ScanResult>> callback);
 
     /**
      * Drops a block from every cached result. Called when a block stops being a result, because

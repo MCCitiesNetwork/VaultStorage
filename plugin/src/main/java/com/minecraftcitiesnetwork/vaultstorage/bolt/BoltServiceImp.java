@@ -113,7 +113,7 @@ public class BoltServiceImp implements BoltService {
 
 
     @Override
-    public Map<EntityProtection, Entity> getProtectedEntities(@NotNull World world, @NotNull BoundingBox boundingBox) {
+    public @NotNull Map<EntityProtection, Entity> getProtectedEntities(@NotNull World world, @NotNull BoundingBox boundingBox) {
         Objects.requireNonNull(world, "world");
         Objects.requireNonNull(boundingBox, "boundingBox");
 
@@ -167,12 +167,12 @@ public class BoltServiceImp implements BoltService {
     }
 
     @Override
-    public void removeProtection(Protection protection) {
+    public void removeProtection(@NotNull Protection protection) {
         api.removeProtection(protection);
     }
 
     @Override
-    public Collection<Protection> getProtections(BoundingBox boundingBox, World world) {
+    public @NotNull Collection<Protection> getProtections(@NotNull BoundingBox boundingBox, @NotNull World world) {
         return api.findProtections(world, boundingBox);
     }
 }

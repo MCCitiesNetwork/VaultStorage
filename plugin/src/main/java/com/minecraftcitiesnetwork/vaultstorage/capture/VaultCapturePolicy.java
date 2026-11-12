@@ -1,5 +1,6 @@
 package com.minecraftcitiesnetwork.vaultstorage.capture;
 
+import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.NotNull;
 import com.minecraftcitiesnetwork.vaultstorage.permission.Permissions;
 
@@ -35,8 +36,8 @@ public final class VaultCapturePolicy {
 
     public record Decision(boolean allowed, boolean hasOverride, boolean actorParticipantAny,
                            boolean containerOwnerParticipantAny, boolean actorIsContainerOwner,
-                           boolean disallowedOwnerSelf, boolean baseAllowed, UUID containerOwner, Reason reason,
-                           List<RegionStatus> regionStatuses) {
+                           boolean disallowedOwnerSelf, boolean baseAllowed, @NotNull UUID containerOwner, @NotNull Reason reason,
+                           @NotNull List<RegionStatus> regionStatuses) {
         public enum Reason {
             /**
              * Allowed (no blocking condition).
@@ -69,7 +70,7 @@ public final class VaultCapturePolicy {
         }
     }
 
-    public record RegionStatus(String regionId, boolean actorParticipant, boolean containerOwnerParticipates) {
+    public record RegionStatus(@NotNull String regionId, boolean actorParticipant, boolean containerOwnerParticipates) {
         /*
          * Per-region participation snapshot.
          * actorParticipant: true if the actor is owner or member of this specific region.
@@ -82,7 +83,7 @@ public final class VaultCapturePolicy {
      * Rules recap: requires Bolt owner; requires region participation unless override is present.
      *
      */
-    public Decision evaluate(Player actor, Block block) {
+    public @NotNull Decision evaluate(@NotNull Player actor, @NotNull Block block) {
         BoltService bolt = plugin.bolt();
         UUID originalOwner = null;
         if (bolt != null) {
@@ -110,7 +111,7 @@ public final class VaultCapturePolicy {
      * @param hanging the hanging entity being captured
      * @param supportingBlock block the hanging is attached to
      */
-    public Decision evaluateHangingCapture(Player actor, Hanging hanging, Block supportingBlock) {
+    public @NotNull Decision evaluateHangingCapture(@NotNull Player actor, @NotNull Hanging hanging, @NotNull Block supportingBlock) {
         BoltService bolt = plugin.bolt();
         UUID originalOwner = null;
         if (bolt != null) {
@@ -133,7 +134,7 @@ public final class VaultCapturePolicy {
         return evaluateBlockPolicy(actor, supportingBlock, originalOwner, false);
     }
 
-    private Decision evaluateBlockPolicy(Player actor, Block block, UUID originalOwner, boolean hangableRestricted) {
+    private @NotNull Decision evaluateBlockPolicy(@NotNull Player actor, @NotNull Block block, @Nullable UUID originalOwner, boolean hangableRestricted) {
         boolean hasOverride = actor.hasPermission(Permissions.BYPASS_REGION);
         boolean actorIsContainerOwner = originalOwner != null && originalOwner.equals(actor.getUniqueId());
 
@@ -187,10 +188,10 @@ public final class VaultCapturePolicy {
     }
 
     private record RegionParticipation(boolean inAnyRegion, boolean actorParticipantAny,
-                                       boolean containerOwnerParticipantAny, List<RegionStatus> perRegionDebug) {}
+                                       boolean containerOwnerParticipantAny, @NotNull List<RegionStatus> perRegionDebug) {}
 
     /** Scans WorldGuard regions at the block and computes actor/owner participation flags. */
-    private RegionParticipation computeRegionParticipation(Player actor, Block block, UUID originalOwner) {
+    private @NotNull RegionParticipation computeRegionParticipation(@NotNull Player actor, @NotNull Block block, @Nullable UUID originalOwner) {
         WorldGuardService wgs = plugin.worldGuard();
 
         boolean actorParticipantAny = false;
@@ -267,7 +268,7 @@ public final class VaultCapturePolicy {
      * Evaluate whether the actor may remove a ChestShop sign on the given container.
      * Only the override permission allows it.
      */
-    public Decision evaluateChestShopSignRemoval(Player actor, Block containerBlock) {
+    public @NotNull Decision evaluateChestShopSignRemoval(@NotNull Player actor, @NotNull Block containerBlock) {
         BoltService bolt = plugin.bolt();
         UUID originalOwner = null;
         if (bolt != null) {
@@ -308,7 +309,7 @@ public final class VaultCapturePolicy {
     /**
      * Evaluate vaulting permission for a specific entity (e.g. from Scan Menu).
      */
-    public Decision evaluate(Player actor, Entity entity) {
+    public @NotNull Decision evaluate(@NotNull Player actor, @NotNull Entity entity) {
         if (entity instanceof Hanging hanging) {
             Block supporting = HangingVaultSupport.resolveSupportingBlock(hanging);
             return evaluateHangingCapture(actor, hanging, supporting);
@@ -324,16 +325,14 @@ public final class VaultCapturePolicy {
         return new Decision(true, hasOverride, false, false, false, false, true, null, Decision.Reason.ALLOWED, List.of());
     }
 
-    private static String formatBlock(Block block) {
+    private static @NotNull String formatBlock(@Nullable Block block) {
         if (block == null) {
             return "<null>";
-        } else {
-            block.getWorld();
         }
         return block.getWorld().getName() + "@" + block.getX() + "," + block.getY() + "," + block.getZ() + "[" + block.getType() + "]";
     }
 
-    private boolean safeContains(BoundingBox outer, VaultRegion innerRegion) {
+    private boolean safeContains(@NotNull BoundingBox outer, @NotNull VaultRegion innerRegion) {
         try {
             BoundingBox inner = innerRegion.boundingBox();
             return outer.contains(inner);

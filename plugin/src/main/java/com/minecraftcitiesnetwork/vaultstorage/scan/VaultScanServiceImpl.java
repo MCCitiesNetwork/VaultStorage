@@ -1,5 +1,6 @@
 package com.minecraftcitiesnetwork.vaultstorage.scan;
 
+import org.jetbrains.annotations.Nullable;
 import java.util.concurrent.CompletableFuture;
 import org.bukkit.Bukkit;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -37,7 +38,7 @@ public class VaultScanServiceImpl implements VaultScanService {
     private final Map<CacheKey, List<Consumer<List<ScanResult>>>> pendingScans = new HashMap<>();
 
     @Override
-    public void scan(Player player, String regionId, VaultUIContext context, Consumer<List<ScanResult>> callback) {
+    public void scan(@NotNull Player player, @NotNull String regionId, @NotNull VaultUIContext context, @NotNull Consumer<List<ScanResult>> callback) {
         CacheKey key = new CacheKey(regionId, player.getUniqueId(), context.filterOwner());
 
         // Check cache
@@ -77,7 +78,7 @@ public class VaultScanServiceImpl implements VaultScanService {
     }
 
     /** Answers everyone waiting on this scan, and stops recording it as in progress. */
-    private void answer(CacheKey key, List<ScanResult> results) {
+    private void answer(@NotNull CacheKey key, @NotNull List<ScanResult> results) {
         List<Consumer<List<ScanResult>>> waiting;
         synchronized (pendingScans) {
             waiting = pendingScans.remove(key);
@@ -90,7 +91,7 @@ public class VaultScanServiceImpl implements VaultScanService {
     }
 
     /** Looks up the name of every owner in the results, so the list can be shown once, complete. */
-    private CompletableFuture<Void> resolveOwnerNames(List<ScanResult> results) {
+    private @NotNull CompletableFuture<Void> resolveOwnerNames(@Nullable List<ScanResult> results) {
         if (results == null) {
             return CompletableFuture.completedFuture(null);
         }
@@ -120,9 +121,9 @@ public class VaultScanServiceImpl implements VaultScanService {
                 && first.getX() == second.getX() && first.getY() == second.getY() && first.getZ() == second.getZ();
     }
 
-    private record CacheKey(String regionId, UUID playerUuid, UUID filterOwner) {
+    private record CacheKey(@NotNull String regionId, @NotNull UUID playerUuid, @NotNull UUID filterOwner) {
         @Override
-        public boolean equals(Object o) {
+        public boolean equals(@Nullable Object o) {
             if (this == o) return true;
             if (o == null || getClass() != o.getClass()) return false;
             CacheKey cacheKey = (CacheKey) o;
@@ -137,6 +138,6 @@ public class VaultScanServiceImpl implements VaultScanService {
         }
     }
 
-    private record CacheEntry(List<ScanResult> results, Instant timestamp) {}
+    private record CacheEntry(@NotNull List<ScanResult> results, @NotNull Instant timestamp) {}
 }
 

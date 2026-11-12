@@ -1,5 +1,7 @@
 package com.minecraftcitiesnetwork.vaultstorage.database;
 
+import org.jetbrains.annotations.Nullable;
+import org.jetbrains.annotations.NotNull;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.sql.CallableStatement;
@@ -18,7 +20,7 @@ import org.apache.ibatis.type.MappedTypes;
 @MappedTypes(UUID.class)
 public final class UuidHandler extends BaseTypeHandler<UUID> {
 
-    private static UUID fromBytes(byte[] bytes) {
+    private static @NotNull UUID fromBytes(byte @NotNull [] bytes) {
         if (bytes.length == 16) {
             ByteBuffer buffer = ByteBuffer.wrap(bytes);
             return new UUID(buffer.getLong(), buffer.getLong());
@@ -27,25 +29,25 @@ public final class UuidHandler extends BaseTypeHandler<UUID> {
     }
 
     @Override
-    public void setNonNullParameter(PreparedStatement ps, int i, UUID parameter, JdbcType jdbcType)
+    public void setNonNullParameter(@NotNull PreparedStatement ps, int i, @NotNull UUID parameter, @NotNull JdbcType jdbcType)
             throws SQLException {
         ps.setString(i, parameter.toString());
     }
 
     @Override
-    public UUID getNullableResult(ResultSet rs, String columnName) throws SQLException {
+    public @Nullable UUID getNullableResult(@NotNull ResultSet rs, @NotNull String columnName) throws SQLException {
         byte[] bytes = rs.getBytes(columnName);
         return bytes == null ? null : fromBytes(bytes);
     }
 
     @Override
-    public UUID getNullableResult(ResultSet rs, int columnIndex) throws SQLException {
+    public @Nullable UUID getNullableResult(@NotNull ResultSet rs, int columnIndex) throws SQLException {
         byte[] bytes = rs.getBytes(columnIndex);
         return bytes == null ? null : fromBytes(bytes);
     }
 
     @Override
-    public UUID getNullableResult(CallableStatement cs, int columnIndex) throws SQLException {
+    public @Nullable UUID getNullableResult(@NotNull CallableStatement cs, int columnIndex) throws SQLException {
         byte[] bytes = cs.getBytes(columnIndex);
         return bytes == null ? null : fromBytes(bytes);
     }

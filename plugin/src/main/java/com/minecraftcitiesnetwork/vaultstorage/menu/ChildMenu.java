@@ -1,6 +1,7 @@
 package com.minecraftcitiesnetwork.vaultstorage.menu;
 
+import org.jetbrains.annotations.NotNull;
 public interface ChildMenu extends  Menu {
-    ParentMenu getParentMenu();
+    @NotNull ParentMenu parentMenu();
 
 }

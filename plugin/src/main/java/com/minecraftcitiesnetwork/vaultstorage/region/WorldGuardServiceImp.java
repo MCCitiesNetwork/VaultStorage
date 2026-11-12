@@ -93,7 +93,7 @@ public class WorldGuardServiceImp implements WorldGuardService {
         return regions.stream().filter(region -> region.id().equals(id)).findFirst().orElse(null);
     }
 
-    private VaultRegion buildVaultRegion(String id, @NotNull ProtectedRegion protectedRegion) {
+    private @NotNull VaultRegion buildVaultRegion(@NotNull String id, @NotNull ProtectedRegion protectedRegion) {
         var ownerSet = new LinkedHashSet<UUID>();
         var memberSet = new LinkedHashSet<UUID>();
         ProtectedRegion cursor = protectedRegion;

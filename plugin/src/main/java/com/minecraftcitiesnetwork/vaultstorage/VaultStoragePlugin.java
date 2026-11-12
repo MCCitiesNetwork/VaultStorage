@@ -1,5 +1,6 @@
 package com.minecraftcitiesnetwork.vaultstorage;
 
+import org.jetbrains.annotations.NotNull;
 import com.minecraftcitiesnetwork.vaultstorage.capture.VaultCapturePolicy;
 import com.minecraftcitiesnetwork.vaultstorage.config.Text;
 import com.minecraftcitiesnetwork.vaultstorage.bolt.BoltService;
@@ -84,54 +85,54 @@ public final class VaultStoragePlugin extends JavaPlugin {
     // Database wiring
 
 
-    public VaultSessionManager sessionManager() { return sessionManager; }
+    public @NotNull VaultSessionManager sessionManager() { return sessionManager; }
 
 
     /** Every read and write of vaults. Blocking: call it on {@link #databaseExecutor()}. */
-    public VaultRepository repository() { return repository; }
+    public @NotNull VaultRepository repository() { return repository; }
 
     /** The connection pool and session factory, for a module that owns tables of its own. */
-    public VaultDatabase database() { return database; }
+    public @NotNull VaultDatabase database() { return database; }
 
     /** The pool database work runs on. */
-    public Executor databaseExecutor() { return databaseExecutor; }
+    public @NotNull Executor databaseExecutor() { return databaseExecutor; }
 
-    public WorldGuardService worldGuard() { return worldGuardService; }
+    public @NotNull WorldGuardService worldGuard() { return worldGuardService; }
 
-    public BoltService bolt() { return boltService; }
+    public @NotNull BoltService bolt() { return boltService; }
 
     /** Reusable capture domain service. */
-    public VaultCaptureService captureService() { return captureService; }
+    public @NotNull VaultCaptureService captureService() { return captureService; }
 
     /** Reusable placement domain service. */
-    public VaultPlacementService placementService() { return placementService; }
+    public @NotNull VaultPlacementService placementService() { return placementService; }
 
     /** Reusable inventory domain service. */
-    public VaultInventoryService inventoryService() { return inventoryService; }
+    public @NotNull VaultInventoryService inventoryService() { return inventoryService; }
 
     /** Reusable scan domain service. */
-    public VaultScanService scanService() { return scanService; }
+    public @NotNull VaultScanService scanService() { return scanService; }
 
     /** What feature modules supply; read at use time. */
-    public Integrations integrations() { return integrations; }
+    public @NotNull Integrations integrations() { return integrations; }
 
     /** Messages with their placeholders given as a map. */
-    public Text text() { return text; }
+    public @NotNull Text text() { return text; }
 
     /** Who may vault what. */
-    public VaultCapturePolicy capturePolicy() { return capturePolicy; }
+    public @NotNull VaultCapturePolicy capturePolicy() { return capturePolicy; }
 
     /** messages.yml. One instance, reloaded in place. */
-    public MessageContainer messages() { return messages; }
+    public @NotNull MessageContainer messages() { return messages; }
 
     /** settings.yml. Read it through the reference each time: a reload swaps what it holds. */
-    public AtomicReference<PluginSettings> settings() { return settings; }
+    public @NotNull AtomicReference<PluginSettings> settings() { return settings; }
 
     /** Player name and UUID lookups. */
-    public Names names() { return names; }
+    public @NotNull Names names() { return names; }
 
     /** Tells a vault's owner about it, through whichever notification module is loaded. */
-    public OwnerNotifications ownerNotifications() { return ownerNotifications; }
+    public @NotNull OwnerNotifications ownerNotifications() { return ownerNotifications; }
 
     @Override
     public void onEnable() {
@@ -205,7 +206,7 @@ public final class VaultStoragePlugin extends JavaPlugin {
      * Reads database.yml and settings.yml, creating each from the bundled default the first
      * time. Values from the 1.x config.yml are carried over into a file as it is created.
      */
-    private DatabaseSettings loadConfiguration() throws IOException {
+    private @NotNull DatabaseSettings loadConfiguration() throws IOException {
         ConfigFiles files = new ConfigFiles(getDataFolder().toPath(), getLogger());
         ConfigurationNode old = files.legacy();
         boolean carryOver = !old.node("mysql", "host").virtual();
@@ -248,11 +249,11 @@ public final class VaultStoragePlugin extends JavaPlugin {
     }
 
     /** What a reload replaces. Both are parsed before either is swapped in. */
-    private record Reloadable(PluginSettings settings, ConfigurationNode messages) {
+    private record Reloadable(@NotNull PluginSettings settings, @NotNull ConfigurationNode messages) {
     }
 
     /** Reads files only; safe off the main thread. */
-    private Reloadable readReloadable(ConfigFiles files, Map<String, String> carriedOver) throws IOException {
+    private @NotNull Reloadable readReloadable(@NotNull ConfigFiles files, @NotNull Map<String, String> carriedOver) throws IOException {
         PluginSettings pluginSettings = files.load("settings.yml", ConfigFiles.bundled(getClass(), "settings.yml"),
                 text -> LegacyConfigImport.fill(text, carriedOver)).get(PluginSettings.class);
         if (pluginSettings == null) {
@@ -267,7 +268,7 @@ public final class VaultStoragePlugin extends JavaPlugin {
      * takes effect unless both parse. database.yml is not re-read. Fails with the cause, which
      * is also logged.
      */
-    public CompletableFuture<Void> reload() {
+    public @NotNull CompletableFuture<Void> reload() {
         Executor mainThread = getServer().getScheduler().getMainThreadExecutor(this);
         return CompletableFuture
                 .supplyAsync(() -> {
@@ -304,7 +305,7 @@ public final class VaultStoragePlugin extends JavaPlugin {
      * to the caller, which disables the plugin: a half-started plugin would remove blocks it
      * cannot store.
      */
-    private boolean startDatabase(DatabaseSettings settings) {
+    private boolean startDatabase(@NotNull DatabaseSettings settings) {
         try {
             this.database = new VaultDatabase(settings);
             new VaultStorageSchemaMigrator().migrate(this.database.dataSource(), getLogger());
@@ -348,7 +349,7 @@ public final class VaultStoragePlugin extends JavaPlugin {
 
 
     /** ChestShop integration; returns a no-op implementation when ChestShop is not installed. */
-    public ChestShopService chestShop() {
+    public @NotNull ChestShopService chestShop() {
         return this.integrations.chestShop();
     }
 

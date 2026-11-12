@@ -1,5 +1,6 @@
 package com.minecraftcitiesnetwork.vaultstorage.menu;
 
+import org.jetbrains.annotations.NotNull;
 import com.minecraftcitiesnetwork.vaultstorage.config.MessageKeys;
 import com.minecraftcitiesnetwork.vaultstorage.database.VaultFilter;
 import java.util.concurrent.CompletableFuture;
@@ -40,22 +41,22 @@ public class VaultPlacementMenu extends ChildMenuImp {
     private final VaultUIContext context;
     /** Ensure YAML exists. */
 
-    public VaultPlacementMenu(Player player, ParentMenuImp parent, UUID vaultId, VaultUIContext context) {
+    public VaultPlacementMenu(@NotNull Player player, @NotNull ParentMenuImp parent, @NotNull UUID vaultId, @NotNull VaultUIContext context) {
         super(player, parent, "vault_place_" + vaultId);
         this.vaultId = vaultId;
         this.context = context;
         setDialog(build());
     }
 
-    private Dialog build() {
-        AutoDialog.Builder builder = getAutoDialogBuilder();
-        builder.title(plugin.text().of(MessageKeys.PLACEMENT_TITLE, Map.of("%player%", getPlayer().getName())));
+    private @NotNull Dialog build() {
+        AutoDialog.Builder builder = dialogBuilder();
+        builder.title(plugin.text().of(MessageKeys.PLACEMENT_TITLE, Map.of("%player%", player().getName())));
         builder.canCloseWithEscape(true);
         builder.afterAction(DialogBase.DialogAfterAction.CLOSE);
 
-        builder.addBody(DialogBody.plainMessage(plugin.text().of(MessageKeys.PLACEMENT_INSTRUCTION, Map.of("%player%", getPlayer().getName()))));
+        builder.addBody(DialogBody.plainMessage(plugin.text().of(MessageKeys.PLACEMENT_INSTRUCTION, Map.of("%player%", player().getName()))));
         builder.button(plugin.text().of(MessageKeys.PLACEMENT_START_BTN), ctx -> startPlacement(ctx.player()));
-        builder.button(plugin.text().of(MessageKeys.PLACEMENT_BACK_BTN), ctx -> getParentMenu().open());
+        builder.button(plugin.text().of(MessageKeys.PLACEMENT_BACK_BTN), ctx -> parentMenu().open());
         return builder.build();
     }
 
@@ -76,27 +77,27 @@ public class VaultPlacementMenu extends ChildMenuImp {
      * </ul>
      * </p>
      */
-    private void startPlacement(Player actor) {
+    private void startPlacement(@NotNull Player actor) {
         VaultSessionManager.Session session = plugin.sessionManager().getOrCreate(actor.getUniqueId());
         // Switch to PLACEMENT mode, cancelling any prior capture/placement state
         session.switchTo(Mode.PLACEMENT);
         final BukkitTask[] actionbarTask = new BukkitTask[1];
 
-        session.getDynamicListener().setListener(new Listener() {
+        session.dynamicListener().setListener(new Listener() {
             @EventHandler
-            public void onInteract(PlayerInteractEvent event) {
+            public void onInteract(@NotNull PlayerInteractEvent event) {
                 if (!event.getPlayer().getUniqueId().equals(actor.getUniqueId())) return;
 
                 // Ignore off-hand events to prevent duplicate processing
                 if (event.getHand() == EquipmentSlot.OFF_HAND) return;
 
                 // Verify session is still in PLACEMENT mode
-                if (session.getMode() != Mode.PLACEMENT) return;
+                if (session.mode() != Mode.PLACEMENT) return;
 
                 Action action = event.getAction();
                 if (action == Action.LEFT_CLICK_AIR || action == Action.LEFT_CLICK_BLOCK) {
                     event.setCancelled(true);
-                    session.getDynamicListener().stop();
+                    session.dynamicListener().stop();
                     if (actionbarTask[0] != null) actionbarTask[0].cancel();
                     session.clearActionBarTask();
                     session.switchTo(Mode.NONE);
@@ -124,9 +125,9 @@ public class VaultPlacementMenu extends ChildMenuImp {
                 }
 
                 VaultPlacementService placement = plugin.placementService();
-                new LoadingMenu(actor, getParentMenu(), Map.of("%player%", actor.getName(), "%vault%", String.valueOf(vaultId))).open();
+                new LoadingMenu(actor, parentMenu(), Map.of("%player%", actor.getName(), "%vault%", String.valueOf(vaultId))).open();
                 // Stop session listener and actionbar (single placement then exit mode)
-                session.getDynamicListener().stop();
+                session.dynamicListener().stop();
                 if (actionbarTask[0] != null) actionbarTask[0].cancel();
                 session.clearActionBarTask();
                 session.switchTo(Mode.NONE);
@@ -144,7 +145,7 @@ public class VaultPlacementMenu extends ChildMenuImp {
                                 CompletableFuture.supplyAsync(() -> plugin.repository().count(remaining), plugin.databaseExecutor())
                                         .thenAcceptAsync(left -> {
                                             if (left > 0) {
-                                                new VaultListMenu(actor, (ParentMenuImp) getParentMenu(), context, "").open();
+                                                new VaultListMenu(actor, (ParentMenuImp) parentMenu(), context, "").open();
                                             } else {
                                                 actor.sendMessage(plugin.text().of(MessageKeys.PLACEMENT_NONE_LEFT));
                                                 actor.closeDialog();
@@ -156,7 +157,7 @@ public class VaultPlacementMenu extends ChildMenuImp {
                                         });
                             } else {
                                 // Failure: return to list for retry
-                                new VaultListMenu(actor, (ParentMenuImp) getParentMenu(), context, "").open();
+                                new VaultListMenu(actor, (ParentMenuImp) parentMenu(), context, "").open();
                             }
                         }
                     }.runTask(plugin);
@@ -185,7 +186,7 @@ public class VaultPlacementMenu extends ChildMenuImp {
         }.runTaskTimer(plugin, 0L, 5L);
         session.setActionBarTask(actionbarTask[0]);
 
-        session.getDynamicListener().start();
+        session.dynamicListener().start();
         actor.closeDialog();
     }
 }

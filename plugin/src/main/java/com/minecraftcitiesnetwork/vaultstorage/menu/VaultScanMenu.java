@@ -58,7 +58,7 @@ public class VaultScanMenu extends ChildMenuImp {
         CONTAINER,
         ENTITY;
 
-        public FilterMode next() {
+        public @NotNull FilterMode next() {
             return switch (this) {
                 case BLOCK -> NON_CONTAINER;
                 case NON_CONTAINER -> CONTAINER;
@@ -130,24 +130,24 @@ public class VaultScanMenu extends ChildMenuImp {
         setDialog(build());
     }
 
-    private boolean checkCooldown(Player player) {
+    private boolean checkCooldown(@NotNull Player player) {
         if (player.hasPermission(Permissions.ADMIN)) return true;
         var session = plugin.sessionManager().getOrCreate(player.getUniqueId());
         long now = System.currentTimeMillis();
-        long last = session.getLastScanTime();
+        long last = session.lastScanTime();
         long cooldownMs = plugin.settings().get().scan().cooldownSeconds() * 1000;
         if (now - last < cooldownMs) {
             long remaining = (cooldownMs - (now - last)) / 1000;
             player.sendMessage(plugin.text().of(MessageKeys.SCAN_SCAN_COOLDOWN, Map.of("%time%", String.valueOf(remaining))));
             return false;
         }
-        session.setLastScanTime(now);
+        session.markScanned(now);
         return true;
     }
 
-    private Dialog build() {
-        AutoDialog.Builder builder = getAutoDialogBuilder();
-        Map<String,String> placeholdersSelf = Map.of("%player%", getPlayer().getName());
+    private @NotNull Dialog build() {
+        AutoDialog.Builder builder = dialogBuilder();
+        Map<String,String> placeholdersSelf = Map.of("%player%", player().getName());
         builder.title(plugin.text().of(MessageKeys.SCAN_TITLE, placeholdersSelf));
         builder.canCloseWithEscape(true);
         builder.afterAction(DialogBase.DialogAfterAction.CLOSE);
@@ -159,7 +159,7 @@ public class VaultScanMenu extends ChildMenuImp {
             builder.buttonWithPlayer(plugin.text().of(MessageKeys.SCAN_SEARCH_BTN), null, Duration.ofMinutes(5), 1, (player, response) -> {
                 String q = Optional.ofNullable(response.getText("QUERY")).orElse("").trim();
                 // VaultRegionListMenu does not accept uiContext; use its (player, parent, query, page) constructor
-                new VaultRegionListMenu(player, getParentMenu(), q, 0).open();
+                new VaultRegionListMenu(player, parentMenu(), q, 0).open();
             });
 
             // "Here" button: detect region at player's current location and open results or list if multiple
@@ -179,7 +179,7 @@ public class VaultScanMenu extends ChildMenuImp {
                 if (containing.size() > 1) {
                     List<String> ids = containing.stream().map(VaultRegion::id).sorted(String.CASE_INSENSITIVE_ORDER).toList();
                     // VaultRegionListMenu subset constructor: (player, parent, ids, page)
-                    new VaultRegionListMenu(ctx.player(), getParentMenu(), ids, 0).open();
+                    new VaultRegionListMenu(ctx.player(), parentMenu(), ids, 0).open();
                     return;
                 }
                 VaultRegion only = containing.getFirst();
@@ -188,14 +188,14 @@ public class VaultScanMenu extends ChildMenuImp {
                     return;
                 }
                 if (!checkCooldown(ctx.player())) return;
-                new LoadingMenu(ctx.player(), getParentMenu(), Map.of("%player%", ctx.player().getName())).open();
+                new LoadingMenu(ctx.player(), parentMenu(), Map.of("%player%", ctx.player().getName())).open();
                 plugin.scanService().scan(ctx.player(), only.id(), uiContext, blocks -> {
                     if (blocks == null) {
                         // The scan could not run and has said why; take the loading dialog down.
                         ctx.player().closeDialog();
                         return;
                     }
-                    new VaultScanMenu(ctx.player(), getParentMenu(), uiContext, only.id(), blocks, 0).open();
+                    new VaultScanMenu(ctx.player(), parentMenu(), uiContext, only.id(), blocks, 0).open();
                 });
             });
 
@@ -229,7 +229,7 @@ public class VaultScanMenu extends ChildMenuImp {
                 addFilterButton(builder, currentPage);
                 return builder.build();
             }
-            Map<EntityProtection, Entity> protections = boltService.getProtectedEntities(getPlayer().getWorld(), region.boundingBox());
+            Map<EntityProtection, Entity> protections = boltService.getProtectedEntities(player().getWorld(), region.boundingBox());
             // A fixed order, so that a page shows the same entities each time it is built.
             List<EntityProtection> ordered = protections.keySet().stream()
                     .sorted(Comparator.<EntityProtection>comparingInt(p -> protections.get(p).getLocation().getBlockX())
@@ -270,7 +270,7 @@ public class VaultScanMenu extends ChildMenuImp {
 
                 String entityName = VaultLabel.materialName(protections.get(protection).getType().name());
 
-                var decision = plugin.capturePolicy().evaluate(getPlayer(), protections.get(protection));
+                var decision = plugin.capturePolicy().evaluate(player(), protections.get(protection));
 
                 Map<String,String> placeholdersEntry = Map.of(
                         "%x%", String.valueOf(entityLoc.getBlockX()),
@@ -294,16 +294,16 @@ public class VaultScanMenu extends ChildMenuImp {
                     if (svc == null) return;
                     svc.removeProtection(protection);
                     // Refresh entity list after removal
-                    new VaultScanMenu(ctx.player(), getParentMenu(), uiContext, regionId, entries, eCurrentPage, FilterMode.ENTITY).open();
+                    new VaultScanMenu(ctx.player(), parentMenu(), uiContext, regionId, entries, eCurrentPage, FilterMode.ENTITY).open();
                 },100);
             }
 
             // Navigation for entity pages
             if (eCurrentPage > 0) {
-                builder.button(plugin.text().of(MessageKeys.SCAN_PREV_BTN), ctx -> new VaultScanMenu(ctx.player(), getParentMenu(), uiContext, regionId, entries, eCurrentPage - 1, FilterMode.ENTITY).open());
+                builder.button(plugin.text().of(MessageKeys.SCAN_PREV_BTN), ctx -> new VaultScanMenu(ctx.player(), parentMenu(), uiContext, regionId, entries, eCurrentPage - 1, FilterMode.ENTITY).open());
             }
             if (eCurrentPage < eTotalPages - 1) {
-                builder.button(plugin.text().of(MessageKeys.SCAN_NEXT_BTN), ctx -> new VaultScanMenu(ctx.player(), getParentMenu(), uiContext, regionId, entries, eCurrentPage + 1, FilterMode.ENTITY).open());
+                builder.button(plugin.text().of(MessageKeys.SCAN_NEXT_BTN), ctx -> new VaultScanMenu(ctx.player(), parentMenu(), uiContext, regionId, entries, eCurrentPage + 1, FilterMode.ENTITY).open());
             }
             addFilterButton(builder, eCurrentPage);
             return builder.build();
@@ -348,7 +348,7 @@ public class VaultScanMenu extends ChildMenuImp {
             // Vault button for this entry
             builder.button(plugin.text().of(MessageKeys.SCAN_ENTRY_VAULT_BUTTON, placeholdersEntry), ctx -> {
                 // Show a loading menu while we process DB work
-                new LoadingMenu(ctx.player(), getParentMenu(), Map.of("%player%", ctx.player().getName())).open();
+                new LoadingMenu(ctx.player(), parentMenu(), Map.of("%player%", ctx.player().getName())).open();
                 Block targetBlock = ctx.player().getWorld().getBlockAt(entryBlock.getX(), entryBlock.getY(), entryBlock.getZ());
                 VaultCaptureService capSvc = plugin.captureService();
                 
@@ -365,11 +365,11 @@ public class VaultScanMenu extends ChildMenuImp {
                     }
                     int newTotal = Math.max(1, (int) Math.ceil(remaining.size() / (double) Math.max(1, RESULTS_PER_PAGE)));
                     int safePage = Math.min(currentPage, newTotal - 1);
-                    new VaultScanMenu(ctx.player(), getParentMenu(), uiContext, regionId, remaining, safePage).open();
+                    new VaultScanMenu(ctx.player(), parentMenu(), uiContext, regionId, remaining, safePage).open();
                 });
             });
             // Teleport button for this entry (literal coordinates with safe centering)
-            if (getPlayer().hasPermission(Permissions.SCAN_TELEPORT)) builder.button(plugin.text().of(MessageKeys.SCAN_ENTRY_TELEPORT_BUTTON, placeholdersEntry), ctx -> {
+            if (player().hasPermission(Permissions.SCAN_TELEPORT)) builder.button(plugin.text().of(MessageKeys.SCAN_ENTRY_TELEPORT_BUTTON, placeholdersEntry), ctx -> {
                 // Checked again at the click: the dialog may be older than the permission.
                 if (!ctx.player().hasPermission(Permissions.SCAN_TELEPORT)) return;
                 boolean passable = entryBlock.isPassable();
@@ -381,10 +381,10 @@ public class VaultScanMenu extends ChildMenuImp {
 
         // Navigation buttons
         if (currentPage > 0) {
-            builder.button(plugin.text().of(MessageKeys.SCAN_PREV_BTN), ctx -> new VaultScanMenu(ctx.player(), getParentMenu(), uiContext, regionId, entries, currentPage - 1, filterMode).open());
+            builder.button(plugin.text().of(MessageKeys.SCAN_PREV_BTN), ctx -> new VaultScanMenu(ctx.player(), parentMenu(), uiContext, regionId, entries, currentPage - 1, filterMode).open());
         }
         if (currentPage < totalPages - 1) {
-            builder.button(plugin.text().of(MessageKeys.SCAN_NEXT_BTN), ctx -> new VaultScanMenu(ctx.player(), getParentMenu(), uiContext, regionId, entries, currentPage + 1, filterMode).open());
+            builder.button(plugin.text().of(MessageKeys.SCAN_NEXT_BTN), ctx -> new VaultScanMenu(ctx.player(), parentMenu(), uiContext, regionId, entries, currentPage + 1, filterMode).open());
         }
 
         addFilterButton(builder, currentPage);
@@ -392,7 +392,7 @@ public class VaultScanMenu extends ChildMenuImp {
         return builder.build();
     }
 
-    private void addFilterButton(AutoDialog.Builder builder, int currentPage) {
+    private void addFilterButton(AutoDialog.@NotNull Builder builder, int currentPage) {
         String label = switch (filterMode) {
             case BLOCK -> MessageKeys.SCAN_FILTER_BTN_BLOCK;
             case NON_CONTAINER -> MessageKeys.SCAN_FILTER_BTN_NON_CONTAINER;
@@ -401,11 +401,11 @@ public class VaultScanMenu extends ChildMenuImp {
         };
         builder.sizableButton(plugin.text().of(label), ctx -> {
             FilterMode next = filterMode.next();
-            new VaultScanMenu(ctx.player(), getParentMenu(), uiContext, regionId, entries, currentPage, next).open();
+            new VaultScanMenu(ctx.player(), parentMenu(), uiContext, regionId, entries, currentPage, next).open();
         }, 100);
     }
 
-    private List<ScanResult> applyTypeFilter(List<ScanResult> source, FilterMode mode) {
+    private @NotNull List<ScanResult> applyTypeFilter(@NotNull List<ScanResult> source, @NotNull FilterMode mode) {
         // In ENTITY filter mode, block list is not used; entity protections are rendered separately.
         if (mode == FilterMode.BLOCK || mode == FilterMode.ENTITY) return source;
         List<ScanResult> out = new ArrayList<>();
@@ -422,7 +422,7 @@ public class VaultScanMenu extends ChildMenuImp {
     }
 
     // This is a faster check than instanceof Container, used for filtering
-    private boolean isContainerMaterial(Material type) {
+    private boolean isContainerMaterial(@NotNull Material type) {
         return switch (type) {
             // Standard storage
             case CHEST, TRAPPED_CHEST, BARREL,
@@ -441,7 +441,7 @@ public class VaultScanMenu extends ChildMenuImp {
         };
     }
     private @NotNull World getWorld() {
-        return getPlayer().getWorld();
+        return player().getWorld();
     }
 
     @Override

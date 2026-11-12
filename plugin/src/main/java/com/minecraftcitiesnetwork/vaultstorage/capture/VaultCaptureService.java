@@ -55,7 +55,6 @@ import com.minecraftcitiesnetwork.vaultstorage.permission.Permissions;
 import com.minecraftcitiesnetwork.vaultstorage.session.VaultSessionManager;
 import com.minecraftcitiesnetwork.vaultstorage.session.VaultSessionManager.Mode;
 import com.minecraftcitiesnetwork.vaultstorage.capture.HangingVaultSupport;
-import org.jspecify.annotations.NonNull;
 
 /**
  * Service responsible for capturing a block into a Vault model.
@@ -78,7 +77,7 @@ public class VaultCaptureService {
      * If invalid, attempts to resolve using the player's name via UniqueIdentifierResolver.
      * Returns a CompletableFuture with the valid UUID or null if resolution fails.
      */
-    private CompletableFuture<UUID> ensureValidOwnerUUID(UUID candidateUUID, Player actor) {
+    private @NotNull CompletableFuture<UUID> ensureValidOwnerUUID(@Nullable UUID candidateUUID, @NotNull Player actor) {
         // If already valid, return immediately
         if (UniqueIdentifierResolver.isValidUUID(candidateUUID)) {
             plugin.getLogger().info(
@@ -127,7 +126,7 @@ public class VaultCaptureService {
      * @param block target block
      * @return true if empty (or not a container), false otherwise
      */
-    public boolean isContainerEmpty(Block block) {
+    public boolean isContainerEmpty(@NotNull Block block) {
         if (!(block.getState() instanceof Container c)) {
             // Non-container: treat as empty so capture logic will produce no vault
             return true;
@@ -154,7 +153,7 @@ public class VaultCaptureService {
      * <li>{@code protectionRemoved}: true if Bolt protection was stripped, false if action was canceled/warned.</li>
      * </ul>
      */
-    public record CaptureOutcome(boolean empty, boolean protectionRemoved, UUID originalOwner, UUID finalOwner, List<Block> reProtectedHalves) {}
+    public record CaptureOutcome(boolean empty, boolean protectionRemoved, @NotNull UUID originalOwner, @NotNull UUID finalOwner, @NotNull List<Block> reProtectedHalves) {}
 
     /**
      * Captures a block into a vault while preserving protection rules.
@@ -166,7 +165,7 @@ public class VaultCaptureService {
      * <li>Target Full: Captures vault, re-protects other half.</li>
      * </ul>
      */
-    public CaptureOutcome captureWithDoubleChestSupport(Player actor, @NonNull Block block, UUID originalOwner) {
+    public @NotNull CaptureOutcome captureWithDoubleChestSupport(@NotNull Player actor, @NotNull Block block, @NotNull UUID originalOwner) {
         return captureWithDoubleChestSupport(block, originalOwner, actor.getUniqueId(), actor::sendMessage);
     }
 
@@ -174,9 +173,9 @@ public class VaultCaptureService {
      * Player-free variant of {@link #captureWithDoubleChestSupport(Player, Block, UUID)}. The vault owner is
      * {@code originalOwner} when non-null, else {@code finalOwnerFallback}; {@code warn} may be null to suppress notices.
      */
-    public CaptureOutcome captureWithDoubleChestSupport(@NonNull Block block, UUID originalOwner,
-                                                        @NonNull UUID finalOwnerFallback,
-                                                        Consumer<Component> warn) {
+    public @NotNull CaptureOutcome captureWithDoubleChestSupport(@NotNull Block block, @Nullable UUID originalOwner,
+                                                        @NotNull UUID finalOwnerFallback,
+                                                        @Nullable Consumer<Component> warn) {
         BoltService bolt = plugin.bolt();
         UUID finalOwner = originalOwner != null ? originalOwner : finalOwnerFallback;
 
@@ -258,7 +257,7 @@ public class VaultCaptureService {
     private static final String SAVE_FAILED =
             MessageKeys.CAPTURE_SAVE_FAILED;
 
-    private @NotNull List<Block> getHalves(Block block, Container container) {
+    private @NotNull List<Block> getHalves(@NotNull Block block, @NotNull Container container) {
         List<Block> otherHalves = new ArrayList<>();
         if (container instanceof Chest chest) {
             InventoryHolder holder = chest.getInventory().getHolder();
@@ -317,16 +316,16 @@ public class VaultCaptureService {
         // Cooldown: block cancellation for a short period after capture to prevent phantom events from other plugins
         final long[] cancelCooldownUntil = new long[]{0L};
 
-        session.getDynamicListener().setListener(new Listener() {
+        session.dynamicListener().setListener(new Listener() {
             @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = false)
-            public void onInteract(PlayerInteractEvent event) {
+            public void onInteract(@NotNull PlayerInteractEvent event) {
                 if (!event.getPlayer().getUniqueId().equals(actor.getUniqueId())) return;
 
                 // Ignore off-hand events to prevent duplicate processing
                 if (event.getHand() == EquipmentSlot.OFF_HAND) return;
 
                 // Verify session is still in CAPTURE mode (may have been changed externally)
-                if (session.getMode() != Mode.CAPTURE) return;
+                if (session.mode() != Mode.CAPTURE) return;
 
                 Action action = event.getAction();
 
@@ -338,7 +337,7 @@ public class VaultCaptureService {
                         return; // Ignore this left-click, still in cooldown
                     }
                     event.setCancelled(true);
-                    session.getDynamicListener().stop();
+                    session.dynamicListener().stop();
                     if (actionbarTask[0] != null) actionbarTask[0].cancel();
                     session.clearActionBarTask();
                     session.switchTo(Mode.NONE);
@@ -476,10 +475,10 @@ public class VaultCaptureService {
             }
 
             @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = false)
-            public void onInteractEntity(PlayerInteractEntityEvent event) {
+            public void onInteractEntity(@NotNull PlayerInteractEntityEvent event) {
                 if (!event.getPlayer().getUniqueId().equals(actor.getUniqueId())) return;
                 if (event.getHand() == EquipmentSlot.OFF_HAND) return;
-                if (session.getMode() != Mode.CAPTURE) return;
+                if (session.mode() != Mode.CAPTURE) return;
                 if (busy[0]) return;
 
                 Entity clicked = event.getRightClicked();
@@ -584,7 +583,7 @@ public class VaultCaptureService {
         }.runTaskTimer(plugin, 0L, 5L);
         session.setActionBarTask(actionbarTask[0]);
 
-        session.getDynamicListener().start();
+        session.dynamicListener().start();
     }
 
     /** Simple in-memory cache for UUID->username for actionbar display. */
@@ -594,7 +593,7 @@ public class VaultCaptureService {
      * Returns a display name for the UUID without blocking the main thread.
      * Uses cache if present; otherwise returns a short UUID and schedules an async resolve.
      */
-    private String ownerDisplayNameAsync(UUID uuid) {
+    private @NotNull String ownerDisplayNameAsync(@Nullable UUID uuid) {
         if (uuid == null) return plugin.text().plain(MessageKeys.CAPTURE_ACTION_BAR_UNPROTECTED_OWNER);
         String cached = NAME_CACHE.get(uuid);
         if (cached != null) return cached;
@@ -606,8 +605,8 @@ public class VaultCaptureService {
     }
 
     /** The " | Reason: ..." part of the action bar; empty when the capture is allowed. */
-    private Component reasonSegment(VaultCapturePolicy.@NonNull Decision decision, String ownerName,
-                                           String regionsList) {
+    private @NotNull Component reasonSegment(VaultCapturePolicy.@NotNull Decision decision, @NotNull String ownerName,
+                                           @NotNull String regionsList) {
         if (decision.allowed()) {
             return Component.empty();
         }
@@ -646,7 +645,7 @@ public class VaultCaptureService {
         }
     }
 
-    private static Block resolveAttachedContainerBlock(@NotNull Block signBlock) {
+    private static @Nullable Block resolveAttachedContainerBlock(@NotNull Block signBlock) {
         if (!isSignBlock(signBlock)) return null;
 
         if (signBlock.getBlockData() instanceof WallSign wallSign) {
@@ -734,7 +733,7 @@ public class VaultCaptureService {
      */
     public @NotNull CompletableFuture<Boolean> captureOfflineAsync(@NotNull Block block,
                                     @NotNull UUID initiatorUuid,
-                                    UUID boltOwner,
+                                    @NotNull UUID boltOwner,
                                     @NotNull Runnable onVaulted) {
 
         CaptureOutcome outcome = captureWithDoubleChestSupport(block, boltOwner, initiatorUuid, null);
@@ -819,7 +818,7 @@ public class VaultCaptureService {
      * anchored at {@code supporting}. One transaction, with the chosen vault locked, so two
      * captures for one owner cannot take the same slots. Blocks on the database.
      */
-    private UUID persistHangingStacks(@NotNull List<ItemStack> stacks, @NotNull UUID boltOwner, @NotNull UUID creatorUuid,
+    private @NotNull UUID persistHangingStacks(@NotNull List<ItemStack> stacks, @NotNull UUID boltOwner, @NotNull UUID creatorUuid,
                                       @NotNull Block supporting, boolean tellOwner) {
         List<VaultItem> items = new ArrayList<>(stacks.size());
         for (int offset = 0; offset < stacks.size(); offset++) {

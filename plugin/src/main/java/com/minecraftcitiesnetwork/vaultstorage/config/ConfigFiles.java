@@ -99,7 +99,7 @@ public final class ConfigFiles {
         return loader().build().createNode();
     }
 
-    private static YamlConfigurationLoader.Builder loader() {
+    private static YamlConfigurationLoader.@NotNull Builder loader() {
         return YamlConfigurationLoader.builder().nodeStyle(NodeStyle.BLOCK);
     }
 }

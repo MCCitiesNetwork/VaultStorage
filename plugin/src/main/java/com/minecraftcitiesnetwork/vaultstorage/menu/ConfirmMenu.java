@@ -32,7 +32,7 @@ public final class ConfirmMenu extends ChildMenuImp {
     }
 
     private @NotNull Dialog build() {
-        AutoDialog.Builder builder = getAutoDialogBuilder();
+        AutoDialog.Builder builder = dialogBuilder();
         builder.title(this.title);
         builder.canCloseWithEscape(true);
         builder.afterAction(DialogBase.DialogAfterAction.CLOSE);

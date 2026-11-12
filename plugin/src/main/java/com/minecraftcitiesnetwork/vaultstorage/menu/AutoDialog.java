@@ -1,5 +1,7 @@
 package com.minecraftcitiesnetwork.vaultstorage.menu;
 
+import org.jetbrains.annotations.Nullable;
+import org.jetbrains.annotations.NotNull;
 import io.papermc.paper.dialog.Dialog;
 import io.papermc.paper.dialog.DialogResponseView;
 import io.papermc.paper.registry.data.InlinedRegistryBuilderProvider;
@@ -27,20 +29,20 @@ import java.util.function.Consumer;
 public class AutoDialog {
     private final Dialog internal;
 
-    private AutoDialog(Dialog internal) {
+    private AutoDialog(@NotNull Dialog internal) {
         this.internal = internal;
     }
 
 
 
-    public static Builder builder(ParentMenu parentMenu) {
+    public static @NotNull Builder builder(@NotNull ParentMenu parentMenu) {
         return new Builder(parentMenu);
     }
 
     public static class Builder {
         private ParentMenu parentMenu;
 
-        private Builder(ParentMenu parentMenu) {
+        private Builder(@NotNull ParentMenu parentMenu) {
             this.parentMenu = parentMenu;
         }
 
@@ -55,35 +57,35 @@ public class AutoDialog {
         private final List<DialogInput> inputs = new ArrayList<>();
         private final List<ActionButton> buttons = new ArrayList<>();
 
-        public Builder title(Component title) {
+        public @NotNull Builder title(@NotNull Component title) {
             this.title = title;
             return this;
         }
-        public Builder canCloseWithEscape(boolean value) {
+        public @NotNull Builder canCloseWithEscape(boolean value) {
             this.canCloseWithEscape = value;
             return this;
         }
-        public Builder afterAction(DialogBase.DialogAfterAction value) {
+        public @NotNull Builder afterAction(DialogBase.@NotNull DialogAfterAction value) {
             this.afterAction = value;
             return this;
         }
 
-        public Builder addBody(DialogBody element) {
+        public @NotNull Builder addBody(@NotNull DialogBody element) {
             this.body.add(element);
             return this;
         }
 
-        public Builder addInput(DialogInput element) {
+        public @NotNull Builder addInput(@NotNull DialogInput element) {
             this.inputs.add(element);
             return this;
         }
 
 
-        public ParentMenu getParentMenu() {
+        public @NotNull ParentMenu parentMenu() {
             return parentMenu;
         }
 
-        public Builder button(Component label, Component tooltip, Duration expireAfter, int maxUses, Consumer<Context> handler) {
+        public @NotNull Builder button(@NotNull Component label, @Nullable Component tooltip, @NotNull Duration expireAfter, int maxUses, @NotNull Consumer<Context> handler) {
             Objects.requireNonNull(label);
             ClickCallback.Options options = ClickCallback.Options.builder()
                     .lifetime(expireAfter)
@@ -108,7 +110,7 @@ public class AutoDialog {
             return this;
         }
 
-        public Builder sizableButton(Component label, Component tooltip, Duration expireAfter, int maxUses, Consumer<Context> handler, @Range(from = 1, to = 1024) int width) {
+        public @NotNull Builder sizableButton(@NotNull Component label, @Nullable Component tooltip, @NotNull Duration expireAfter, int maxUses, @NotNull Consumer<Context> handler, @Range(from = 1, to = 1024) int width) {
             Objects.requireNonNull(label);
             ClickCallback.Options options = ClickCallback.Options.builder()
                     .lifetime(expireAfter)
@@ -134,16 +136,16 @@ public class AutoDialog {
             return this;
         }
 
-        public Builder sizableButton(Component label, Consumer<Context> handler, @Range(from = 1, to = 1024) int width) {
+        public @NotNull Builder sizableButton(@NotNull Component label, @NotNull Consumer<Context> handler, @Range(from = 1, to = 1024) int width) {
             return sizableButton(label, null, Duration.ofMinutes(5), 10, handler, width);
         }
 
-        public Builder button(Component label, Consumer<Context> handler) {
+        public @NotNull Builder button(@NotNull Component label, @NotNull Consumer<Context> handler) {
             return button(label, null, Duration.ofMinutes(5), 10, handler);
         }
 
 
-        public Builder buttonWithPlayer(Component label, Component tooltip, Duration expireAfter, int maxUses, BiConsumer<Player, DialogResponseView> handler) {
+        public @NotNull Builder buttonWithPlayer(@NotNull Component label, @Nullable Component tooltip, @NotNull Duration expireAfter, int maxUses, @NotNull BiConsumer<Player, DialogResponseView> handler) {
             ClickCallback.Options options = ClickCallback.Options.builder()
                     .lifetime(expireAfter)
                     .uses(maxUses)
@@ -168,7 +170,7 @@ public class AutoDialog {
 
 
 
-        public Dialog build() {
+        public @NotNull Dialog build() {
             DialogBase.Builder baseBuilder = DialogBase.builder(title)
                     .canCloseWithEscape(canCloseWithEscape)
                     .pause(pause)
@@ -192,6 +194,6 @@ public class AutoDialog {
          }
      }
 
-    public record Context(Player player, Audience audience, DialogResponseView response) {
+    public record Context(@NotNull Player player, @NotNull Audience audience, @NotNull DialogResponseView response) {
     }
 }

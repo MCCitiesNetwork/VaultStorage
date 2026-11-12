@@ -18,7 +18,7 @@ public abstract class ParentMenuImp implements ParentMenu {
     private final String id;
     private Dialog dialog;
 
-    protected ParentMenuImp(@NotNull VaultStoragePlugin plugin, Player player, String id) {
+    protected ParentMenuImp(@NotNull VaultStoragePlugin plugin, @NotNull Player player, @NotNull String id) {
         this.plugin = plugin;
         this.player = player;
         this.id = id;
@@ -28,10 +28,10 @@ public abstract class ParentMenuImp implements ParentMenu {
     public @NotNull VaultStoragePlugin plugin() { return plugin; }
 
     @Override
-    public String getId() { return id; }
+    public @NotNull String id() { return id; }
 
     @Override
-    public Dialog getDialog() { return dialog; }
+    public @NotNull Dialog dialog() { return dialog; }
 
     @Override
     public void open() {
@@ -39,13 +39,13 @@ public abstract class ParentMenuImp implements ParentMenu {
     }
 
     @Override
-    public Player getPlayer() { return player; }
+    public @NotNull Player player() { return player; }
 
     @Override
-    public void setDialog(Dialog dialog) { this.dialog = dialog; }
+    public void setDialog(@NotNull Dialog dialog) { this.dialog = dialog; }
 
     @Override
-    public AutoDialog.Builder getAutoDialogBuilder() { return AutoDialog.builder(this); }
+    public AutoDialog.@NotNull Builder dialogBuilder() { return AutoDialog.builder(this); }
 
 
 

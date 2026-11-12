@@ -51,7 +51,7 @@ public class VaultActionMenu extends ChildMenuImp {
      * @param description the vault's line from the list, shown so the player knows which vault this is
      * @param back        where Back, a finished delete and a finished placement lead
      */
-    public VaultActionMenu(Player player, ParentMenuImp parent, VaultUIContext ctx, UUID vaultId,
+    public VaultActionMenu(@NotNull Player player, @NotNull ParentMenuImp parent, @NotNull VaultUIContext ctx, @NotNull UUID vaultId,
                            @NotNull Component description, @NotNull Consumer<Player> back) {
         super(player, parent, "vault_action");
         this.vaultId = vaultId;
@@ -61,8 +61,8 @@ public class VaultActionMenu extends ChildMenuImp {
         setDialog(build());
     }
 
-    private Dialog build() {
-        AutoDialog.Builder builder = getAutoDialogBuilder();
+    private @NotNull Dialog build() {
+        AutoDialog.Builder builder = dialogBuilder();
         builder.title(plugin.text().of(MessageKeys.ACTION_TITLE));
         builder.canCloseWithEscape(true);
         builder.afterAction(DialogBase.DialogAfterAction.CLOSE);
@@ -71,7 +71,7 @@ public class VaultActionMenu extends ChildMenuImp {
 
         // Build SingleOption with available actions filtered by permissions
         List<SingleOptionDialogInput.OptionEntry> entries = new ArrayList<>();
-        Player player = getPlayer();
+        Player player = player();
         String firstValue = null;
         for (VaultAction vaultAction : VaultAction.values()) {
             if (player.hasPermission(vaultAction.permission())) {
@@ -100,7 +100,7 @@ public class VaultActionMenu extends ChildMenuImp {
 
         // Place block button (relative placement UI)
         builder.buttonWithPlayer(plugin.text().of(MessageKeys.ACTION_PLACE_BTN), null, java.time.Duration.ofMinutes(5), 1, (actor, response) -> {
-            new VaultPlacementMenu(actor, (ParentMenuImp) getParentMenu(), vaultId, uiContext).open();
+            new VaultPlacementMenu(actor, (ParentMenuImp) parentMenu(), vaultId, uiContext).open();
         });
 
         // Admin-only delete button
@@ -112,14 +112,14 @@ public class VaultActionMenu extends ChildMenuImp {
                     return;
                 }
                 MessageContainer messages = plugin.messages();
-                new ConfirmMenu(actor, getParentMenu(),
+                new ConfirmMenu(actor, parentMenu(),
                         messages.messageFor(MessageKeys.ACTION_DELETE_CONFIRM_TITLE),
                         messages.messageFor(MessageKeys.ACTION_DELETE_CONFIRM_BODY,
                                 MessageContainer.markup("vault", this.description)),
                         messages.messageFor(MessageKeys.ACTION_DELETE_CONFIRM_BTN),
                         messages.messageFor(MessageKeys.ACTION_DELETE_CANCEL_BTN),
                         this::delete,
-                        cancelled -> new VaultActionMenu(cancelled, (ParentMenuImp) getParentMenu(), uiContext,
+                        cancelled -> new VaultActionMenu(cancelled, (ParentMenuImp) parentMenu(), uiContext,
                                 vaultId, this.description, this.back).open()).open();
             });
         }
@@ -157,7 +157,7 @@ public class VaultActionMenu extends ChildMenuImp {
                 }, mainThread);
     }
 
-    private static VaultAction parseAction(String s) {
+    private static @NotNull VaultAction parseAction(@NotNull String s) {
         try {
             return VaultAction.valueOf(s.toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException ex) {
@@ -165,11 +165,11 @@ public class VaultActionMenu extends ChildMenuImp {
         }
     }
 
-    private static String cap(String s) { return s.substring(0,1).toUpperCase(Locale.ROOT) + s.substring(1).toLowerCase(Locale.ROOT); }
+    private static @NotNull String cap(@NotNull String s) { return s.substring(0,1).toUpperCase(Locale.ROOT) + s.substring(1).toLowerCase(Locale.ROOT); }
 
-    private void openInventoryAsync(Player player, VaultAction action) {
+    private void openInventoryAsync(@NotNull Player player, @NotNull VaultAction action) {
         VaultInventoryService invSvc = plugin.inventoryService();
-        invSvc.openVirtualInventory(player, vaultId, action, getParentMenu(), () -> new VaultActionMenu(player, (ParentMenuImp) getParentMenu(), uiContext, vaultId, this.description, this.back).open());
+        invSvc.openVirtualInventory(player, vaultId, action, parentMenu(), () -> new VaultActionMenu(player, (ParentMenuImp) parentMenu(), uiContext, vaultId, this.description, this.back).open());
     }
 
     @Override

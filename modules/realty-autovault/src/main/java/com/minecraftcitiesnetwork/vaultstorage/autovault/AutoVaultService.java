@@ -126,7 +126,7 @@ public class AutoVaultService {
      * invocation notifies the occupant (if online and enabled); the rest are no-ops. Thread-safe: may be called
      * from async capture tasks, and hops the message send onto the main thread.
      */
-    private Runnable vaultedNotifier(@NotNull UUID initiator) {
+    private @NotNull Runnable vaultedNotifier(@NotNull UUID initiator) {
         if (!this.settings.get().notifyOccupant()) {
             return () -> {};
         }
@@ -328,7 +328,7 @@ public class AutoVaultService {
 
     @FunctionalInterface
     private interface ChunkWork<T> {
-        void run(World world, Chunk chunk, T item);
+        void run(@NotNull World world, @NotNull Chunk chunk, @NotNull T item);
     }
 
     /** Cancels all pending sweeps. Call from {@code onDisable}. */

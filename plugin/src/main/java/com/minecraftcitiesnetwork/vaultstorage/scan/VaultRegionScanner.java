@@ -1,5 +1,6 @@
 package com.minecraftcitiesnetwork.vaultstorage.scan;
 
+import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.NotNull;
 import com.minecraftcitiesnetwork.vaultstorage.config.MessageKeys;
 import java.util.LinkedHashSet;
@@ -41,7 +42,7 @@ public class VaultRegionScanner {
     /** Chunks held loaded for this scan. Main thread only. */
     private final List<Chunk> heldChunks = new ArrayList<>();
 
-    public VaultRegionScanner(@NotNull VaultStoragePlugin plugin, Player player, String regionId, VaultUIContext uiContext, Consumer<List<ScanResult>> callback) {
+    public VaultRegionScanner(@NotNull VaultStoragePlugin plugin, @NotNull Player player, @NotNull String regionId, @NotNull VaultUIContext uiContext, @NotNull Consumer<List<ScanResult>> callback) {
         this.plugin = plugin;
         this.player = player;
         this.regionId = regionId;
@@ -126,7 +127,7 @@ public class VaultRegionScanner {
         private int index = 0;
         private final int batchSize;
 
-        public ScanTask(List<BlockProtection> protections, World world, boolean actorOwnsRegion) {
+        public ScanTask(@NotNull List<BlockProtection> protections, @NotNull World world, boolean actorOwnsRegion) {
             this.protections = protections;
             this.world = world;
             this.actorOwnsRegion = actorOwnsRegion;
@@ -185,7 +186,7 @@ public class VaultRegionScanner {
         }
 
         /** Ends the scan: stops the task, lets the chunks go, and answers exactly once. */
-        private void finish(List<ScanResult> answer) {
+        private void finish(@Nullable List<ScanResult> answer) {
             this.cancel();
             for (Chunk chunk : heldChunks) {
                 chunk.removePluginChunkTicket(plugin);

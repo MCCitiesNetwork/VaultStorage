@@ -55,9 +55,9 @@ public class VaultListMenu extends ChildMenuImp {
     /** Null until the page has been loaded. */
     private final @Nullable Loaded loaded;
 
-    private record Entry(VaultSummary vault, String ownerName, int index) {}
+    private record Entry(@NotNull VaultSummary vault, @NotNull String ownerName, int index) {}
 
-    private record Loaded(List<Entry> entries, Paging paging) {}
+    private record Loaded(@NotNull List<Entry> entries, @NotNull Paging paging) {}
 
 
 
@@ -68,16 +68,16 @@ public class VaultListMenu extends ChildMenuImp {
     /** Lazily loaded configuration snapshot. */
 
     /** Opens the first page. */
-    public VaultListMenu(Player player, ParentMenuImp parent, VaultUIContext ctx, String query) {
+    public VaultListMenu(@NotNull Player player, @NotNull ParentMenuImp parent, @NotNull VaultUIContext ctx, @NotNull String query) {
         this(player, parent, ctx, query, 0);
     }
 
     /** Opens the given page, zero-based; a page past the end shows the last one. */
-    public VaultListMenu(Player player, ParentMenuImp parent, VaultUIContext ctx, String query, int page) {
+    public VaultListMenu(@NotNull Player player, @NotNull ParentMenuImp parent, @NotNull VaultUIContext ctx, @NotNull String query, int page) {
         this(player, parent, ctx, query, page, null);
     }
 
-    private VaultListMenu(Player player, ParentMenuImp parent, VaultUIContext ctx, String query, int page,
+    private VaultListMenu(@NotNull Player player, @NotNull ParentMenuImp parent, @NotNull VaultUIContext ctx, @Nullable String query, int page,
                           @Nullable Loaded loaded) {
         super(player, parent, "vault_list");
         this.uiContext = ctx;
@@ -90,15 +90,15 @@ public class VaultListMenu extends ChildMenuImp {
     }
 
     @Override
-    public Dialog getDialog() { return super.getDialog(); }
+    public @NotNull Dialog dialog() { return super.dialog(); }
 
-    private Dialog build(@NotNull Loaded page) {
-        AutoDialog.Builder builder = getAutoDialogBuilder();
+    private @NotNull Dialog build(@NotNull Loaded page) {
+        AutoDialog.Builder builder = dialogBuilder();
         Map<String, String> phQuery = Map.of("%query%", this.query);
         builder.title(plugin.text().of(MessageKeys.LIST_TITLE, phQuery));
         builder.canCloseWithEscape(true);
         builder.afterAction(DialogBase.DialogAfterAction.CLOSE);
-        ParentMenuImp parent = (ParentMenuImp) getParentMenu();
+        ParentMenuImp parent = (ParentMenuImp) parentMenu();
 
         // Only someone who may see everyone's vaults has anything to search for.
         if (this.uiContext.filterOwner() == null) {
@@ -137,12 +137,12 @@ public class VaultListMenu extends ChildMenuImp {
             builder.button(plugin.text().of(MessageKeys.LIST_NEXT_BTN),
                     ctx -> new VaultListMenu(ctx.player(), parent, this.uiContext, this.query, paging.page() + 1).open());
         }
-        builder.button(plugin.text().of(MessageKeys.LIST_BACK_BTN), ctx -> getParentMenu().open());
+        builder.button(plugin.text().of(MessageKeys.LIST_BACK_BTN), ctx -> parentMenu().open());
         return builder.build();
     }
 
     /** Who owns the vault, what it was, where it stood, how much it holds and when it was captured. */
-    private Component label(@NotNull Entry entry) {
+    private @NotNull Component label(@NotNull Entry entry) {
         VaultSummary vault = entry.vault();
         MessageContainer messages = plugin.messages();
         World world = Bukkit.getWorld(vault.worldUuid());
@@ -162,14 +162,14 @@ public class VaultListMenu extends ChildMenuImp {
 
     /** What the list covers: one owner's vaults, one vault, or everything. */
     private record Scope(@Nullable UUID owner, @Nullable UUID vault, boolean nothing) {
-        static Scope everything() { return new Scope(null, null, false); }
-        static Scope ownedBy(UUID owner) { return new Scope(owner, null, false); }
-        static Scope oneVault(UUID vault) { return new Scope(null, vault, false); }
-        static Scope empty() { return new Scope(null, null, true); }
+        static @NotNull Scope everything() { return new Scope(null, null, false); }
+        static @NotNull Scope ownedBy(@NotNull UUID owner) { return new Scope(owner, null, false); }
+        static @NotNull Scope oneVault(@NotNull UUID vault) { return new Scope(null, vault, false); }
+        static @NotNull Scope empty() { return new Scope(null, null, true); }
     }
 
     /** Works out the scope from the context and what was typed. May look a name up. */
-    private CompletableFuture<Scope> scope(VaultStoragePlugin plugin) {
+    private @NotNull CompletableFuture<Scope> scope(@NotNull VaultStoragePlugin plugin) {
         if (this.uiContext.filterOwner() != null) {
             return CompletableFuture.completedFuture(Scope.ownedBy(this.uiContext.filterOwner()));
         }
@@ -189,7 +189,7 @@ public class VaultListMenu extends ChildMenuImp {
         }
     }
 
-    private VaultPage read(VaultRepository repository, Scope scope) {
+    private @NotNull VaultPage read(@NotNull VaultRepository repository, @NotNull Scope scope) {
         if (scope.nothing()) {
             return new VaultPage(List.of(), 0);
         }
@@ -209,7 +209,7 @@ public class VaultListMenu extends ChildMenuImp {
     }
 
     private void load() {
-        Player player = getPlayer();
+        Player player = player();
         Executor mainThread = plugin.getServer().getScheduler().getMainThreadExecutor(plugin);
         scope(plugin)
                 .thenApplyAsync(scope -> read(plugin.repository(), scope), plugin.databaseExecutor())
@@ -238,7 +238,7 @@ public class VaultListMenu extends ChildMenuImp {
                 })
                 .thenAcceptAsync(result -> {
                     if (player.isOnline()) {
-                        new VaultListMenu(player, (ParentMenuImp) getParentMenu(), this.uiContext, this.query,
+                        new VaultListMenu(player, (ParentMenuImp) parentMenu(), this.uiContext, this.query,
                                 this.requestedPage, result).open();
                     }
                 }, mainThread)
@@ -246,7 +246,7 @@ public class VaultListMenu extends ChildMenuImp {
                     plugin.getLogger().log(Level.SEVERE, "Could not load the vault list for " + player.getName() + ".", failure);
                     mainThread.execute(() -> {
                         player.sendMessage(plugin.text().of(MessageKeys.LIST_LOAD_FAILED));
-                        getParentMenu().open();
+                        parentMenu().open();
                     });
                     return null;
                 });
@@ -255,7 +255,7 @@ public class VaultListMenu extends ChildMenuImp {
     @Override
     public void open() {
         if (this.loaded == null) {
-            new LoadingMenu(getPlayer(), getParentMenu(), Map.of("%query%", this.query)).open();
+            new LoadingMenu(player(), parentMenu(), Map.of("%query%", this.query)).open();
             load();
         } else {
             setDialog(build(this.loaded));

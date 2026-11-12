@@ -1,5 +1,7 @@
 package com.minecraftcitiesnetwork.vaultstorage.autovault;
 
+import org.jetbrains.annotations.Nullable;
+import org.jetbrains.annotations.NotNull;
 import com.minecraftcitiesnetwork.vaultstorage.region.RegionGeometry;
 
 import com.minecraftcitiesnetwork.vaultstorage.region.VaultRegion;
@@ -26,14 +28,14 @@ import java.util.UUID;
 public final class SweepFilter {
 
     /** A region overlapping the swept area, paired with its participants (owners ∪ members). */
-    public record OwnerZone(BoundingBox box, Set<UUID> participants) {}
+    public record OwnerZone(@NotNull BoundingBox box, @NotNull Set<UUID> participants) {}
 
     private final BoundingBox sweptBox;
     private final Set<UUID> allowed;
     private final List<BoundingBox> exclusions;
     private final List<OwnerZone> ownerZones;
 
-    private SweepFilter(BoundingBox sweptBox, Set<UUID> allowed, List<BoundingBox> exclusions, List<OwnerZone> ownerZones) {
+    private SweepFilter(@NotNull BoundingBox sweptBox, @NotNull Set<UUID> allowed, @NotNull List<BoundingBox> exclusions, @NotNull List<OwnerZone> ownerZones) {
         this.sweptBox = sweptBox;
         this.allowed = allowed;
         this.exclusions = exclusions;
@@ -46,7 +48,7 @@ public final class SweepFilter {
      * are spared where their box covers a container. Classifies every other region using the same bounding-box
      * containment/overlap tests as {@link RegionGeometry}.
      */
-    public static SweepFilter forSweep(List<VaultRegion> regions, VaultRegion swept, UUID initiator) {
+    public static @NotNull SweepFilter forSweep(@NotNull List<VaultRegion> regions, @NotNull VaultRegion swept, @NotNull UUID initiator) {
         Set<UUID> allowed = participants(swept);
         allowed.add(initiator);
 
@@ -69,14 +71,14 @@ public final class SweepFilter {
     }
 
     /** A region's participants: its owners and members combined into a fresh, mutable set for O(1) lookups. */
-    private static Set<UUID> participants(VaultRegion region) {
+    private static @NotNull Set<UUID> participants(@NotNull VaultRegion region) {
         Set<UUID> combined = new HashSet<>(region.owners());
         combined.addAll(region.members());
         return combined;
     }
 
     /** Whether a locked thing with the given Bolt owner at (x, y, z) should be vaulted by this sweep. */
-    public boolean shouldVault(UUID owner, double x, double y, double z) {
+    public boolean shouldVault(@Nullable UUID owner, double x, double y, double z) {
         // Never vault anything outside the swept region.
         if (!RegionGeometry.containsInclusive(sweptBox, x, y, z)) return false;
         if (owner == null || allowed.contains(owner)) return false;

@@ -16,7 +16,7 @@ class SessionQuitListenerTest {
         new SessionQuitListener(sessions).playerLeft(PLAYER);
 
         Assertions.assertNull(sessions.get(PLAYER));
-        Assertions.assertEquals(VaultSessionManager.Mode.NONE, sessions.getOrCreate(PLAYER).getMode());
+        Assertions.assertEquals(VaultSessionManager.Mode.NONE, sessions.getOrCreate(PLAYER).mode());
     }
 
     @Test

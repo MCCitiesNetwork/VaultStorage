@@ -33,16 +33,16 @@ public class VaultSessionManager {
         private long lastScanTime = 0;
 
         /** Returns the dynamic listener holder for this session. */
-        public DynamicListener getDynamicListener() { return dynamicListener; }
+        public @NotNull DynamicListener dynamicListener() { return dynamicListener; }
 
         /** Returns current session mode. */
-        public Mode getMode() { return mode; }
+        public @NotNull Mode mode() { return mode; }
 
         /**
          * Switches to a new mode, stopping any active listener and cancelling existing action bar task.
          * Use this before starting a new capture/placement flow to ensure mutual exclusion.
          */
-        public void switchTo(Mode newMode) {
+        public void switchTo(@NotNull Mode newMode) {
             if (this.mode == newMode) return;
             // Stop listener and clear actionbar to avoid overlap
             dynamicListener.stop();
@@ -51,7 +51,7 @@ public class VaultSessionManager {
         }
 
         /** Registers the action bar task, cancelling a previous one if present. */
-        public void setActionBarTask(org.bukkit.scheduler.BukkitTask task) {
+        public void setActionBarTask(org.bukkit.scheduler.@NotNull BukkitTask task) {
             clearActionBarTask();
             this.actionBarTask = task;
         }
@@ -64,8 +64,8 @@ public class VaultSessionManager {
             }
         }
 
-        public long getLastScanTime() { return lastScanTime; }
-        public void setLastScanTime(long time) { this.lastScanTime = time; }
+        public long lastScanTime() { return lastScanTime; }
+        public void markScanned(long time) { this.lastScanTime = time; }
     }
 
     private final Map<UUID, Session> sessions = new HashMap<>();
@@ -76,16 +76,16 @@ public class VaultSessionManager {
         this.register = register;
     }
 
-    public Session getOrCreate(UUID playerId) {
+    public @NotNull Session getOrCreate(@NotNull UUID playerId) {
         return sessions.computeIfAbsent(playerId, id -> new Session(this.register));
     }
 
-    public Session get(UUID playerId) { return sessions.get(playerId); }
+    public @NotNull Session get(@NotNull UUID playerId) { return sessions.get(playerId); }
 
-    public void end(UUID playerId) {
+    public void end(@NotNull UUID playerId) {
         Session s = sessions.remove(playerId);
         if (s != null) {
-            s.getDynamicListener().close();
+            s.dynamicListener().close();
             s.clearActionBarTask();
         }
     }

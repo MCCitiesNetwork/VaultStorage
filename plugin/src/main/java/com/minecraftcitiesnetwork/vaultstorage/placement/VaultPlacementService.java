@@ -48,7 +48,7 @@ public class VaultPlacementService {
 
     /** Immutable result for placement operations. */
     /** {@code messageKey} names the line in messages.yml that tells the player what happened. */
-    public record Result(boolean success, String messageKey) {}
+    public record Result(boolean success, @NotNull String messageKey) {}
 
     /**
      * Places the vault at the target. The callback runs on the main thread.

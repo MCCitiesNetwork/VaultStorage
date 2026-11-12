@@ -1,5 +1,7 @@
 package com.minecraftcitiesnetwork.vaultstorage.menu;
 
+import org.jetbrains.annotations.Nullable;
+import org.jetbrains.annotations.NotNull;
 import com.minecraftcitiesnetwork.vaultstorage.config.MessageKeys;
 import io.papermc.paper.dialog.Dialog;
 import io.papermc.paper.registry.data.dialog.DialogBase;
@@ -28,14 +30,14 @@ public class LoadingMenu extends ChildMenuImp {
      * @param parentMenu  the parent menu to which this child belongs
      * @param placeholders placeholder map (e.g., %player%, %vault%)
      */
-    public LoadingMenu(Player player, ParentMenu parentMenu, Map<String,String> placeholders) {
+    public LoadingMenu(@NotNull Player player, @NotNull ParentMenu parentMenu, @Nullable Map<String,String> placeholders) {
         super(player, parentMenu, "loading_menu");
         this.placeholders = placeholders == null ? Map.of() : placeholders;
         setDialog(build());
     }
 
-    private Dialog build() {
-        AutoDialog.Builder builder = getAutoDialogBuilder();
+    private @NotNull Dialog build() {
+        AutoDialog.Builder builder = dialogBuilder();
         builder.title(plugin.text().of(MessageKeys.LOADING_TITLE, placeholders));
         builder.canCloseWithEscape(true);
         builder.afterAction(DialogBase.DialogAfterAction.CLOSE);

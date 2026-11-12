@@ -1,5 +1,6 @@
 package com.minecraftcitiesnetwork.vaultstorage.vault;
 
+import org.jetbrains.annotations.Nullable;
 import org.bukkit.inventory.ItemStack;
 import org.jetbrains.annotations.NotNull;
 
@@ -13,7 +14,7 @@ public final class ItemSerialization {
      * Serialize an ItemStack to bytes.
      * @return bytes array (never null)
      */
-    public static byte[] toBytes(@NotNull ItemStack stack) {
+    public static byte @NotNull [] toBytes(@NotNull ItemStack stack) {
         return stack.serializeAsBytes();
     }
 
@@ -22,7 +23,7 @@ public final class ItemSerialization {
      * @param data bytes array (may be null)
      * @return ItemStack or null
      */
-    public static ItemStack fromBytes(byte[] data) {
+    public static @Nullable ItemStack fromBytes(byte @Nullable [] data) {
         if (data == null || data.length == 0) return null;
         return ItemStack.deserializeBytes(data);
     }

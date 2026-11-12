@@ -34,12 +34,12 @@ public class VaultCaptureMenu extends ParentMenuImp {
     private final VaultUIContext uiContext;
 
     /** Existing constructor kept: self-filter context */
-    public VaultCaptureMenu(@NotNull VaultStoragePlugin plugin, Player player) {
+    public VaultCaptureMenu(@NotNull VaultStoragePlugin plugin, @NotNull Player player) {
         this(plugin, player, VaultUIContext.self(player.getUniqueId()));
     }
 
     /** New constructor accepting UI context (admin or filtered). */
-    public VaultCaptureMenu(@NotNull VaultStoragePlugin plugin, Player player, VaultUIContext context) {
+    public VaultCaptureMenu(@NotNull VaultStoragePlugin plugin, @NotNull Player player, @NotNull VaultUIContext context) {
         super(plugin, player, "vault_capture");
         this.uiContext = context;
         setDialog(build());
@@ -49,10 +49,10 @@ public class VaultCaptureMenu extends ParentMenuImp {
      * Builds the dialog structure and associated actions.
      * @return the constructed dialog instance
      */
-    private Dialog build() {
-        AutoDialog.Builder builder = getAutoDialogBuilder();
+    private @NotNull Dialog build() {
+        AutoDialog.Builder builder = dialogBuilder();
         Map<String,String> phSelf = new java.util.HashMap<>();
-        phSelf.put("%player%", getPlayer().getName());
+        phSelf.put("%player%", player().getName());
         if (uiContext.filterOwner() != null) {
             phSelf.put("%filterOwner%", uiContext.filterOwner().toString());
         } else if (uiContext.admin()) {

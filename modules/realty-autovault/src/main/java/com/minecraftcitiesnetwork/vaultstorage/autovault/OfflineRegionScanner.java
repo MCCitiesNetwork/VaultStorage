@@ -1,5 +1,7 @@
 package com.minecraftcitiesnetwork.vaultstorage.autovault;
 
+import org.jetbrains.annotations.Nullable;
+import org.jetbrains.annotations.NotNull;
 import com.minecraftcitiesnetwork.vaultstorage.bolt.BoltService;
 import com.minecraftcitiesnetwork.vaultstorage.autovault.SweepFilter;
 import org.bukkit.Bukkit;
@@ -23,11 +25,11 @@ public final class OfflineRegionScanner {
     private OfflineRegionScanner() {}
 
     /** A locked container flagged for vaulting: its coordinates and Bolt owner. */
-    public record DisplacedContainer(int x, int y, int z, UUID owner) {}
+    public record DisplacedContainer(int x, int y, int z, @NotNull UUID owner) {}
 
     /** Filters the region's Bolt protections to displaced containers, or {@code null} if services are unavailable. */
-    public static List<DisplacedContainer> scan(BoltService boltService, UUID worldId, BoundingBox boundingBox,
-                                                SweepFilter filter) {
+    public static @Nullable List<DisplacedContainer> scan(@Nullable BoltService boltService, @NotNull UUID worldId, @NotNull BoundingBox boundingBox,
+                                                @NotNull SweepFilter filter) {
         World world = Bukkit.getWorld(worldId);
         if (world == null || boltService == null) {
             return null;
