@@ -55,7 +55,6 @@ Under `com.minecraftcitiesnetwork.vaultstorage`, grouped by feature:
 | `session` | per-player session state |
 | `config` | `AutoYML`, config paths, `MiniMessageUtil` |
 | `database` | MyBatis mappers, `VaultDatabase`, `VaultRepository`, the schema migrator |
-| `database.legacy` | `VaultService`: an adapter over the repository for callers not yet rewritten |
 
 `menu`, `command` and `config` are layers, not features. Each is rewritten whole by a later
 step of the programme below.
@@ -115,9 +114,11 @@ Step 3 so far, on `refactor/capture-placement` (plan: `docs/superpowers/plans/20
 - Done: exact region lookups; `CapturePipeline` (every capture saves before it removes); sessions
   end on quit; placement claims the vault and asks `Integrations.mayPlace`; the vault inventory
   claims while editing and saves in one transaction; the GriefPrevention module.
-- Also done: owner notifications through the PlayerNotifications module; Essentials is gone.
-- Not done: shop owners from Treasury; stored sweeps; scan fixes; paging the vault
-  list; the event handler lists; deleting `database.legacy`.
+- Also done: owner notifications through the PlayerNotifications module (Essentials is gone);
+  the vault list pages and loads off the main thread; the events have a handler list; the
+  admin delete works; `database.legacy` is deleted and every caller uses `VaultRepository`.
+- Not done: shop owners from Treasury and the ChestShop sign rule; stored sweeps and one
+  notification per sweep; the scan fixes.
 
 ## Live-server tests
 
@@ -140,7 +141,8 @@ Covered live: `/vault` opening and being refused; capturing a locked chest, find
 menus and placing it back with items in their slots; a capture during a database outage leaving
 the chest untouched and working again afterwards; viewing a vault without being able to take from
 it; editing a vault and the change being saved; a second editor being refused until the first
-closes.
+closes; paging through 45 vaults; an admin searching by owner name, deleting a vault,
+transferring one and opening one by id.
 
 Not covered live: sweeps, scans, hangings, double chests, ChestShop, GriefPrevention placement,
 and a non-operator's region rules (every bot so far is an operator, which bypasses them). Shared
