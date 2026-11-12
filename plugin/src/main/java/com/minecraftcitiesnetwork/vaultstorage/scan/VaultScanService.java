@@ -1,5 +1,7 @@
 package com.minecraftcitiesnetwork.vaultstorage.scan;
 
+import org.bukkit.block.Block;
+import org.jetbrains.annotations.NotNull;
 import com.minecraftcitiesnetwork.vaultstorage.Service;
 
 import com.minecraftcitiesnetwork.vaultstorage.scan.ScanResult;
@@ -29,9 +31,10 @@ public interface VaultScanService extends Service {
     void scan(Player player, String regionId, VaultUIContext context, VaultScanMenu.Config config, Consumer<List<ScanResult>> callback);
 
     /**
-     * Invalidates the cache for a specific region or globally.
-     * Useful when permissions change or blocks are modified.
+     * Drops a block from every cached result. Called when a block stops being a result, because
+     * it was vaulted or its protection was removed, so the lists stay right without scanning the
+     * region again.
      */
-    void invalidateCache();
+    void forget(@NotNull Block block);
 }
 

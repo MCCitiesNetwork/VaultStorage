@@ -1,5 +1,10 @@
 package com.minecraftcitiesnetwork.vaultstorage.scan;
 
+import java.util.LinkedHashSet;
+import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.logging.Level;
+import org.bukkit.Chunk;
 import com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin;
 import com.minecraftcitiesnetwork.vaultstorage.bolt.BoltService;
 import com.minecraftcitiesnetwork.vaultstorage.region.WorldGuardService;
@@ -33,6 +38,8 @@ public class VaultRegionScanner {
     private final VaultScanMenu.Config config;
     private final Consumer<List<ScanResult>> callback;
     private BukkitTask task;
+    /** Chunks held loaded for this scan. Main thread only. */
+    private final List<Chunk> heldChunks = new ArrayList<>();
 
     public VaultRegionScanner(Player player, String regionId, VaultUIContext uiContext, VaultScanMenu.Config config, Consumer<List<ScanResult>> callback) {
         this.player = player;
@@ -79,7 +86,28 @@ public class VaultRegionScanner {
             }
         }
 
-        this.task = new ScanTask(blockProtections, world, actorOwnsRegion).runTaskTimer(VaultStoragePlugin.getInstance(), 1L, 1L);
+        // Every chunk the scan reads is loaded off the main thread first and held until the scan
+        // ends, so reading a block never loads a chunk on the main thread.
+        VaultStoragePlugin plugin = VaultStoragePlugin.getInstance();
+        Set<Long> chunkKeys = new LinkedHashSet<>();
+        for (BlockProtection protection : blockProtections) {
+            chunkKeys.add(Chunk.getChunkKey(protection.getX() >> 4, protection.getZ() >> 4));
+        }
+        List<CompletableFuture<Void>> loads = new ArrayList<>();
+        for (long key : chunkKeys) {
+            int chunkX = (int) key;
+            int chunkZ = (int) (key >> 32);
+            loads.add(world.getChunkAtAsync(chunkX, chunkZ).thenAccept(chunk -> {
+                chunk.addPluginChunkTicket(plugin);
+                this.heldChunks.add(chunk);
+            }));
+        }
+        CompletableFuture.allOf(loads.toArray(new CompletableFuture[0])).whenComplete((done, failure) -> {
+            if (failure != null) {
+                plugin.getLogger().log(Level.WARNING, "A chunk could not be loaded for a scan of " + regionId + ".", failure);
+            }
+            this.task = new ScanTask(blockProtections, world, actorOwnsRegion).runTaskTimer(plugin, 1L, 1L);
+        });
     }
 
     public void cancel() {
@@ -106,7 +134,8 @@ public class VaultRegionScanner {
         @Override
         public void run() {
             if (!player.isOnline()) {
-                this.cancel();
+                // Still answer: the scan service is waiting to clear its record of this scan.
+                finish(null);
                 return;
             }
 
@@ -128,9 +157,9 @@ public class VaultRegionScanner {
 
                 if (y < world.getMinHeight() || y >= world.getMaxHeight()) continue;
 
-                // Load chunk if needed
+                // Loaded and held by start(). One that failed to load is skipped, not loaded here.
                 if (!world.isChunkLoaded(x >> 4, z >> 4)) {
-                    world.getChunkAt(x >> 4, z >> 4); // This loads it
+                    continue;
                 }
 
                 Block block = world.getBlockAt(x, y, z);
@@ -149,9 +178,19 @@ public class VaultRegionScanner {
             }
 
             if (index >= protections.size()) {
-                this.cancel();
-                callback.accept(results);
+                finish(results);
             }
+        }
+
+        /** Ends the scan: stops the task, lets the chunks go, and answers exactly once. */
+        private void finish(List<ScanResult> answer) {
+            this.cancel();
+            VaultStoragePlugin plugin = VaultStoragePlugin.getInstance();
+            for (Chunk chunk : heldChunks) {
+                chunk.removePluginChunkTicket(plugin);
+            }
+            heldChunks.clear();
+            callback.accept(answer);
         }
     }
 }

@@ -18,7 +18,6 @@ import com.minecraftcitiesnetwork.vaultstorage.config.ConfigPaths;
 import com.minecraftcitiesnetwork.vaultstorage.config.DataFolder;
 import com.minecraftcitiesnetwork.vaultstorage.config.MiniMessageUtil;
 import com.minecraftcitiesnetwork.vaultstorage.config.AutoYML;
-import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
@@ -36,7 +35,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -148,6 +146,15 @@ public class VaultScanMenu extends ChildMenuImp {
 
     /** Local cache for UUID->username to avoid repeated lookups per page. */
     private static final ConcurrentHashMap<UUID, String> NAME_CACHE = new ConcurrentHashMap<>();
+
+    /**
+     * Records an owner's name for the result lists. The scan service resolves names before it
+     * hands results over, so a list is shown once, complete. It used to be shown with short ids
+     * and then opened again when the names arrived, on top of whatever the player had moved to.
+     */
+    public static void rememberName(@NotNull UUID owner, @NotNull String name) {
+        NAME_CACHE.put(owner, name);
+    }
 
     public VaultScanMenu(@NotNull Player player, @NotNull ParentMenu parent) {
         this(player, parent, new VaultUIContext(player.getUniqueId(), player.getUniqueId(), false));
@@ -340,26 +347,6 @@ public class VaultScanMenu extends ChildMenuImp {
                 },100);
             }
 
-            // Resolve names asynchronously if needed and refresh
-            if (!toResolve.isEmpty()) {
-                var plugin = VaultStoragePlugin.getInstance();
-                List<CompletableFuture<Void>> futures = new ArrayList<>();
-                for (UUID u : toResolve) {
-                    var future = plugin.names().nameOf(u).thenAccept(name ->
-                            name.filter(resolved -> !resolved.isBlank()).ifPresent(resolved -> NAME_CACHE.put(u, resolved)));
-                    futures.add(future);
-                }
-               CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
-                        .thenRun(() -> {
-                            // Check if any names were resolved
-                            boolean anyResolved = toResolve.stream().anyMatch(NAME_CACHE::containsKey);
-                            if (anyResolved) {
-                                Bukkit.getScheduler().runTask(plugin, () ->
-                                        new VaultScanMenu(getPlayer(), getParentMenu(), uiContext, regionId, entries, eCurrentPage, FilterMode.ENTITY).open());
-                            }
-                        });
-            }
-
             // Navigation for entity pages
             if (eCurrentPage > 0) {
                 builder.button(MiniMessageUtil.parseOrPlain(config.prevBtn), ctx -> new VaultScanMenu(ctx.player(), getParentMenu(), uiContext, regionId, entries, eCurrentPage - 1, FilterMode.ENTITY).open());
@@ -416,15 +403,19 @@ public class VaultScanMenu extends ChildMenuImp {
                 VaultCaptureService capSvc = VaultStoragePlugin.getInstance().getCaptureService();
                 VaultCaptureService.SessionTexts texts = capSvc.sessionTexts();
                 capSvc.captureDirectAsync(ctx.player(), targetBlock, texts, success -> {
-                    // Refresh results after capture attempt
-                    // Invalidate cache because we just modified the world state (vaulted a block)
-                    VaultStoragePlugin.getInstance().getScanService().invalidateCache();
-                    VaultStoragePlugin.getInstance().getScanService().scan(ctx.player(), regionId, uiContext, config, recomputed -> {
-                        if (recomputed == null) return;
-                        int newTotal = Math.max(1, (int) Math.ceil(recomputed.size() / (double) Math.max(1, config.pageSize)));
-                        int safePage = Math.min(currentPage, newTotal - 1);
-                        new VaultScanMenu(ctx.player(), getParentMenu(), uiContext, regionId, recomputed, safePage).open();
-                    });
+                    // The block stops being a result once it has no Bolt owner: it was vaulted, or
+                    // its protection was removed. The cached list is corrected, not rebuilt.
+                    BoltService bolt = VaultStoragePlugin.getInstance().getBoltService();
+                    List<ScanResult> remaining = entries;
+                    if (bolt == null || bolt.getOwner(targetBlock) == null) {
+                        VaultStoragePlugin.getInstance().getScanService().forget(targetBlock);
+                        remaining = entries.stream().filter(result -> !(result.block().getX() == targetBlock.getX()
+                                && result.block().getY() == targetBlock.getY()
+                                && result.block().getZ() == targetBlock.getZ())).toList();
+                    }
+                    int newTotal = Math.max(1, (int) Math.ceil(remaining.size() / (double) Math.max(1, config.pageSize)));
+                    int safePage = Math.min(currentPage, newTotal - 1);
+                    new VaultScanMenu(ctx.player(), getParentMenu(), uiContext, regionId, remaining, safePage).open();
                 });
             });
             // Teleport button for this entry (literal coordinates with safe centering)
@@ -434,25 +425,6 @@ public class VaultScanMenu extends ChildMenuImp {
                 Location destination = new Location(ctx.player().getWorld(), entryBlock.getX() + 0.5, destY, entryBlock.getZ() + 0.5, ctx.player().getLocation().getYaw(), ctx.player().getLocation().getPitch());
                 ctx.player().teleport(destination);
             });
-        }
-
-        // Async resolve missing owner names and refresh the page if any were resolved
-        if (!toResolve.isEmpty()) {
-            var plugin = VaultStoragePlugin.getInstance();
-            List<CompletableFuture<Void>> futures = new ArrayList<>();
-            for (UUID uuid : toResolve) {
-                var future = plugin.names().nameOf(uuid).thenAccept(name ->
-                        name.filter(resolved -> !resolved.isBlank()).ifPresent(resolved -> NAME_CACHE.put(uuid, resolved)));
-                futures.add(future);
-            }
-            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
-                    .thenRun(() -> {
-                        boolean anyResolved = toResolve.stream().anyMatch(NAME_CACHE::containsKey);
-                        if (anyResolved) {
-                            Bukkit.getScheduler().runTask(plugin, () ->
-                                    new VaultScanMenu(getPlayer(), getParentMenu(), uiContext, regionId, entries, currentPage).open());
-                        }
-                    });
         }
 
         // Navigation buttons

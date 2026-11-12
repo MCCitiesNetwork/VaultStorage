@@ -117,8 +117,10 @@ Step 3 so far, on `refactor/capture-placement` (plan: `docs/superpowers/plans/20
 - Also done: owner notifications through the PlayerNotifications module (Essentials is gone);
   the vault list pages and loads off the main thread; the events have a handler list; the
   admin delete works; `database.legacy` is deleted and every caller uses `VaultRepository`.
+- Also done: scans load chunks off the main thread, always answer, and correct their cache
+  after a capture instead of rescanning.
 - Not done: shop owners from Treasury and the ChestShop sign rule; stored sweeps and one
-  notification per sweep; the scan fixes.
+  notification per sweep.
 
 ## Live-server tests
 
@@ -142,9 +144,10 @@ menus and placing it back with items in their slots; a capture during a database
 the chest untouched and working again afterwards; viewing a vault without being able to take from
 it; editing a vault and the change being saved; a second editor being refused until the first
 closes; paging through 45 vaults; an admin searching by owner name, deleting a vault,
-transferring one and opening one by id.
+transferring one and opening one by id; scanning a WorldGuard region, vaulting a result and
+seeing it leave the list.
 
-Not covered live: sweeps, scans, hangings, double chests, ChestShop, GriefPrevention placement,
+Not covered live: sweeps, hangings, double chests, ChestShop, GriefPrevention placement,
 and a non-operator's region rules (every bot so far is an operator, which bypasses them). Shared
 steps are in `tests/vaults.ts`.
 
