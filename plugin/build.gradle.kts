@@ -137,6 +137,10 @@ plugwright {
                 url("https://cdn.modrinth.com/data/1u6JkXh5/versions/YFnqiUlL/worldedit-bukkit-7.4.6.jar")
                 url("https://cdn.modrinth.com/data/DKY9btbd/versions/9YdeGXiK/worldguard-bukkit-7.0.20.jar")
                 url("https://cdn.modrinth.com/data/YqbUofZE/versions/oWPMxWDV/Bolt-1.2.37.jar")
+                // For the tests of what a player who is not an operator may do.
+                url("https://cdn.modrinth.com/data/Vebnzrzj/versions/b0mk8uS6/LuckPerms-Bukkit-5.5.71.jar")
+                // GriefPrevention 16.18.8, the release for 26.3, for the placement grant.
+                url("https://cdn.modrinth.com/data/O4o4mKaq/versions/MtwPHMAS/GriefPrevention.jar")
                 // The bots join as 1.21.11 clients; these let them join a 26.3 server.
                 // See src/test/e2e/plugins/test-server.ts.
                 url("https://cdn.modrinth.com/data/P1OZGk5p/versions/Fkfcr89K/ViaVersion-5.12.2.jar")

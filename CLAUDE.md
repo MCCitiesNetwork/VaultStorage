@@ -129,7 +129,8 @@ Step 3 so far, on `refactor/capture-placement` (plan: `docs/superpowers/plans/20
 ## Live-server tests
 
 `./gradlew :plugin:plugwrightTest` starts MariaDB from `compose.dev.yml` (port 3309), provisions a
-Paper 26.3 server with Bolt, WorldGuard, WorldEdit, ViaVersion and ViaBackwards,
+Paper 26.3 server with Bolt, WorldGuard, WorldEdit, LuckPerms, GriefPrevention, ViaVersion and
+ViaBackwards,
 installs the host and module jars, and runs the specs in `plugin/src/test/e2e/tests/`. It is never
 part of `build`. It needs Docker and Node.
 
@@ -151,9 +152,13 @@ closes; paging through 45 vaults; an admin searching by owner name, deleting a v
 transferring one and opening one by id; scanning a WorldGuard region, vaulting a result and
 seeing it leave the list.
 
-Not covered live: sweeps (they need Realty to trigger one), hangings, double chests, ChestShop, GriefPrevention placement,
-and a non-operator's region rules (every bot so far is an operator, which bypasses them). Shared
-steps are in `tests/vaults.ts`.
+Also covered live, with players who are not operators (permissions through LuckPerms): a region
+member vaulting a non-member's chest; a non-member, a co-member's chest and a chest outside any
+region all being refused; placement refused on land the owner has no part in and allowed on
+their own GriefPrevention claim.
+
+Not covered live: sweeps (they need Realty to trigger one), hangings, double chests and
+ChestShop. Shared steps are in `tests/vaults.ts`.
 
 ## Rules for the capture and placement code
 
