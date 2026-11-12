@@ -142,7 +142,7 @@ Specs and plans are in `docs/superpowers/`. One spec and one plan per step.
 
 | Step | Status | Delivers |
 | --- | --- | --- |
-| 1. Scaffold, package move, modules | built; live-server checks outstanding | this layout |
+| 1. Scaffold, package move, modules | done | this layout |
 | 2. Persistence | done | MyBatis on MariaDB, the playbook schema, transactions |
 | 3. Capture, placement, auto-vault | done, except shop owners from Treasury | save before destroy, futures, two more modules |
 | 4. Config and messages | done | Configurate records, `messages.yml`, reload |
