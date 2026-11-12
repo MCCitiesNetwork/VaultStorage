@@ -113,6 +113,7 @@ Every other integration is a module: a separate jar in `plugins/VaultStorage/mod
 | `floodgate-adapter` | Floodgate | Bedrock names when Namebook is absent; a chat line instead of the loading dialog for Bedrock players |
 | `chestshop-adapter` | ChestShop | Shop sign handling during capture |
 | `realty-autovault` | Realty | Automatic vaulting when a region changes occupant |
+| `griefprevention-adapter` | GriefPrevention | Placing a vault on a claim where the player may build |
 
 Module jars must come from the same build as the plugin jar.
 

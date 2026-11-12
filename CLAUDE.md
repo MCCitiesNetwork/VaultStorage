@@ -24,6 +24,7 @@ project version lives in `gradle.properties`.
 | `:modules:floodgate-adapter` | `floodgate-adapter-<version>.jar` | Bedrock names and the Bedrock client check |
 | `:modules:chestshop-adapter` | `chestshop-adapter-<version>.jar` | ChestShop sign handling |
 | `:modules:realty-autovault` | `realty-autovault-<version>.jar` | Auto-vault on a Realty occupant change |
+| `:modules:griefprevention-adapter` | `griefprevention-adapter-<version>.jar` | Placing vaults on GriefPrevention claims |
 
 The host goes in `plugins/`; module jars go in `plugins/VaultStorage/modules/`.
 
@@ -101,12 +102,31 @@ Specs and plans are in `docs/superpowers/`. One spec and one plan per step.
 | --- | --- | --- |
 | 1. Scaffold, package move, modules | built; live-server checks outstanding | this layout |
 | 2. Persistence | done | MyBatis on MariaDB, the playbook schema, transactions |
-| 3. Capture, placement, auto-vault | specified | save before destroy, futures, three more modules |
+| 3. Capture, placement, auto-vault | tasks 1 to 6 and 9 of 11 done | save before destroy, futures, three more modules |
 | 4. Config and messages | outline | Configurate records, `messages.yml`, reload |
 | 5. Commands and permissions | outline | Brigadier, `vaultstorage.command.*` |
 | 6. Menus | outline | paged vault list with real labels, confirmations |
 | 7. Sweep | outline | code style everywhere, dead code removed |
 
-`database.legacy.VaultService` keeps the old two-call shape (create a vault, then add its items),
-so those two writes are still separate transactions. Until step 3 ships, capture still removes a block before its items are saved, so a failed
-database write loses them. Do not treat a 2.0.0 snapshot as safer than 1.2.0.
+Step 3 so far, on `refactor/capture-placement` (plan: `docs/superpowers/plans/2026-11-12-capture-placement-autovault.md`):
+
+- Done: exact region lookups; `CapturePipeline` (every capture saves before it removes); sessions
+  end on quit; placement claims the vault and asks `Integrations.mayPlace`; the vault inventory
+  claims while editing and saves in one transaction; the GriefPrevention module.
+- Not done: owner notifications through PlayerNotifications (Essentials is still required and
+  still sends the mail); shop owners from Treasury; stored sweeps; scan fixes; paging the vault
+  list; the event handler lists; deleting `database.legacy`.
+
+Nothing since step 1 has been exercised by a player. The boot check covers enabling, migrating
+and module loading only.
+
+## Rules for the capture and placement code
+
+- **Nothing removes a container except `CapturePipeline`**, through `BukkitContainerAccess.remove`.
+  The order is: read, store, check it is unchanged, remove.
+- **Placement claims before it places and deletes after.** A vault is never deleted before its
+  block exists.
+- **Editing a vault claims it.** Every claim is released: on close, on a failed open, at
+  shutdown, and for all vaults at startup.
+- **Where a player may place is `Integrations.mayPlace`.** A module adds a `PlacementGrant`; a
+  grant that throws counts as no.
