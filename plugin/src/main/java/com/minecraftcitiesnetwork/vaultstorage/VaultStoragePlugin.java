@@ -89,6 +89,9 @@ public final class VaultStoragePlugin extends JavaPlugin {
     /** Every read and write of vaults. Blocking: call it on {@link #databaseExecutor()}. */
     public VaultRepository repository() { return repository; }
 
+    /** The connection pool and session factory, for a module that owns tables of its own. */
+    public VaultDatabase database() { return database; }
+
     /** The pool database work runs on. */
     public Executor databaseExecutor() { return databaseExecutor; }
 
@@ -157,7 +160,8 @@ public final class VaultStoragePlugin extends JavaPlugin {
         AutoYML<MailConfig> notificationTexts = AutoYML.create(MailConfig.class, "mail", DataFolder.MAIL, MailConfig.HEADER);
         this.ownerNotifications = new OwnerNotifications(this.names, this.integrations::ownerNotifier,
                 () -> notificationTexts.loadOrCreate(MailConfig::new).notificationTitle,
-                () -> notificationTexts.loadOrCreate(MailConfig::new).vaultCreatedMessage, getLogger());
+                () -> notificationTexts.loadOrCreate(MailConfig::new).vaultCreatedMessage,
+                () -> notificationTexts.loadOrCreate(MailConfig::new).sweepVaultedMessage, getLogger());
 
         // Ensure menu YAMLs exist at startup
         VaultCaptureMenu.ensureConfig();

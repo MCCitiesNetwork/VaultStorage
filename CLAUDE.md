@@ -103,7 +103,7 @@ Specs and plans are in `docs/superpowers/`. One spec and one plan per step.
 | --- | --- | --- |
 | 1. Scaffold, package move, modules | built; live-server checks outstanding | this layout |
 | 2. Persistence | done | MyBatis on MariaDB, the playbook schema, transactions |
-| 3. Capture, placement, auto-vault | tasks 1 to 6 and 9 of 11 done | save before destroy, futures, three more modules |
+| 3. Capture, placement, auto-vault | done, except shop owners from Treasury | save before destroy, futures, two more modules |
 | 4. Config and messages | outline | Configurate records, `messages.yml`, reload |
 | 5. Commands and permissions | outline | Brigadier, `vaultstorage.command.*` |
 | 6. Menus | outline | paged vault list with real labels, confirmations |
@@ -121,8 +121,10 @@ Step 3 so far, on `refactor/capture-placement` (plan: `docs/superpowers/plans/20
   after a capture instead of rescanning.
 - Also done: a shop sign is removed on region rights no longer, only with the override; a
   lock owner's broken id aborts the capture instead of giving the vault to the capturer.
-- Not done: shop owners from Treasury's registry (see the step 3 spec's known limitations);
-  stored sweeps and one notification per sweep.
+- Also done: pending sweeps are stored in the auto-vault module's own table and resume after a
+  restart; a sweep is tracked to its end and tells each previous owner once.
+- Not done: shop owners from Treasury's registry (see the step 3 spec's known limitations).
+  Everything else in the step 3 plan is done.
 
 ## Live-server tests
 
@@ -149,7 +151,7 @@ closes; paging through 45 vaults; an admin searching by owner name, deleting a v
 transferring one and opening one by id; scanning a WorldGuard region, vaulting a result and
 seeing it leave the list.
 
-Not covered live: sweeps, hangings, double chests, ChestShop, GriefPrevention placement,
+Not covered live: sweeps (they need Realty to trigger one), hangings, double chests, ChestShop, GriefPrevention placement,
 and a non-operator's region rules (every bot so far is an operator, which bypasses them). Shared
 steps are in `tests/vaults.ts`.
 
@@ -161,5 +163,8 @@ steps are in `tests/vaults.ts`.
   block exists.
 - **Editing a vault claims it.** Every claim is released: on close, on a failed open, at
   shutdown, and for all vaults at startup.
+- **A module that owns a table** keeps its own migrator and version table, registers its mapper
+  with `VaultDatabase.registerMapper`, and reads it through `SqlSessionWrapper.mapper`. The
+  auto-vault module's `PendingSweepStore` is the example.
 - **Where a player may place is `Integrations.mayPlace`.** A module adds a `PlacementGrant`; a
   grant that throws counts as no.

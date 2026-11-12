@@ -631,7 +631,7 @@ public class VaultCaptureService {
                     var plugin = VaultStoragePlugin.getInstance();
                     // Stored first, removed after: a failed save leaves the entity where it is.
                     CompletableFuture
-                            .supplyAsync(() -> persistHangingStacks(stacks, validatedOwner, actor.getUniqueId(), supporting),
+                            .supplyAsync(() -> persistHangingStacks(stacks, validatedOwner, actor.getUniqueId(), supporting, true),
                                     plugin.databaseExecutor())
                             .thenAcceptAsync(vaultUuid -> {
                                 if (hang.isValid()) {
@@ -854,7 +854,7 @@ public class VaultCaptureService {
      * The vault is owned by {@code boltOwner} (falls back to {@code initiatorUuid} when null) and created by
      * {@code initiatorUuid}. Must be called on the main thread; persistence runs async (fire-and-forget).
      */
-    public void captureOfflineAsync(@NotNull Block block,
+    public @NotNull CompletableFuture<Boolean> captureOfflineAsync(@NotNull Block block,
                                     @NotNull UUID initiatorUuid,
                                     UUID boltOwner,
                                     @NotNull Runnable onVaulted) {
@@ -862,7 +862,7 @@ public class VaultCaptureService {
 
         CaptureOutcome outcome = captureWithDoubleChestSupport(block, boltOwner, initiatorUuid, null);
         if (outcome.empty()) {
-            return;
+            return CompletableFuture.completedFuture(false);
         }
 
         UUID finalOwner = outcome.finalOwner();
@@ -871,13 +871,13 @@ public class VaultCaptureService {
                     "[VaultCaptureService] Offline capture aborted at " + block.getWorld().getName() + ":"
                             + block.getX() + "," + block.getY() + "," + block.getZ()
                             + " - invalid vault owner UUID: " + finalOwner);
-            return;
+            return CompletableFuture.completedFuture(false);
         }
 
-        storeThenRemove(block, finalOwner, outcome.reProtectedHalves()).thenAccept(result -> {
+        return storeThenRemove(block, finalOwner, outcome.reProtectedHalves()).thenApply(result -> {
             if (!(result instanceof CaptureResult.Vaulted vaulted)) {
                 // Already logged by the pipeline. The container stays for the next sweep.
-                return;
+                return false;
             }
             plugin.getLogger().info("[VaultCaptureService] Offline vault created: ID=" + vaulted.vault()
                     + " owner=" + finalOwner + " initiator=" + initiatorUuid);
@@ -889,9 +889,9 @@ public class VaultCaptureService {
                     removeAttachedChestShopSigns(null, shopSigns);
                 }
             }
-            mailOwner(block, initiatorUuid, finalOwner);
-            // Automated capture: no PlayerVaultEvent, just signal the notifier.
+            // The sweep tells the owner once, at its end; no PlayerVaultEvent for an automated capture.
             onVaulted.run();
+            return true;
         });
     }
 
@@ -902,11 +902,11 @@ public class VaultCaptureService {
      * and the entity is removed (which also disposes its Bolt protection).
      * <p>Must be called on the main thread with the entity loaded; persistence runs async.</p>
      */
-    public void captureHangingOfflineAsync(@NotNull Hanging hang, @NotNull UUID boltOwner, @NotNull UUID initiatorUuid,
-                                           @NotNull Runnable onVaulted) {
+    public @NotNull CompletableFuture<Boolean> captureHangingOfflineAsync(@NotNull Hanging hang, @NotNull UUID boltOwner,
+                                           @NotNull UUID initiatorUuid, @NotNull Runnable onVaulted) {
         List<ItemStack> stacks = HangingVaultSupport.itemStacksFrom(hang);
         if (stacks.isEmpty()) {
-            return;
+            return CompletableFuture.completedFuture(false);
         }
 
         var plugin = VaultStoragePlugin.getInstance();
@@ -916,10 +916,10 @@ public class VaultCaptureService {
         // an entity in an unloaded chunk can no longer be removed: its items would then exist twice.
         Chunk chunk = hang.getLocation().getChunk();
         chunk.addPluginChunkTicket(plugin);
-        CompletableFuture
-                .supplyAsync(() -> persistHangingStacks(stacks, boltOwner, initiatorUuid, supporting),
+        return CompletableFuture
+                .supplyAsync(() -> persistHangingStacks(stacks, boltOwner, initiatorUuid, supporting, false),
                         plugin.databaseExecutor())
-                .thenAcceptAsync(vaultUuid -> {
+                .thenApplyAsync(vaultUuid -> {
                     if (hang.isValid()) {
                         hang.remove();
                     } else {
@@ -927,12 +927,13 @@ public class VaultCaptureService {
                                 + " was gone before it could be removed; its items may exist twice.");
                     }
                     onVaulted.run();
+                    return true;
                 }, mainThread)
                 .exceptionally(failure -> {
                     plugin.getLogger().log(Level.SEVERE, "Offline hanging capture failed at "
                             + supporting.getWorld().getName() + " " + supporting.getX() + "," + supporting.getY() + ","
                             + supporting.getZ() + "; the entity was left in place.", failure);
-                    return null;
+                    return false;
                 })
                 .whenCompleteAsync((done, failure) -> chunk.removePluginChunkTicket(plugin), mainThread);
     }
@@ -942,7 +943,8 @@ public class VaultCaptureService {
      * anchored at {@code supporting}. One transaction, with the chosen vault locked, so two
      * captures for one owner cannot take the same slots. Blocks on the database.
      */
-    private UUID persistHangingStacks(@NotNull List<ItemStack> stacks, @NotNull UUID boltOwner, @NotNull UUID creatorUuid, @NotNull Block supporting) {
+    private UUID persistHangingStacks(@NotNull List<ItemStack> stacks, @NotNull UUID boltOwner, @NotNull UUID creatorUuid,
+                                      @NotNull Block supporting, boolean tellOwner) {
         var plugin = VaultStoragePlugin.getInstance();
         List<VaultItem> items = new ArrayList<>(stacks.size());
         for (int offset = 0; offset < stacks.size(); offset++) {
@@ -959,7 +961,9 @@ public class VaultCaptureService {
             case AppendResult.Created created -> {
                 plugin.getLogger().info("[VaultCaptureService] Hanging capture created vault ID=" + created.vault()
                         + " owner=" + boltOwner);
-                mailOwner(supporting, creatorUuid, boltOwner);
+                if (tellOwner) {
+                    mailOwner(supporting, creatorUuid, boltOwner);
+                }
                 yield created.vault();
             }
         };

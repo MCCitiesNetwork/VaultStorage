@@ -46,6 +46,21 @@ checkstyle {
 tasks {
     test {
         useJUnitPlatform()
+        // A Gradle test JVM inherits no shell environment, so Testcontainers needs the socket named.
+        val dockerSocket = listOf(
+            File(System.getProperty("user.home"), ".docker/run/docker.sock"),
+            File(System.getProperty("user.home"), ".colima/default/docker.sock"),
+            File("/var/run/docker.sock"),
+        ).firstOrNull { it.exists() }
+        if (System.getenv("DOCKER_HOST") == null && dockerSocket != null) {
+            environment("DOCKER_HOST", "unix://${dockerSocket.absolutePath}")
+            environment("TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE", dockerSocket.absolutePath)
+        }
+        // Docker Engine 29 rejects API versions below 1.44.
+        if (System.getenv("DOCKER_API_VERSION") == null) {
+            environment("DOCKER_API_VERSION", "1.44")
+            systemProperty("api.version", "1.44")
+        }
     }
 
     withType(JavaCompile::class) {

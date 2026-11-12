@@ -15,6 +15,11 @@ public interface SqlSessionWrapper extends Closeable {
 
     @NotNull WorldMapper worlds();
 
+    /** A mapper a feature module registered with {@link VaultDatabase#registerMapper}. */
+    default <M> @NotNull M mapper(@NotNull Class<M> type) {
+        return session().getMapper(type);
+    }
+
     @Override
     void close();
 }

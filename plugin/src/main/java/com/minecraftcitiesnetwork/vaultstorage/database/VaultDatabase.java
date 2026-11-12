@@ -54,6 +54,17 @@ public final class VaultDatabase implements AutoCloseable {
         return new SqlSessionFactoryBuilder().build(configuration);
     }
 
+    /**
+     * Adds a mapper a feature module owns. Does nothing if it is already there, so a module can
+     * be started again without a restart.
+     */
+    public void registerMapper(@NotNull Class<?> mapper) {
+        Configuration configuration = this.sessionFactory.getConfiguration();
+        if (!configuration.hasMapper(mapper)) {
+            configuration.addMapper(mapper);
+        }
+    }
+
     public @NotNull DataSource dataSource() {
         return this.dataSource;
     }

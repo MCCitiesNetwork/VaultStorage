@@ -4,6 +4,7 @@ import com.minecraftcitiesnetwork.pluginInfrastructure.modules.SimplePluginModul
 import com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin;
 import com.minecraftcitiesnetwork.vaultstorage.config.ConfigPaths;
 import java.nio.file.Path;
+import java.sql.SQLException;
 import java.util.logging.Level;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -29,13 +30,19 @@ public final class AutoVaultModule extends SimplePluginModule<VaultStoragePlugin
         }
         try {
             // Every Realty type lives behind RealtyBinding, so this class loads without them.
-            AutoVaultService created = new AutoVaultService(plugin);
+            // Fallible work first: the table, before anything is registered.
+            PendingSweepStore store = new PendingSweepStore(plugin.database());
+            store.migrate(plugin.getLogger());
+            AutoVaultService created = new AutoVaultService(plugin, store);
             registerListener(RealtyBinding.createListener(created));
             this.service = created;
+            created.resume();
             plugin.getLogger().info("Auto-vault on region occupant change enabled.");
         } catch (LinkageError error) {
             plugin.getLogger().log(Level.SEVERE,
                     "Realty is enabled but its classes are not reachable from this module.", error);
+        } catch (SQLException ex) {
+            throw new IllegalStateException("Could not prepare the auto-vault table.", ex);
         }
     }
 

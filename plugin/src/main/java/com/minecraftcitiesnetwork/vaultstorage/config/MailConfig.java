@@ -37,6 +37,9 @@ public class MailConfig implements Serializable {
     /** MiniMessage title of the notification, shown where the delivery medium has one. */
     public String notificationTitle = "<gold>Vault storage</gold>";
 
+    /** MiniMessage sent once after an auto-vault sweep. Placeholders: %count% %sender% %recipient% %region%. */
+    public String sweepVaultedMessage = "<gold>%count%</gold> of your locked containers in <yellow>%region%</yellow> were moved to your vault storage when <gold>%sender%</gold> took over the region.";
+
     /** No-arg constructor required by the AutoYML loader. */
     public MailConfig() {}
 }

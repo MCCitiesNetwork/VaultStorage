@@ -1,5 +1,8 @@
 package com.minecraftcitiesnetwork.vaultstorage.autovault;
 
+import java.time.Instant;
+import java.util.concurrent.CompletableFuture;
+import java.util.logging.Level;
 import com.minecraftcitiesnetwork.vaultstorage.capture.VaultCaptureService;
 
 import com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin;
@@ -44,9 +47,32 @@ public class AutoVaultService {
     private final VaultStoragePlugin plugin;
     // Main-thread only: populated from the Realty event handler and the scheduled sweep task.
     private final Map<RegionKey, BukkitTask> pending = new HashMap<>();
+    private final PendingSweepStore store;
 
-    public AutoVaultService(@NotNull VaultStoragePlugin plugin) {
+    public AutoVaultService(@NotNull VaultStoragePlugin plugin, @NotNull PendingSweepStore store) {
         this.plugin = plugin;
+        this.store = store;
+    }
+
+    /**
+     * Schedules every sweep that was still waiting when the server last stopped. One that came
+     * due meanwhile runs shortly after startup.
+     */
+    public void resume() {
+        CompletableFuture.supplyAsync(this.store::all, this.plugin.databaseExecutor())
+                .thenAcceptAsync(sweeps -> {
+                    Instant now = Instant.now();
+                    for (PendingSweep sweep : sweeps) {
+                        schedule(sweep, sweep.ticksUntilDue(now));
+                    }
+                    if (!sweeps.isEmpty()) {
+                        this.plugin.getLogger().info("Resumed " + sweeps.size() + " auto-vault sweep(s) from before the restart.");
+                    }
+                }, this.plugin.getServer().getScheduler().getMainThreadExecutor(this.plugin))
+                .exceptionally(failure -> {
+                    this.plugin.getLogger().log(Level.SEVERE, "Could not read the pending auto-vault sweeps.", failure);
+                    return null;
+                });
     }
 
     /**
@@ -61,9 +87,22 @@ public class AutoVaultService {
         if (!plugin.getConfig().getBoolean(ConfigPaths.AUTOVAULT_ENABLED.getPath(), true)) {
             return;
         }
-        RegionKey key = new RegionKey(worldId, regionId);
         long delayTicks = Math.max(0L, plugin.getConfig().getLong(ConfigPaths.AUTOVAULT_DELAY_TICKS.getPath(), 1200L));
+        PendingSweep sweep = new PendingSweep(worldId, regionId, initiator, Instant.now().plusMillis(delayTicks * 50L));
+        // Stored so that a restart during the grace period does not lose the sweep.
+        CompletableFuture.runAsync(() -> this.store.save(sweep), this.plugin.databaseExecutor())
+                .exceptionally(failure -> {
+                    this.plugin.getLogger().log(Level.SEVERE, "Could not store the pending sweep of " + regionId
+                            + "; it will be lost if the server restarts before it runs.", failure);
+                    return null;
+                });
+        schedule(sweep, delayTicks);
+    }
 
+    /** Main thread. Replaces a sweep already waiting for the same region. */
+    private void schedule(@NotNull PendingSweep sweep, long delayTicks) {
+        RegionKey key = new RegionKey(sweep.worldUuid(), sweep.regionId());
+        UUID initiator = sweep.initiatorUuid();
         BukkitTask task = new BukkitRunnable() {
             @Override public void run() {
                 // A fired task is always the current pending entry (a resubmit cancels the prior one).
@@ -108,50 +147,101 @@ public class AutoVaultService {
     private void runSweep(@NotNull RegionKey key, @NotNull UUID initiator) {
         World world = Bukkit.getWorld(key.worldId());
         if (world == null) {
+            // The world is not loaded. The stored sweep stays and is tried again after a restart.
             return;
         }
         WorldGuardService wgs = plugin.getWorldGuardService();
-        if (wgs == null) {
-            return;
-        }
         // Resolve every region once: the swept region plus the sweep filter both come from this single list.
         List<VaultRegion> regions = wgs.getRegionsIn(world);
         VaultRegion region = regions.stream().filter(r -> r.id().equals(key.regionId())).findFirst().orElse(null);
         if (region == null) {
             // Region was deleted during the delay window; nothing to sweep.
+            forget(key);
             return;
         }
 
         SweepFilter filter = SweepFilter.forSweep(regions, region, initiator);
         // One notifier shared by both passes, so the occupant is messaged at most once per sweep.
         Runnable onVaulted = vaultedNotifier(initiator);
+        Sweep sweep = new Sweep();
 
         List<DisplacedContainer> displaced = OfflineRegionScanner.scan(key.worldId(), region.boundingBox(), filter);
-        if (displaced != null && !displaced.isEmpty()) {
-            vaultBlocks(key.worldId(), displaced, initiator, onVaulted);
+        CompletableFuture<Void> blocksDispatched = displaced == null || displaced.isEmpty()
+                ? CompletableFuture.completedFuture(null)
+                : vaultBlocks(key.worldId(), displaced, initiator, onVaulted, sweep);
+        CompletableFuture<Void> hangingsDispatched =
+                plugin.getConfig().getBoolean(ConfigPaths.AUTOVAULT_INCLUDE_HANGINGS.getPath(), true)
+                        ? vaultHangings(key.worldId(), region.boundingBox(), filter, initiator, onVaulted, sweep)
+                        : CompletableFuture.completedFuture(null);
+
+        // Every capture has been started once both passes have visited their chunks; the sweep is
+        // over when the last of them has finished.
+        CompletableFuture.allOf(blocksDispatched, hangingsDispatched)
+                .thenCompose(dispatched -> sweep.allCaptures())
+                .whenCompleteAsync((done, failure) -> {
+                    if (failure != null) {
+                        plugin.getLogger().log(Level.SEVERE, "The auto-vault sweep of " + key.regionId() + " failed.", failure);
+                    }
+                    // One message per previous owner, however many of their containers were vaulted.
+                    sweep.vaultedPerOwner().forEach((owner, count) ->
+                            plugin.ownerNotifications().sweepVaulted(owner, initiator, count, key.regionId()));
+                    forget(key);
+                }, plugin.getServer().getScheduler().getMainThreadExecutor(plugin));
+    }
+
+    /** Removes the stored sweep: it has run, or has nothing left to do. */
+    private void forget(@NotNull RegionKey key) {
+        CompletableFuture.runAsync(() -> this.store.delete(key.worldId(), key.regionId()), this.plugin.databaseExecutor())
+                .exceptionally(failure -> {
+                    this.plugin.getLogger().log(Level.WARNING, "Could not remove the finished sweep of " + key.regionId()
+                            + "; it will run again after a restart.", failure);
+                    return null;
+                });
+    }
+
+    /** What one sweep has started and what came of it. Captures finish on the main thread. */
+    private static final class Sweep {
+        private final List<CompletableFuture<Boolean>> captures = new ArrayList<>();
+        private final Map<UUID, Integer> vaultedPerOwner = new HashMap<>();
+
+        void track(@NotNull UUID owner, @NotNull CompletableFuture<Boolean> capture) {
+            this.captures.add(capture.thenApply(vaulted -> {
+                if (vaulted) {
+                    this.vaultedPerOwner.merge(owner, 1, Integer::sum);
+                }
+                return vaulted;
+            }));
         }
-        if (plugin.getConfig().getBoolean(ConfigPaths.AUTOVAULT_INCLUDE_HANGINGS.getPath(), true)) {
-            vaultHangings(key.worldId(), region.boundingBox(), filter, initiator, onVaulted);
+
+        @NotNull CompletableFuture<Void> allCaptures() {
+            return CompletableFuture.allOf(this.captures.toArray(new CompletableFuture[0]));
+        }
+
+        @NotNull Map<UUID, Integer> vaultedPerOwner() {
+            return this.vaultedPerOwner;
         }
     }
 
     /** Vaults each displaced container, loading its chunk asynchronously. */
-    private void vaultBlocks(@NotNull UUID worldId, @NotNull List<DisplacedContainer> displaced, @NotNull UUID initiator,
-                             @NotNull Runnable onVaulted) {
+    private @NotNull CompletableFuture<Void> vaultBlocks(@NotNull UUID worldId, @NotNull List<DisplacedContainer> displaced,
+                                                        @NotNull UUID initiator, @NotNull Runnable onVaulted,
+                                                        @NotNull Sweep sweep) {
         VaultCaptureService captureService = plugin.getCaptureService();
-        forEachChunkPaced(worldId, displaced,
+        return forEachChunkPaced(worldId, displaced,
                 dc -> new int[]{dc.x() >> 4, dc.z() >> 4},
                 (world, chunk, dc) ->
                         // Tolerant of blocks changed since the scan (non-containers just drop their protection).
-                        captureService.captureOfflineAsync(world.getBlockAt(dc.x(), dc.y(), dc.z()), initiator, dc.owner(), onVaulted));
+                        sweep.track(dc.owner(), captureService.captureOfflineAsync(
+                                world.getBlockAt(dc.x(), dc.y(), dc.z()), initiator, dc.owner(), onVaulted)));
     }
 
     /**
      * Vaults displaced item frames and paintings across the region. Entity protections are not indexed
      * by coordinate, so every chunk in the region's bounds is loaded and its hanging entities inspected.
      */
-    private void vaultHangings(@NotNull UUID worldId, @NotNull BoundingBox box, @NotNull SweepFilter filter,
-                               @NotNull UUID initiator, @NotNull Runnable onVaulted) {
+    private @NotNull CompletableFuture<Void> vaultHangings(@NotNull UUID worldId, @NotNull BoundingBox box,
+                                                          @NotNull SweepFilter filter, @NotNull UUID initiator,
+                                                          @NotNull Runnable onVaulted, @NotNull Sweep sweep) {
         VaultCaptureService captureService = plugin.getCaptureService();
         BoltService bolt = plugin.getBoltService();
 
@@ -166,14 +256,15 @@ public class AutoVaultService {
             }
         }
 
-        forEachChunkPaced(worldId, chunks,
+        return forEachChunkPaced(worldId, chunks,
                 coords -> coords,
                 (world, chunk, coords) -> {
                     for (Entity entity : chunk.getEntities()) {
                         if (!(entity instanceof ItemFrame) && !(entity instanceof Painting)) continue;
                         UUID owner = bolt.getOwner(entity);
                         if (!filter.shouldVault(owner, entity.getX(), entity.getY(), entity.getZ())) continue;
-                        captureService.captureHangingOfflineAsync((Hanging) entity, owner, initiator, onVaulted);
+                        sweep.track(owner, captureService.captureHangingOfflineAsync(
+                                (Hanging) entity, owner, initiator, onVaulted));
                     }
                 });
     }
@@ -183,9 +274,11 @@ public class AutoVaultService {
      * at most {@code scan.batch-size} loads in flight. {@code work} runs on the main thread once that chunk is
      * loaded. Stops if the world unloads.
      */
-    private <T> void forEachChunkPaced(@NotNull UUID worldId, @NotNull List<T> items,
-                                       @NotNull Function<T, int[]> chunkOf, @NotNull ChunkWork<T> work) {
+    private <T> @NotNull CompletableFuture<Void> forEachChunkPaced(@NotNull UUID worldId, @NotNull List<T> items,
+                                                                  @NotNull Function<T, int[]> chunkOf,
+                                                                  @NotNull ChunkWork<T> work) {
         final int maxInFlight = Math.max(1, plugin.getConfig().getInt(ConfigPaths.SCAN_BATCH_SIZE.getPath(), 50));
+        CompletableFuture<Void> dispatched = new CompletableFuture<>();
 
         new BukkitRunnable() {
             int index = 0;
@@ -195,6 +288,7 @@ public class AutoVaultService {
                 World world = Bukkit.getWorld(worldId);
                 if (world == null) {
                     this.cancel();
+                    dispatched.complete(null);
                     return;
                 }
                 while (index < items.size() && inFlight < maxInFlight) {
@@ -202,16 +296,29 @@ public class AutoVaultService {
                     index++;
                     int[] chunkCoords = chunkOf.apply(item);
                     inFlight++;
-                    world.getChunkAtAsync(chunkCoords[0], chunkCoords[1]).thenAccept(chunk -> {
+                    world.getChunkAtAsync(chunkCoords[0], chunkCoords[1]).whenComplete((chunk, failure) -> {
+                        // Counted down whatever happened, or one failed load would keep this task alive forever.
                         inFlight--;
-                        work.run(world, chunk, item);
+                        if (failure != null || chunk == null) {
+                            plugin.getLogger().log(Level.WARNING, "A chunk could not be loaded for an auto-vault sweep: "
+                                    + chunkCoords[0] + "," + chunkCoords[1], failure);
+                            return;
+                        }
+                        try {
+                            work.run(world, chunk, item);
+                        } catch (RuntimeException ex) {
+                            plugin.getLogger().log(Level.SEVERE, "An auto-vault sweep failed in chunk "
+                                    + chunkCoords[0] + "," + chunkCoords[1], ex);
+                        }
                     });
                 }
                 if (index >= items.size() && inFlight == 0) {
                     this.cancel();
+                    dispatched.complete(null);
                 }
             }
         }.runTaskTimer(plugin, 1L, 1L);
+        return dispatched;
     }
 
     @FunctionalInterface

@@ -9,4 +9,12 @@ dependencies {
     compileOnly(libs.bolt.bukkit)
     compileOnly(libs.bolt.common)
     compileOnly(libs.worldguard)
+    // The module keeps its pending sweeps in a table of its own, through the host's MyBatis.
+    compileOnly(libs.mybatis)
+    // Database tests run against the real engine and need a running Docker daemon.
+    testImplementation(libs.mybatis)
+    testImplementation(libs.plugin.infrastructure)
+    testImplementation(libs.mariadb.java.client)
+    testImplementation(libs.testcontainers.mariadb)
+    testImplementation(libs.testcontainers.junit.jupiter)
 }

@@ -25,6 +25,7 @@ public final class OwnerNotifications {
     private final @NotNull Supplier<@Nullable OwnerNotifier> notifier;
     private final @NotNull Supplier<String> title;
     private final @NotNull Supplier<String> template;
+    private final @NotNull Supplier<String> sweepTemplate;
     private final @NotNull Logger logger;
 
     /**
@@ -32,25 +33,45 @@ public final class OwnerNotifications {
      *                 after the host and may stop while it runs
      * @param title    the notification's title, as MiniMessage
      * @param template the message, as MiniMessage with %sender%, %recipient% and %region%
+     * @param sweepTemplate the message after a sweep, with %count%, %sender%, %recipient% and %region%
      */
     public OwnerNotifications(@NotNull NameSource names, @NotNull Supplier<@Nullable OwnerNotifier> notifier,
                               @NotNull Supplier<String> title, @NotNull Supplier<String> template,
-                              @NotNull Logger logger) {
+                              @NotNull Supplier<String> sweepTemplate, @NotNull Logger logger) {
         this.names = names;
         this.notifier = notifier;
         this.title = title;
         this.template = template;
+        this.sweepTemplate = sweepTemplate;
         this.logger = logger;
     }
 
     /** Never completes exceptionally: a notification that fails is logged and nothing more. */
     public @NotNull CompletableFuture<Void> vaultCreated(@NotNull UUID owner, @NotNull UUID actor,
                                                         @Nullable String regionId) {
+        return notify(owner, actor, regionId, this.template, null);
+    }
+
+    /**
+     * One message for a whole sweep, however many of the owner's containers it vaulted. Does
+     * nothing when it vaulted none. Never completes exceptionally.
+     */
+    public @NotNull CompletableFuture<Void> sweepVaulted(@NotNull UUID owner, @NotNull UUID newOccupant, int containers,
+                                                        @Nullable String regionId) {
+        if (containers <= 0) {
+            return CompletableFuture.completedFuture(null);
+        }
+        return notify(owner, newOccupant, regionId, this.sweepTemplate, containers);
+    }
+
+    private @NotNull CompletableFuture<Void> notify(@NotNull UUID owner, @NotNull UUID actor, @Nullable String regionId,
+                                                   @NotNull Supplier<String> text, @Nullable Integer count) {
         return this.names.nameOf(actor)
                 .thenCombine(this.names.nameOf(owner), (actorName, ownerName) -> {
                     // Names and the region id go in as text. Parsed as markup, a name could carry
                     // a click action that runs as whoever reads the message.
-                    Component message = MINI_MESSAGE.deserialize(tags(this.template.get()),
+                    Component message = MINI_MESSAGE.deserialize(tags(text.get()),
+                            Placeholder.unparsed("count", count == null ? "" : String.valueOf(count)),
                             Placeholder.unparsed("sender", actorName.orElse(shortId(actor))),
                             Placeholder.unparsed("recipient", ownerName.orElse(shortId(owner))),
                             Placeholder.unparsed("region", regionId == null ? NO_REGION : regionId));
@@ -76,7 +97,7 @@ public final class OwnerNotifications {
     /** The templates use %name% placeholders; MiniMessage's own are tags. */
     private static @NotNull String tags(@NotNull String template) {
         return template.replace("%sender%", "<sender>").replace("%recipient%", "<recipient>")
-                .replace("%region%", "<region>");
+                .replace("%region%", "<region>").replace("%count%", "<count>");
     }
 
     private static @NotNull String shortId(@NotNull UUID player) {

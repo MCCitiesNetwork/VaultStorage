@@ -42,6 +42,7 @@ class OwnerNotificationsTest {
             }
         };
         return new OwnerNotifications(names, () -> this.notifier, () -> "<gold>Vault storage</gold>", () -> TEMPLATE,
+                () -> "<gold>%count%</gold> of your containers in <yellow>%region%</yellow> were vaulted for <gold>%sender%</gold>",
                 Logger.getLogger("test"));
     }
 
@@ -63,6 +64,19 @@ class OwnerNotificationsTest {
     void aNameIsInsertedAsTextNotAsMarkup() {
         notifications(Map.of(OWNER, "Bob", ACTOR, "<red>Mallory")).vaultCreated(OWNER, ACTOR, "plot1").join();
         Assertions.assertTrue(this.delivered.getFirst().message().startsWith("<red>Mallory created"));
+    }
+
+    @Test
+    void aSweepTellsTheOwnerOnceHowManyContainersWereVaulted() {
+        notifications(Map.of(OWNER, "Bob", ACTOR, "Alice")).sweepVaulted(OWNER, ACTOR, 12, "plot1").join();
+        Assertions.assertEquals(List.of(new Delivered(OWNER, "Vault storage",
+                "12 of your containers in plot1 were vaulted for Alice")), this.delivered);
+    }
+
+    @Test
+    void aSweepThatVaultedNothingTellsNobody() {
+        notifications(Map.of(OWNER, "Bob", ACTOR, "Alice")).sweepVaulted(OWNER, ACTOR, 0, "plot1").join();
+        Assertions.assertTrue(this.delivered.isEmpty());
     }
 
     @Test
