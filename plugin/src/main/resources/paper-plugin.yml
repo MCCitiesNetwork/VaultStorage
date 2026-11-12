@@ -20,28 +20,64 @@ dependencies:
 
 # Every permission is declared here with a description and a default.
 permissions:
-  vaultstorage.user:
-    description: Allows using basic vault commands
-    default: op
+  # Staff. Also what the menus read for the staff view: everyone's vaults, delete, every region.
   vaultstorage.admin:
-    description: Admin override for vault commands
+    description: Everything, and the staff view in menus.
+    default: op
+    children:
+      vaultstorage.command.vault: true
+      vaultstorage.command.vault.others: true
+      vaultstorage.command.open: true
+      vaultstorage.command.open.others: true
+      vaultstorage.command.admin: true
+      vaultstorage.command.transfer: true
+      vaultstorage.command.reload: true
+      vaultstorage.action.view: true
+      vaultstorage.action.copy: true
+      vaultstorage.action.edit: true
+      vaultstorage.action.place: true
+      vaultstorage.action.capture: true
+      vaultstorage.bypass.region: true
+      vaultstorage.scan.teleport: true
+  vaultstorage.command.vault:
+    description: Open the vault menu with /vault.
+    default: op
+  vaultstorage.command.vault.others:
+    description: Open another player's vaults with /vault menu <player>.
+    default: op
+  vaultstorage.command.open:
+    description: Open a vault by its id with /vault open.
+    default: op
+  vaultstorage.command.open.others:
+    description: Open a vault that belongs to someone else with /vault open.
+    default: op
+  vaultstorage.command.admin:
+    description: Open the menu over every vault with /vault admin.
+    default: op
+  vaultstorage.command.transfer:
+    description: Give a vault to another player with /vault transfer.
+    default: op
+  vaultstorage.command.reload:
+    description: Reload settings and messages with /vault reload.
     default: op
   vaultstorage.action.view:
-    description: Allows viewing vaults in a virtual inventory
+    description: Look inside a vault.
     default: true
-  vaultstorage.action.edit:
-    description: Allows editing vault contents in a virtual inventory
-    default: op
   vaultstorage.action.copy:
-    description: Allows copying items from a vault to the player inventory
+    description: Take copies of the items in a vault.
     default: op
-  # Checked since 2.0. Before that nothing read it, so everyone could place; the default keeps that.
+  vaultstorage.action.edit:
+    description: Change the items in a vault.
+    default: op
   vaultstorage.action.place:
-    description: Allows placing a vault back into the world as a block
+    description: Place a vault back into the world as a block.
     default: true
-  vaultstorage.admin.override:
-    description: Allows capturing/placing vault blocks even if not a region member or outside regions
-    default: false
   vaultstorage.action.capture:
-    description: Allows capturing a container into a vault (requires region ownership & container ownership unless override)
+    description: Vault a locked container, from the menu or with /vault capture.
+    default: op
+  vaultstorage.bypass.region:
+    description: Capture and place regardless of region and ownership rules.
+    default: false
+  vaultstorage.scan.teleport:
+    description: Teleport to a scan result.
     default: op

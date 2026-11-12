@@ -10,7 +10,7 @@ import com.minecraftcitiesnetwork.vaultstorage.region.VaultRegion;
 import com.minecraftcitiesnetwork.vaultstorage.region.WorldGuardService;
 import com.minecraftcitiesnetwork.vaultstorage.menu.AutoDialog;
 import com.minecraftcitiesnetwork.vaultstorage.menu.ParentMenu;
-import com.minecraftcitiesnetwork.vaultstorage.permission.VaultPermission;
+import com.minecraftcitiesnetwork.vaultstorage.permission.Permissions;
 import org.bukkit.World;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
@@ -104,7 +104,7 @@ public class VaultRegionListMenu extends ChildMenuImp {
             }
 
             builder.button(Text.of(MessageKeys.REGIONS_BACK_BTN), ctx -> {
-                VaultUIContext backCtx = VaultPermission.ADMIN.has(ctx.player()) ? VaultUIContext.admin(ctx.player().getUniqueId()) : VaultUIContext.self(ctx.player().getUniqueId());
+                VaultUIContext backCtx = ctx.player().hasPermission(Permissions.ADMIN) ? VaultUIContext.admin(ctx.player().getUniqueId()) : VaultUIContext.self(ctx.player().getUniqueId());
                 new VaultScanMenu(ctx.player(), getParentMenu(), backCtx).open();
             });
             return builder.build();
@@ -120,7 +120,9 @@ public class VaultRegionListMenu extends ChildMenuImp {
 
         World world = getPlayer().getWorld();
         List<VaultRegion> all = wgs.getRegionsIn(world);
-        List<VaultRegion> filtered = filterAndSort(all, query);
+        // Without the staff view a player is shown only the regions they have a part in.
+        List<VaultRegion> filtered = filterAndSort(all, query).stream()
+                .filter(region -> mayScan(getPlayer(), region)).toList();
 
         int total = filtered.size();
         int pages = Math.max(1, (int) Math.ceil(total / (double) PAGE_SIZE));
@@ -152,7 +154,7 @@ public class VaultRegionListMenu extends ChildMenuImp {
         }
 
         builder.button(Text.of(MessageKeys.REGIONS_BACK_BTN), ctx -> {
-            VaultUIContext backCtx = VaultPermission.ADMIN.has(ctx.player()) ? VaultUIContext.admin(ctx.player().getUniqueId()) : VaultUIContext.self(ctx.player().getUniqueId());
+            VaultUIContext backCtx = ctx.player().hasPermission(Permissions.ADMIN) ? VaultUIContext.admin(ctx.player().getUniqueId()) : VaultUIContext.self(ctx.player().getUniqueId());
             new VaultScanMenu(ctx.player(), getParentMenu(), backCtx).open();
         });
         return builder.build();
@@ -171,8 +173,15 @@ public class VaultRegionListMenu extends ChildMenuImp {
      * @param regionId target region identifier
      */
     private void openResultsFor(@NotNull Player player, String regionId) {
+        WorldGuardService regions = VaultStoragePlugin.getInstance().getWorldGuardService();
+        boolean allowed = regions != null && regions.getRegionsIn(player.getWorld()).stream()
+                .anyMatch(region -> region.id().equals(regionId) && mayScan(player, region));
+        if (!allowed) {
+            player.sendMessage(Text.of(MessageKeys.SCAN_NOT_YOUR_REGION));
+            return;
+        }
         if (!checkCooldown(player)) return;
-        VaultUIContext context = VaultPermission.ADMIN.has(player) ? VaultUIContext.admin(player.getUniqueId()) : VaultUIContext.self(player.getUniqueId());
+        VaultUIContext context = player.hasPermission(Permissions.ADMIN) ? VaultUIContext.admin(player.getUniqueId()) : VaultUIContext.self(player.getUniqueId());
         new LoadingMenu(player, getParentMenu(), Map.of("%player%", player.getName())).open();
         VaultStoragePlugin.getInstance().getScanService().scan(player, regionId, context, results -> {
             if (results == null) return;
@@ -180,8 +189,13 @@ public class VaultRegionListMenu extends ChildMenuImp {
         });
     }
 
+    /** Staff may scan any region; anyone else only one they own or are a member of. */
+    static boolean mayScan(@NotNull Player player, @NotNull VaultRegion region) {
+        return player.hasPermission(Permissions.ADMIN) || region.isPartOfRegion(player.getUniqueId());
+    }
+
     private boolean checkCooldown(@NotNull Player player) {
-        if (VaultPermission.ADMIN.has(player)) return true;
+        if (player.hasPermission(Permissions.ADMIN)) return true;
         var session = VaultStoragePlugin.getInstance().getSessionManager().getOrCreate(player.getUniqueId());
         long now = System.currentTimeMillis();
         long last = session.getLastScanTime();

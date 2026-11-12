@@ -7,7 +7,7 @@ import io.papermc.paper.registry.data.dialog.DialogBase;
 import io.papermc.paper.registry.data.dialog.body.DialogBody;
 import com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin;
 import com.minecraftcitiesnetwork.vaultstorage.menu.AutoDialog;
-import com.minecraftcitiesnetwork.vaultstorage.permission.VaultPermission;
+import com.minecraftcitiesnetwork.vaultstorage.permission.Permissions;
 import com.minecraftcitiesnetwork.vaultstorage.capture.VaultCaptureService;
 import org.bukkit.entity.Player;
 
@@ -68,7 +68,7 @@ public class VaultCaptureMenu extends ParentMenuImp {
         // Start capture mode now delegates fully to VaultCaptureService
         builder.button(Text.of(MessageKeys.CAPTURE_MENU_START_BTN, phSelf), ctx -> {
             Player actor = ctx.player();
-            if (!VaultPermission.ACTION_CAPTURE.has(actor)) {
+            if (!actor.hasPermission(Permissions.ACTION_CAPTURE)) {
                 actor.sendMessage(Text.of(MessageKeys.CAPTURE_NO_PERMISSION));
                 return;
             }

@@ -55,16 +55,43 @@ The first start of 2.0 converts the existing tables to a new layout. Every vault
 - `config.yml` is no longer read. The first start writes `database.yml`, `settings.yml` and the auto-vault module's `config.yml` from the values in it. Once those exist you can delete it.
 - **Wording you changed in `menus/` and `mail/` is not carried over.** All text is in `messages.yml` now. Move your changes there, then delete the two folders.
 
-### Permissions
-Assign via your permissions plugin (examples: LuckPerms, PermissionsEx):
-- vaultstorage.user — basic usage (open menu, list, use common actions)
-- vaultstorage.admin — admin override for all plugin actions
-- vaultstorage.action.view — allow viewing a Vault’s contents in a virtual inventory
-- vaultstorage.action.copy — allow copying items from a Vault to the player inventory
-- vaultstorage.action.edit — allow editing Vault contents inside the virtual inventory
-- vaultstorage.action.place — allow placing the stored block back into the world
-- vaultstorage.admin.override — bypass region/container checks when capturing/placing
-- vaultstorage.action.capture — allow entering capture mode and vaulting containers
+### Commands and permissions
+Grant these with your permissions plugin (for example LuckPerms).
+
+| Command | Permission | Default |
+| --- | --- | --- |
+| `/vault`, `/vault menu` | `vaultstorage.command.vault` | op |
+| `/vault menu <player>` | `vaultstorage.command.vault.others` | op |
+| `/vault capture` | `vaultstorage.action.capture` | op |
+| `/vault open <vault id> [view\|copy\|edit]` | `vaultstorage.command.open` and the action's permission | op |
+| the same, for someone else's vault | `vaultstorage.command.open.others` | op |
+| `/vault admin` | `vaultstorage.command.admin` | op |
+| `/vault transfer <vault id> <player>` | `vaultstorage.command.transfer` | op |
+| `/vault reload` | `vaultstorage.command.reload` | op |
+
+A player is only shown the subcommands they may use.
+
+| Permission | Allows | Default |
+| --- | --- | --- |
+| `vaultstorage.action.view` | looking inside a vault | everyone |
+| `vaultstorage.action.copy` | taking copies of a vault's items | op |
+| `vaultstorage.action.edit` | changing a vault's items | op |
+| `vaultstorage.action.place` | placing a vault back into the world | everyone |
+| `vaultstorage.action.capture` | vaulting a locked container | op |
+| `vaultstorage.bypass.region` | capturing and placing regardless of region and ownership rules | nobody |
+| `vaultstorage.scan.teleport` | the teleport button in scan results | op |
+| `vaultstorage.admin` | every permission above, and the staff view in menus: everyone's vaults, delete, every region, no scan cooldown | op |
+
+Without `vaultstorage.admin`, a player sees and can scan only the regions they own or are a member of.
+
+#### Permissions that changed in 2.0
+| 1.x | 2.0 |
+| --- | --- |
+| `vaultstorage.user` | `vaultstorage.command.vault`, and `vaultstorage.command.open` for `/vault open` |
+| `vaultstorage.admin.override` | `vaultstorage.bypass.region` |
+| `vaultstorage.admin` | unchanged; grant a single `vaultstorage.command.*` permission instead if a rank should have only one staff command |
+
+The subcommand aliases `ui`, `cap` and `inv` are gone.
 
 ### Configuration files
 All are under `plugins/VaultStorage/`.
@@ -76,7 +103,7 @@ All are under `plugins/VaultStorage/`.
 | `messages.yml` | every sentence a player sees, as MiniMessage | yes |
 | `modules/realty-autovault/config.yml` | auto-vault: on or off, the delay, item frames, telling the occupant | yes |
 
-- `/vault reload` (needs `vaultstorage.admin`) re-reads the files marked yes. If `settings.yml` or `messages.yml` does not parse, nothing changes and the log says why.
+- `/vault reload` (needs `vaultstorage.command.reload`) re-reads the files marked yes. If `settings.yml` or `messages.yml` does not parse, nothing changes and the log says why.
 - The plugin never rewrites these files, so your comments stay. The defaults of the current version are written to `defaults/` on every start; compare with them after an upgrade.
 - A key you leave out of `messages.yml` uses the default wording. A key missing from `settings.yml` is named in the startup log.
 - In `messages.yml`, a word in angle brackets that is not a colour, such as `<owner>`, is filled in by the plugin. The comment above each line lists the ones it may use.
@@ -108,7 +135,7 @@ Health signals in console:
 
 Common symptoms and checks:
 - “No MySQL connection available” — verify mysql.host/port/database/user/password and network reachability; confirm privileges and SSL settings.
-- “You don’t have permission.” — grant vaultstorage.user or the specific vaultstorage.action.* permission; admins may use vaultstorage.admin.
+- “You don’t have permission.” — grant `vaultstorage.command.vault` or the specific `vaultstorage.action.*` permission; staff may be given `vaultstorage.admin`.
 - “Services not ready.” — ensure WorldEdit, WorldGuard, and Bolt are present and enabled.
 - “Vault not found.” — the provided ID may be invalid or already removed; re-list and try again.
 

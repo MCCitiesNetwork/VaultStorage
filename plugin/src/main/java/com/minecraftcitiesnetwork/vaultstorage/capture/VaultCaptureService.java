@@ -58,7 +58,7 @@ import org.bukkit.Chunk;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import com.minecraftcitiesnetwork.vaultstorage.capture.VaultCapturePolicy;
-import com.minecraftcitiesnetwork.vaultstorage.permission.VaultPermission;
+import com.minecraftcitiesnetwork.vaultstorage.permission.Permissions;
 import com.minecraftcitiesnetwork.vaultstorage.session.VaultSessionManager;
 import com.minecraftcitiesnetwork.vaultstorage.session.VaultSessionManager.Mode;
 import com.minecraftcitiesnetwork.vaultstorage.capture.HangingVaultSupport;
@@ -334,7 +334,7 @@ public class VaultCaptureService {
      * - Session stays active for multiple captures until canceled with left-click.
      */
     public void startCaptureSession(@NotNull Player actor) {
-        if (!VaultPermission.ACTION_CAPTURE.has(actor)) {
+        if (!actor.hasPermission(Permissions.ACTION_CAPTURE)) {
             actor.sendMessage(Text.of(MessageKeys.CAPTURE_NO_PERMISSION));
             return;
         }
@@ -342,7 +342,7 @@ public class VaultCaptureService {
         session.switchTo(Mode.CAPTURE);
 
         // Notify admin mode if override is active
-        if (VaultPermission.ADMIN.has(actor)) {
+        if (actor.hasPermission(Permissions.ADMIN)) {
             actor.sendMessage(Text.of(MessageKeys.CAPTURE_ADMIN_MODE_ENABLED));
         }
 

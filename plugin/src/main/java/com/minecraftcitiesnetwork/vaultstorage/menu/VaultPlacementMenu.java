@@ -11,7 +11,7 @@ import io.papermc.paper.registry.data.dialog.body.DialogBody;
 import com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin;
 import com.minecraftcitiesnetwork.vaultstorage.placement.PlayerPlaceVaultEvent;
 import com.minecraftcitiesnetwork.vaultstorage.menu.AutoDialog;
-import com.minecraftcitiesnetwork.vaultstorage.permission.VaultPermission;
+import com.minecraftcitiesnetwork.vaultstorage.permission.Permissions;
 import com.minecraftcitiesnetwork.vaultstorage.placement.VaultPlacementService;
 import com.minecraftcitiesnetwork.vaultstorage.session.VaultSessionManager;
 import com.minecraftcitiesnetwork.vaultstorage.session.VaultSessionManager.Mode;
@@ -114,11 +114,11 @@ public class VaultPlacementMenu extends ChildMenuImp {
                 Location targetLoc = target.getLocation();
 
                 // The place permission, and somewhere the player may place: any grant, or the override.
-                if (!VaultPermission.ACTION_PLACE.has(actor)) {
+                if (!actor.hasPermission(Permissions.ACTION_PLACE)) {
                     actor.sendMessage(Text.of(MessageKeys.PLACEMENT_NO_PERMISSION));
                     return;
                 }
-                boolean allowed = VaultPermission.ACTION_PLACE_OVERRIDE.has(actor)
+                boolean allowed = actor.hasPermission(Permissions.BYPASS_REGION)
                         || VaultStoragePlugin.getInstance().integrations().mayPlace(actor.getUniqueId(), targetLoc);
                 if (!allowed) {
                     actor.sendMessage(Text.of(MessageKeys.PLACEMENT_NOT_ALLOWED));
@@ -179,8 +179,8 @@ public class VaultPlacementMenu extends ChildMenuImp {
                     actor.sendActionBar(Text.of(MessageKeys.PLACEMENT_ACTION_BAR_IDLE));
                     return;
                 }
-                boolean allowed = VaultPermission.ACTION_PLACE.has(actor)
-                        && (VaultPermission.ACTION_PLACE_OVERRIDE.has(actor)
+                boolean allowed = actor.hasPermission(Permissions.ACTION_PLACE)
+                        && (actor.hasPermission(Permissions.BYPASS_REGION)
                         || VaultStoragePlugin.getInstance().integrations().mayPlace(actor.getUniqueId(), target.getLocation()));
                 var ph = Map.of("%placeable%", Text.plain(allowed ? MessageKeys.PLACEMENT_PLACE_YES : MessageKeys.PLACEMENT_PLACE_NO));
                 actor.sendActionBar(Text.of(MessageKeys.PLACEMENT_ACTION_BAR_TARGET, ph));

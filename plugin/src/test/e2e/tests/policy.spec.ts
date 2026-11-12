@@ -9,7 +9,7 @@ import { expectBlock, FLOOR, freshSpot, GROUND, rightClick, standAt } from './wo
 /** Gives a player who is not an operator the permissions to use the plugin. */
 async function ordinaryPlayer(server: ServerWrapper, player: PlayerWrapper): Promise<void> {
     await server.execute(`deop ${player.username}`);
-    for (const node of ['vaultstorage.user', 'vaultstorage.action.capture']) {
+    for (const node of ['vaultstorage.command.vault', 'vaultstorage.action.capture']) {
         await server.execute(`lp user ${player.username} permission set ${node} true`);
     }
     // LuckPerms applies a change a moment after the command returns.
@@ -115,7 +115,7 @@ test('a vault is placed only where its owner belongs to the region, or on their 
 
         // The owner is now an ordinary player with no region and no claim.
         await server.execute(`deop ${owner.username}`);
-        await server.execute(`lp user ${owner.username} permission set vaultstorage.user true`);
+        await server.execute(`lp user ${owner.username} permission set vaultstorage.command.vault true`);
         await sleep(700);
         const dialogs = new Dialogs(owner);
         (await ownVaultActions(owner, dialogs)).click('Place Block');

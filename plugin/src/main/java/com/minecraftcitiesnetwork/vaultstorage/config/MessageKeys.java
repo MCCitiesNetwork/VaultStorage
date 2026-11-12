@@ -108,6 +108,7 @@ public final class MessageKeys {
     public static final String LIST_LOAD_FAILED = "list.load-failed";
 
     public static final String SCAN_NO_REGION_HERE = "scan.no-region-here";
+    public static final String SCAN_NOT_YOUR_REGION = "scan.not-your-region";
     public static final String SCAN_NO_ENTITIES = "scan.no-entities";
     public static final String SCAN_FILTER_BLOCK = "scan.filter-block";
     public static final String SCAN_FILTER_NON_CONTAINER = "scan.filter-non-container";
@@ -136,23 +137,17 @@ public final class MessageKeys {
 
     public static final String COMMAND_PLAYERS_ONLY = "command.players-only";
     public static final String COMMAND_NO_PERMISSION = "command.no-permission";
-    public static final String COMMAND_ERROR = "command.error";
-    public static final String COMMAND_USAGE = "command.usage";
-    public static final String COMMAND_UNKNOWN_SUBCOMMAND = "command.unknown-subcommand";
     public static final String COMMAND_CAPTURE_STARTED = "command.capture.started";
-    public static final String COMMAND_TRANSFER_INVALID_ID = "command.transfer.invalid-id";
     public static final String COMMAND_TRANSFER_RESOLVING = "command.transfer.resolving";
     public static final String COMMAND_TRANSFER_UNKNOWN_PLAYER = "command.transfer.unknown-player";
     public static final String COMMAND_TRANSFER_NOT_FOUND = "command.transfer.not-found";
     public static final String COMMAND_TRANSFER_DONE = "command.transfer.done";
     public static final String COMMAND_TRANSFER_FAILED = "command.transfer.failed";
-    public static final String COMMAND_OPEN_INVALID_ID = "command.open.invalid-id";
     public static final String COMMAND_OPEN_UNKNOWN_ACTION = "command.open.unknown-action";
     public static final String COMMAND_OPEN_NO_PERMISSION = "command.open.no-permission";
     public static final String COMMAND_OPEN_NO_ACCESS = "command.open.no-access";
     public static final String COMMAND_MENU_RESOLVING = "command.menu.resolving";
     public static final String COMMAND_MENU_PLAYER_NOT_FOUND = "command.menu.player-not-found";
-    public static final String COMMAND_MENU_NO_PERMISSION_OTHERS = "command.menu.no-permission-others";
     public static final String COMMAND_RELOAD_DONE = "command.reload.done";
     public static final String COMMAND_RELOAD_FAILED = "command.reload.failed";
 

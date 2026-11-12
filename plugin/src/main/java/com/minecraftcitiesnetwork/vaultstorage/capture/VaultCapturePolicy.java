@@ -1,6 +1,6 @@
 package com.minecraftcitiesnetwork.vaultstorage.capture;
 
-import com.minecraftcitiesnetwork.vaultstorage.permission.VaultPermission;
+import com.minecraftcitiesnetwork.vaultstorage.permission.Permissions;
 
 import com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin;
 import com.minecraftcitiesnetwork.vaultstorage.vault.Dto;
@@ -130,7 +130,7 @@ public final class VaultCapturePolicy {
     }
 
     private static Decision evaluateBlockPolicy(Player actor, Block block, UUID originalOwner, boolean hangableRestricted) {
-        boolean hasOverride = VaultPermission.ACTION_PLACE_OVERRIDE.has(actor);
+        boolean hasOverride = actor.hasPermission(Permissions.BYPASS_REGION);
         boolean actorIsContainerOwner = originalOwner != null && originalOwner.equals(actor.getUniqueId());
 
         RegionParticipation participation = computeRegionParticipation(actor, block, originalOwner);
@@ -275,7 +275,7 @@ public final class VaultCapturePolicy {
             }
         }
 
-        boolean hasOverride = VaultPermission.ACTION_PLACE_OVERRIDE.has(actor);
+        boolean hasOverride = actor.hasPermission(Permissions.BYPASS_REGION);
         boolean actorIsContainerOwner = originalOwner != null && originalOwner.equals(actor.getUniqueId());
         RegionParticipation participation = computeRegionParticipation(actor, containerBlock, originalOwner);
 
@@ -310,8 +310,8 @@ public final class VaultCapturePolicy {
             return evaluateHangingCapture(actor, hanging, supporting);
         }
 
-        boolean hasOverride = VaultPermission.ACTION_PLACE_OVERRIDE.has(actor);
-        boolean isAdmin = VaultPermission.ADMIN.has(actor);
+        boolean hasOverride = actor.hasPermission(Permissions.BYPASS_REGION);
+        boolean isAdmin = actor.hasPermission(Permissions.ADMIN);
 
         if (!isAdmin) {
             return new Decision(false, hasOverride, false, false, false, false, false, null, Decision.Reason.ENTITIES_REQUIRE_ADMIN, List.of());

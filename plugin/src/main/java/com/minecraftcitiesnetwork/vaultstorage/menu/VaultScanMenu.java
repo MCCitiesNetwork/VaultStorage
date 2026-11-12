@@ -1,5 +1,6 @@
 package com.minecraftcitiesnetwork.vaultstorage.menu;
 
+import com.minecraftcitiesnetwork.vaultstorage.permission.Permissions;
 import com.minecraftcitiesnetwork.vaultstorage.config.MessageKeys;
 import com.minecraftcitiesnetwork.vaultstorage.config.Text;
 import io.papermc.paper.dialog.Dialog;
@@ -131,7 +132,7 @@ public class VaultScanMenu extends ChildMenuImp {
     }
 
     private boolean checkCooldown(Player player) {
-        if (player.hasPermission("vaultstorage.admin")) return true;
+        if (player.hasPermission(Permissions.ADMIN)) return true;
         var session = VaultStoragePlugin.getInstance().getSessionManager().getOrCreate(player.getUniqueId());
         long now = System.currentTimeMillis();
         long last = session.getLastScanTime();
@@ -183,6 +184,10 @@ public class VaultScanMenu extends ChildMenuImp {
                     return;
                 }
                 VaultRegion only = containing.getFirst();
+                if (!VaultRegionListMenu.mayScan(ctx.player(), only)) {
+                    ctx.player().sendMessage(Text.of(MessageKeys.SCAN_NOT_YOUR_REGION));
+                    return;
+                }
                 if (!checkCooldown(ctx.player())) return;
                 new LoadingMenu(ctx.player(), getParentMenu(), Map.of("%player%", ctx.player().getName())).open();
                 VaultStoragePlugin.getInstance().getScanService().scan(ctx.player(), only.id(), uiContext, blocks -> {
@@ -356,7 +361,9 @@ public class VaultScanMenu extends ChildMenuImp {
                 });
             });
             // Teleport button for this entry (literal coordinates with safe centering)
-            builder.button(Text.of(MessageKeys.SCAN_ENTRY_TELEPORT_BUTTON, placeholdersEntry), ctx -> {
+            if (getPlayer().hasPermission(Permissions.SCAN_TELEPORT)) builder.button(Text.of(MessageKeys.SCAN_ENTRY_TELEPORT_BUTTON, placeholdersEntry), ctx -> {
+                // Checked again at the click: the dialog may be older than the permission.
+                if (!ctx.player().hasPermission(Permissions.SCAN_TELEPORT)) return;
                 boolean passable = entryBlock.isPassable();
                 double destY = passable ? entryBlock.getY() : (entryBlock.getY() + 1);
                 Location destination = new Location(ctx.player().getWorld(), entryBlock.getX() + 0.5, destY, entryBlock.getZ() + 0.5, ctx.player().getLocation().getYaw(), ctx.player().getLocation().getPitch());

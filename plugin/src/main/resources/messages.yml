@@ -73,6 +73,7 @@ scan:
   # <mode>
   filter-btn: '<gray>[Filter: <mode>]</gray>'
   no-region-here: '<red>No region at your location.</red>'
+  not-your-region: '<red>You can only scan regions you own or are a member of.</red>'
   no-entities: '<gray>No protected entities found in this region.</gray>'
   filter-block: 'Block'
   filter-non-container: 'Non-Container'
@@ -174,15 +175,9 @@ inventory:
 command:
   players-only: 'Only players can use this.'
   no-permission: 'You don''t have permission.'
-  error: 'An error occurred.'
-  # <label> <usage>
-  usage: 'Usage: /<label> <usage>'
-  # <subcommands>
-  unknown-subcommand: 'Unknown subcommand. Try: <subcommands>'
   capture:
     started: 'Capture session started. Left-click to cancel.'
   transfer:
-    invalid-id: 'Invalid vault ID format.'
     resolving: 'Resolving owner...'
     # <player>
     unknown-player: 'Could not resolve player: <player>'
@@ -192,14 +187,12 @@ command:
     done: 'Vault <vault> transferred from <from> to <to>.'
     failed: 'The transfer failed. See the server log.'
   open:
-    invalid-id: 'Invalid vault id.'
     unknown-action: 'Unknown action. Use view|copy|edit.'
     no-permission: 'You don''t have permission for that action.'
     no-access: 'You don''t have access to that vault.'
   menu:
     resolving: 'Resolving player...'
     player-not-found: 'Player not found.'
-    no-permission-others: 'You don''t have permission to open other players'' vaults.'
   reload:
     done: '<green>VaultStorage reloaded.</green>'
     failed: '<red>The reload failed; the old settings are still in use. See the server log.</red>'

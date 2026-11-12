@@ -50,13 +50,13 @@ Under `com.minecraftcitiesnetwork.vaultstorage`, grouped by feature:
 | `chestshop` | the `ChestShopService` interface and its no-op default |
 | `names` | `NameSource`, the Paper source, `Names`, `UniqueIdentifierResolver` |
 | `menu` | dialog menus and `AutoDialog` |
-| `command` | the `/vault` router, subcommands, `LegacyVaultCommand` |
-| `permission` | `VaultPermission` |
+| `command` | `VaultCommand` (the Brigadier tree), its sealed outcomes, `VaultActionArgument` |
+| `permission` | `Permissions`, one constant per node |
 | `session` | per-player session state |
 | `config` | `ConfigFiles`, `PluginSettings`, `MessageKeys`, `Text`, the 1.x import |
 | `database` | MyBatis mappers, `VaultDatabase`, `VaultRepository`, the schema migrator |
 
-`menu` and `command` are layers, not features. Each is rewritten whole by a later
+`menu` is a layer, not a feature. It is rewritten whole by a later
 step of the programme below.
 
 ## Rules
@@ -113,6 +113,19 @@ step of the programme below.
 - **`/vault reload`** parses `settings.yml` and `messages.yml` off the main thread, swaps both
   only if both parsed, then reloads modules whose manifest says `reloadable: true`.
 
+## Rules for commands and permissions
+
+- **`/vault` is one Brigadier tree**, built by `VaultCommand.create`. Each branch has a
+  `requires`; a handler checks the sender, reads permissions on the main thread, works on the
+  database executor and replies on the main thread.
+- **A permission is a constant in `Permissions` and an entry in `paper-plugin.yml`** with a
+  description and a default. `PermissionsTest` checks both directions.
+- **`vaultstorage.admin` is a declared parent, not an override in code.** A new node is added to
+  its `children`; `PermissionsTest` fails otherwise. Code checks the node it means with
+  `hasPermission` and nothing else.
+- **A command's outcome is a sealed interface** switched over for the reply. No exception text
+  reaches a player.
+
 ## Standardisation programme
 
 Specs and plans are in `docs/superpowers/`. One spec and one plan per step.
@@ -123,7 +136,7 @@ Specs and plans are in `docs/superpowers/`. One spec and one plan per step.
 | 2. Persistence | done | MyBatis on MariaDB, the playbook schema, transactions |
 | 3. Capture, placement, auto-vault | done, except shop owners from Treasury | save before destroy, futures, two more modules |
 | 4. Config and messages | done | Configurate records, `messages.yml`, reload |
-| 5. Commands and permissions | outline | Brigadier, `vaultstorage.command.*` |
+| 5. Commands and permissions | done | Brigadier, `vaultstorage.command.*` |
 | 6. Menus | outline | paged vault list with real labels, confirmations |
 | 7. Sweep | outline | code style everywhere, dead code removed |
 
@@ -180,6 +193,9 @@ their own GriefPrevention claim.
 
 Also covered live: one half of a double chest being vaulted and the other staying locked for its
 owner; a locked item frame being vaulted with the item it shows.
+
+Also covered live: `vaultstorage.admin` alone giving a non-operator the staff commands, and a
+player with only the menu permission being refused `/vault reload`.
 
 Also covered live: `/vault reload` picking up a reworded message and refusing a file that does not
 parse.

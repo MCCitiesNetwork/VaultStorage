@@ -4,7 +4,6 @@ import com.minecraftcitiesnetwork.vaultstorage.bolt.BoltService;
 import com.minecraftcitiesnetwork.vaultstorage.chestshop.ChestShopService;
 import com.minecraftcitiesnetwork.vaultstorage.scan.VaultScanService;
 import com.minecraftcitiesnetwork.vaultstorage.region.WorldGuardService;
-import com.minecraftcitiesnetwork.vaultstorage.command.LegacyVaultCommand;
 import com.minecraftcitiesnetwork.vaultstorage.command.VaultCommand;
 import io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents;
 import com.minecraftcitiesnetwork.vaultstorage.bolt.BoltServiceImp;
@@ -14,7 +13,6 @@ import com.minecraftcitiesnetwork.vaultstorage.placement.VaultPlacementService;
 import com.minecraftcitiesnetwork.vaultstorage.scan.VaultScanServiceImpl;
 import com.minecraftcitiesnetwork.vaultstorage.region.WorldGuardServiceImp;
 import com.minecraftcitiesnetwork.vaultstorage.session.VaultSessionManager;
-import com.minecraftcitiesnetwork.vaultstorage.permission.VaultPermission;
 import com.minecraftcitiesnetwork.vaultstorage.names.Names;
 import com.minecraftcitiesnetwork.vaultstorage.names.PaperProfileNameSource;
 import com.minecraftcitiesnetwork.pluginInfrastructure.modules.ModuleLifecycleManager;
@@ -49,7 +47,6 @@ import java.util.concurrent.TimeUnit;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.logging.Level;
-import org.bukkit.permissions.Permission;
 import org.bukkit.plugin.java.JavaPlugin;
 
 /**
@@ -178,12 +175,9 @@ public final class VaultStoragePlugin extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new SessionQuitListener(this.sessionManager), this);
         getServer().getPluginManager().registerEvents(this.inventoryService, this);
 
-        VaultCommand vaultCommand = new VaultCommand();
         getLifecycleManager().registerEventHandler(LifecycleEvents.COMMANDS, event ->
-                event.registrar().register("vault", "Vault storage tools", new LegacyVaultCommand(vaultCommand)));
+                event.registrar().register(VaultCommand.create(this), VaultCommand.DESCRIPTION));
 
-        // Validate defined permissions vs plugin.yml
-        validatePermissionsMapping();
 
         startModules();
     }
@@ -198,31 +192,6 @@ public final class VaultStoragePlugin extends JavaPlugin {
         } catch (IOException | LinkageError ex) {
             // One bad module jar must not stop the host enabling.
             getLogger().log(Level.SEVERE, "Could not load feature modules.", ex);
-        }
-    }
-
-    private void validatePermissionsMapping() {
-        try {
-            java.util.Set<String> pluginNodes = new java.util.HashSet<>();
-            for (Permission p : getPluginMeta().getPermissions()) {
-                pluginNodes.add(p.getName());
-            }
-            java.util.Set<String> enumNodes = new java.util.HashSet<>();
-            for (VaultPermission vp : VaultPermission.values()) {
-                enumNodes.add(vp.node());
-            }
-            java.util.Set<String> missingInPluginYml = new java.util.HashSet<>(enumNodes);
-            missingInPluginYml.removeAll(pluginNodes);
-            java.util.Set<String> missingInEnum = new java.util.HashSet<>(pluginNodes);
-            missingInEnum.removeAll(enumNodes);
-            if (!missingInPluginYml.isEmpty()) {
-                getLogger().warning("Permissions defined in code but missing in plugin.yml: " + missingInPluginYml);
-            }
-            if (!missingInEnum.isEmpty()) {
-                getLogger().warning("Permissions present in plugin.yml but not in VaultPermission enum: " + missingInEnum);
-            }
-        } catch (Throwable t) {
-            getLogger().warning("Failed to validate permissions mapping: " + t.getMessage());
         }
     }
 

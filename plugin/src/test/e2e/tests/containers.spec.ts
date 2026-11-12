@@ -46,6 +46,8 @@ test('one half of a double chest is vaulted and the other half stays locked for 
         // The second half can only be captured if it still has a lock owner: the capture of the
         // first half re-protected it for the same owner.
         await rightClick(player, rightX, FLOOR, z);
+        // 'Vault captured.' is already in the log from the first half, so wait for the save instead.
+        await sleep(1500);
         await expectBlock(server, rightX, FLOOR, z, 'air', 'second-half-gone');
         const ownerUuid = owner.bot.player.uuid;
         expect(query(`SELECT COUNT(*) FROM Vault WHERE ownerUuid = '${ownerUuid}'`)).toEqual(['2']);

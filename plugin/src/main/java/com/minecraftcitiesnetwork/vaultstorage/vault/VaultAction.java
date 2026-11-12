@@ -1,28 +1,25 @@
 package com.minecraftcitiesnetwork.vaultstorage.vault;
 
-import com.minecraftcitiesnetwork.vaultstorage.permission.VaultPermission;
+import com.minecraftcitiesnetwork.vaultstorage.permission.Permissions;
+import org.jetbrains.annotations.NotNull;
 
-/**
- * Actions available for a Vault when opening its virtual inventory.
- */
+/** What a player may do with a vault opened as an inventory. */
 public enum VaultAction {
-    /** View-only mode: player can inspect items but cannot modify them. */
-    VIEW(VaultPermission.ACTION_VIEW),
-    /** Edit mode: player can move items and persist changes back to the vault. */
-    EDIT(VaultPermission.ACTION_EDIT),
-    /** Copy mode: player can take items without affecting the original vault. */
-    COPY(VaultPermission.ACTION_COPY);
+    /** Look, and take nothing. */
+    VIEW(Permissions.ACTION_VIEW),
+    /** Move items; the change is saved when the inventory closes. */
+    EDIT(Permissions.ACTION_EDIT),
+    /** Take copies; the vault keeps its items. */
+    COPY(Permissions.ACTION_COPY);
 
-    private final VaultPermission permission;
+    private final @NotNull String permission;
 
-    VaultAction(VaultPermission permission) {
+    VaultAction(@NotNull String permission) {
         this.permission = permission;
     }
 
-    /**
-     * Returns the required VaultPermission for this action.
-     */
-    public VaultPermission permission() {
-        return permission;
+    /** The node a player needs for this action. */
+    public @NotNull String permission() {
+        return this.permission;
     }
 }

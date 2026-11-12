@@ -17,7 +17,7 @@ import io.papermc.paper.registry.data.dialog.input.SingleOptionDialogInput;
 import com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin;
 import com.minecraftcitiesnetwork.vaultstorage.vault.PlayerDeleteVaultEvent;
 import com.minecraftcitiesnetwork.vaultstorage.menu.AutoDialog;
-import com.minecraftcitiesnetwork.vaultstorage.permission.VaultPermission;
+import com.minecraftcitiesnetwork.vaultstorage.permission.Permissions;
 import com.minecraftcitiesnetwork.vaultstorage.vault.VaultInventoryService;
 import org.bukkit.entity.Player;
 
@@ -61,7 +61,7 @@ public class VaultActionMenu extends ChildMenuImp {
         Player player = getPlayer();
         String firstValue = null;
         for (VaultAction vaultAction : VaultAction.values()) {
-            if (vaultAction.permission().has(player)) {
+            if (player.hasPermission(vaultAction.permission())) {
                 String value = vaultAction.name().toLowerCase(Locale.ROOT);
                 boolean selected = firstValue == null; // preselect first permitted
                 if (firstValue == null) firstValue = value;
@@ -92,9 +92,9 @@ public class VaultActionMenu extends ChildMenuImp {
 
         // Admin-only delete button
 
-        if (VaultPermission.ADMIN.has(player)) {
+        if (player.hasPermission(Permissions.ADMIN)) {
             builder.buttonWithPlayer(Text.of(MessageKeys.ACTION_DELETE_BTN), null, Duration.ofMinutes(2), 1, (actor, response) -> {
-                if (!VaultPermission.ADMIN.has(actor)) {
+                if (!actor.hasPermission(Permissions.ADMIN)) {
                     actor.sendMessage(Text.of(MessageKeys.COMMAND_NO_PERMISSION));
                     return;
                 }
