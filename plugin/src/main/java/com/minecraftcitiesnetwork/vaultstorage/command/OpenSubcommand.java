@@ -1,11 +1,12 @@
 package com.minecraftcitiesnetwork.vaultstorage.command;
 
+import com.minecraftcitiesnetwork.vaultstorage.database.FindResult;
+import java.util.concurrent.CompletableFuture;
+import java.util.logging.Level;
 import com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin;
 import com.minecraftcitiesnetwork.vaultstorage.command.CommandContext;
 import com.minecraftcitiesnetwork.vaultstorage.command.Subcommand;
-import com.minecraftcitiesnetwork.vaultstorage.vault.VaultInventoryService;
 import com.minecraftcitiesnetwork.vaultstorage.vault.VaultAction;
-import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.entity.Player;
 
 import java.util.ArrayList;
@@ -56,36 +57,26 @@ public class OpenSubcommand implements Subcommand {
         }
 
         var plugin = VaultStoragePlugin.getInstance();
-        new BukkitRunnable() {
-            @Override public void run() {
-                var vs = plugin.getVaultService();
-                var entityOpt = vs.get(id);
-                if (entityOpt.isEmpty()) {
-                    new BukkitRunnable() {
-                        @Override public void run() {
-                            ctx.sender().sendMessage("Vault not found.");
-                        }
-                    }.runTask(plugin);
-                    return;
-                }
-                UUID owner = vs.getOwner(id);
-                boolean allowed = owner != null && owner.equals(p.getUniqueId()) || VaultPermission.ADMIN.has(ctx.sender());
-                if (!allowed) {
-                    new BukkitRunnable() {
-                        @Override public void run() {
-                            ctx.sender().sendMessage("You don't have access to that vault.");
-                        }
-                    }.runTask(plugin);
-                    return;
-                }
-                new BukkitRunnable() {
-                    @Override public void run() {
-                        VaultInventoryService invSvc = plugin.getInventoryService();
-                        invSvc.openVirtualInventory(p, id, action);
+        // Read on the main thread, before the lookup: permissions are not safe to read off it.
+        boolean admin = VaultPermission.ADMIN.has(p);
+        UUID opener = p.getUniqueId();
+        CompletableFuture.supplyAsync(() -> plugin.repository().find(id), plugin.databaseExecutor())
+                .thenAcceptAsync(found -> {
+                    if (!(found instanceof FindResult.Found vault)) {
+                        p.sendMessage("Vault not found.");
+                        return;
                     }
-                }.runTask(plugin);
-            }
-        }.runTaskAsynchronously(plugin);
+                    if (!admin && !vault.vault().vault().ownerUuid().equals(opener)) {
+                        p.sendMessage("You don't have access to that vault.");
+                        return;
+                    }
+                    plugin.getInventoryService().openVirtualInventory(p, id, action);
+                }, plugin.getServer().getScheduler().getMainThreadExecutor(plugin))
+                .exceptionally(failure -> {
+                    plugin.getLogger().log(Level.SEVERE, "Could not open vault " + id + ".", failure);
+                    p.sendMessage("The vault could not be opened.");
+                    return null;
+                });
     }
 
     @Override

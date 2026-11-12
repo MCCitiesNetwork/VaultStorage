@@ -27,6 +27,13 @@ export function sql(statement: string): void {
         { stdio: 'ignore' });
 }
 
+/** Runs a query against the dev database and returns its rows, one per line, columns tab-separated. */
+export function query(statement: string): string[] {
+    const output = execFileSync('docker',
+        ['exec', CONTAINER, 'mariadb', '-uvaultstorage', '-pvaultstorage', 'vault_storage', '-N', '-B', '-e', statement]).toString();
+    return output.split('\n').filter((line) => line.length > 0);
+}
+
 /**
  * Stores empty vaults for an owner straight in the database, a minute apart so their order is
  * fixed. For tests that need more vaults than it is reasonable to capture one by one.

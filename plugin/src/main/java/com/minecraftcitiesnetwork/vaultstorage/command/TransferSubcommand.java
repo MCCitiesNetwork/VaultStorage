@@ -1,13 +1,14 @@
 package com.minecraftcitiesnetwork.vaultstorage.command;
 
+import com.minecraftcitiesnetwork.vaultstorage.database.OwnerResult;
+import java.util.concurrent.CompletableFuture;
+import java.util.logging.Level;
 import com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin;
-import com.minecraftcitiesnetwork.vaultstorage.database.legacy.VaultService;
 import com.minecraftcitiesnetwork.vaultstorage.command.CommandContext;
 import com.minecraftcitiesnetwork.vaultstorage.command.Subcommand;
 import com.minecraftcitiesnetwork.vaultstorage.permission.VaultPermission;
 import com.minecraftcitiesnetwork.vaultstorage.names.UniqueIdentifierResolver;
 import org.bukkit.Bukkit;
-import org.bukkit.scheduler.BukkitRunnable;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.List;
@@ -53,80 +54,29 @@ public class TransferSubcommand implements Subcommand {
         String ownerIdentifier = ctx.require(1, "newOwnerUUID or playerName");
 
         var plugin = VaultStoragePlugin.getInstance();
-        var vaultService = plugin.getVaultService();
+        var sender = ctx.sender();
+        sender.sendMessage("Resolving owner...");
 
-        ctx.sender().sendMessage("Resolving vault and owner...");
-        plugin.getLogger().info("[TransferSubcommand] Lookup initiated for vault: " + vaultId);
-
-        // Async work: verify vault exists and resolve owner UUID
-        new BukkitRunnable() {
-            @Override
-            public void run() {
-                // Check if vault exists
-                var vaultOpt = vaultService.get(vaultId);
-                if (vaultOpt.isEmpty()) {
-                    plugin.getLogger().warning("[TransferSubcommand] Vault not found for ID: " + vaultId + " (UUID format valid: " + vaultId.toString() + ")");
-                    Bukkit.getScheduler().runTask(plugin, () -> {
-                        ctx.sender().sendMessage("✗ Vault not found with ID: " + vaultId);
-                        ctx.sender().sendMessage("  Debug: UUID format verified. Check if vault exists in database.");
-                    });
-                    return;
-                }
-
-                var vault = vaultOpt.get();
-                plugin.getLogger().info("[TransferSubcommand] Vault found: " + vaultId + " at world " + vault.worldUuid + " coords(" + vault.x + "," + vault.y + "," + vault.z + ")");
-
-                // Resolve owner UUID using the centralized resolver
-                UniqueIdentifierResolver resolver = new UniqueIdentifierResolver(plugin.names());
-                resolver.resolveUuid(ownerIdentifier).thenAccept(resolvedUUID -> {
-                    if (resolvedUUID == null) {
-                        plugin.getLogger().warning("[TransferSubcommand] Failed to resolve owner identifier: " + ownerIdentifier);
-                        Bukkit.getScheduler().runTask(plugin, () -> {
-                            ctx.sender().sendMessage("✗ Could not resolve player: " + ownerIdentifier);
-                        });
-                    } else {
-                        plugin.getLogger().info("[TransferSubcommand] Resolved owner " + ownerIdentifier + " to UUID: " + resolvedUUID);
-                        performTransfer(ctx, plugin, vaultService, vaultId, resolvedUUID);
+        new UniqueIdentifierResolver(plugin.names()).resolveUuid(ownerIdentifier)
+                .thenCompose(newOwner -> {
+                    if (!UniqueIdentifierResolver.isValidUUID(newOwner)) {
+                        return CompletableFuture.completedFuture("Could not resolve player: " + ownerIdentifier);
                     }
-                });
-            }
-        }.runTaskAsynchronously(plugin);
-    }
-
-    /**
-     * Performs the actual vault ownership transfer.
-     */
-    private void performTransfer(
-            CommandContext ctx,
-            VaultStoragePlugin plugin,
-            VaultService vaultService,
-            UUID vaultId,
-            UUID newOwnerUUID) {
-
-        new BukkitRunnable() {
-            @Override
-            public void run() {
-                try {
-                    UUID oldOwner = vaultService.getOwner(vaultId);
-                    plugin.getLogger().info("[TransferSubcommand] Transferring vault " + vaultId + " from " + oldOwner + " to " + newOwnerUUID);
-                    vaultService.setOwner(vaultId, newOwnerUUID);
-                    plugin.getLogger().info("[TransferSubcommand] Transfer completed successfully");
-
-                    Bukkit.getScheduler().runTask(plugin, () -> {
-                        String oldOwnerStr = oldOwner != null ? oldOwner.toString() : "unknown";
-                        ctx.sender().sendMessage("✓ Vault " + vaultId + " ownership transferred:");
-                        ctx.sender().sendMessage("  Old owner: " + oldOwnerStr);
-                        ctx.sender().sendMessage("  New owner: " + newOwnerUUID);
-                    });
-                } catch (Exception ex) {
-                    plugin.getLogger().log(Level.WARNING,
-                            "[TransferSubcommand] Transfer error for vault " + vaultId + " to " + newOwnerUUID, ex);
-                    Bukkit.getScheduler().runTask(plugin, () -> {
-                        ctx.sender().sendMessage("✗ Transfer failed: " + ex.getMessage());
-                    });
-                }
-            }
-        }.runTaskAsynchronously(plugin);
+                    return CompletableFuture.supplyAsync(() -> switch (plugin.repository().setOwner(vaultId, newOwner)) {
+                        case OwnerResult.NoSuchVault missing -> "Vault not found with ID: " + vaultId;
+                        case OwnerResult.Changed changed -> {
+                            plugin.getLogger().info("[TransferSubcommand] " + sender.getName() + " transferred vault "
+                                    + vaultId + " from " + changed.previous() + " to " + newOwner);
+                            yield "Vault " + vaultId + " transferred from " + changed.previous() + " to " + newOwner + ".";
+                        }
+                    }, plugin.databaseExecutor());
+                })
+                .exceptionally(failure -> {
+                    // The cause goes to the log; the sender is told only that it failed.
+                    plugin.getLogger().log(Level.SEVERE, "Could not transfer vault " + vaultId + ".", failure);
+                    return "The transfer failed. See the server log.";
+                })
+                .thenAcceptAsync(sender::sendMessage, plugin.getServer().getScheduler().getMainThreadExecutor(plugin));
     }
 
     @Override

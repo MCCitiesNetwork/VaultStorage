@@ -3,7 +3,6 @@ package com.minecraftcitiesnetwork.vaultstorage;
 import com.minecraftcitiesnetwork.vaultstorage.bolt.BoltService;
 import com.minecraftcitiesnetwork.vaultstorage.chestshop.ChestShopService;
 import com.minecraftcitiesnetwork.vaultstorage.scan.VaultScanService;
-import com.minecraftcitiesnetwork.vaultstorage.database.legacy.VaultService;
 import com.minecraftcitiesnetwork.vaultstorage.region.WorldGuardService;
 import com.minecraftcitiesnetwork.vaultstorage.command.LegacyVaultCommand;
 import com.minecraftcitiesnetwork.vaultstorage.command.VaultCommand;
@@ -13,7 +12,6 @@ import com.minecraftcitiesnetwork.vaultstorage.capture.VaultCaptureService;
 import com.minecraftcitiesnetwork.vaultstorage.vault.VaultInventoryService;
 import com.minecraftcitiesnetwork.vaultstorage.placement.VaultPlacementService;
 import com.minecraftcitiesnetwork.vaultstorage.scan.VaultScanServiceImpl;
-import com.minecraftcitiesnetwork.vaultstorage.database.legacy.VaultServiceImpl;
 import com.minecraftcitiesnetwork.vaultstorage.region.WorldGuardServiceImp;
 import com.minecraftcitiesnetwork.vaultstorage.session.VaultSessionManager;
 import com.minecraftcitiesnetwork.vaultstorage.config.ConfigInitializer;
@@ -73,7 +71,6 @@ public final class VaultStoragePlugin extends JavaPlugin {
     private ModuleLifecycleManager<VaultStoragePlugin> modules;
     private Names names;
     private OwnerNotifications ownerNotifications;
-    private VaultService vaultService;
     private VaultDatabase database;
     private VaultRepository repository;
     private ExecutorService databaseExecutor;
@@ -88,7 +85,6 @@ public final class VaultStoragePlugin extends JavaPlugin {
 
     public VaultSessionManager getSessionManager() { return sessionManager; }
 
-    public VaultService getVaultService() { return vaultService; }
 
     /** Every read and write of vaults. Blocking: call it on {@link #databaseExecutor()}. */
     public VaultRepository repository() { return repository; }
@@ -132,7 +128,6 @@ public final class VaultStoragePlugin extends JavaPlugin {
             getServer().getPluginManager().disablePlugin(this);
             return;
         }
-        this.vaultService = new VaultServiceImpl(this.repository);
         // A claim can only be left behind by a crash; nobody holds one now.
         CompletableFuture.supplyAsync(this.repository::releaseAllClaims, this.databaseExecutor)
                 .thenAccept(released -> released.forEach(vault -> getLogger().warning("Vault " + vault
@@ -142,7 +137,6 @@ public final class VaultStoragePlugin extends JavaPlugin {
                     getLogger().log(Level.SEVERE, "Could not release vault claims left by the last shutdown.", failure);
                     return null;
                 });
-        // Register VaultService in Bukkit services
 
         // Integration services
         this.worldGuardService = new WorldGuardServiceImp();

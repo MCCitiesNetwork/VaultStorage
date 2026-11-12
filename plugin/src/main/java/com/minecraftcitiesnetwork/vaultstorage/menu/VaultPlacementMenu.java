@@ -1,5 +1,8 @@
 package com.minecraftcitiesnetwork.vaultstorage.menu;
 
+import com.minecraftcitiesnetwork.vaultstorage.database.VaultFilter;
+import java.util.concurrent.CompletableFuture;
+import java.util.logging.Level;
 import io.papermc.paper.dialog.Dialog;
 import io.papermc.paper.registry.data.dialog.DialogBase;
 import io.papermc.paper.registry.data.dialog.body.DialogBody;
@@ -184,42 +187,21 @@ public class VaultPlacementMenu extends ChildMenuImp {
                                 // Fire Vault placed event
                                 new PlayerPlaceVaultEvent(actor, targetLoc).callEvent();
 
-                                try {
-                                    var vaultService = plugin.getVaultService();
-                                    UUID worldId = actor.getWorld().getUID();
-
-
-                                    new BukkitRunnable() {
-                                        boolean anyLeft;
-                                        @Override
-                                        public void run() {
-                                            if (context.filterOwner() != null) {
-                                                var owned = vaultService.listByOwner(context.filterOwner());
-                                                anyLeft = owned.stream().anyMatch(v -> worldId.equals(v.worldUuid));
+                                // Back to the list if there is anything left on it.
+                                VaultFilter remaining = new VaultFilter(context.filterOwner(), null);
+                                CompletableFuture.supplyAsync(() -> plugin.repository().count(remaining), plugin.databaseExecutor())
+                                        .thenAcceptAsync(left -> {
+                                            if (left > 0) {
+                                                new VaultListMenu(actor, (ParentMenuImp) getParentMenu(), context, "").open();
                                             } else {
-                                                anyLeft = !vaultService.listInWorld(worldId).isEmpty();
+                                                actor.sendMessage("You have no more vaults to place.");
+                                                actor.closeDialog();
                                             }
-
-                                            new BukkitRunnable() {
-                                                @Override
-                                                public void run() {
-                                                    if (anyLeft) {
-                                                        new VaultListMenu(actor, (ParentMenuImp) getParentMenu(), context, "").open();
-                                                    } else {
-                                                        actor.sendMessage("You have no more vaults to place in this world.");
-                                                        actor.closeDialog();
-                                                    }
-                                                }
-                                            }.runTask(plugin);
-
-
-                                        }
-                                    }.runTaskAsynchronously(plugin);
-
-                                } catch (Throwable t) {
-                                    // On error, fallback to list menu for recovery
-                                    new VaultListMenu(actor, (ParentMenuImp) getParentMenu(), context, "").open();
-                                }
+                                        }, plugin.getServer().getScheduler().getMainThreadExecutor(plugin))
+                                        .exceptionally(failure -> {
+                                            plugin.getLogger().log(Level.WARNING, "Could not count the remaining vaults.", failure);
+                                            return null;
+                                        });
                             } else {
                                 // Failure: return to list for retry
                                 new VaultListMenu(actor, (ParentMenuImp) getParentMenu(), context, "").open();

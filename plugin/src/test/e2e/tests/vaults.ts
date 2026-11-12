@@ -62,6 +62,8 @@ export async function ownVaultActions(player: PlayerWrapper, dialogs: Dialogs): 
 export async function adminVaultActions(admin: PlayerWrapper, dialogs: Dialogs, ownerName: string): Promise<Dialog> {
     admin.chat('/vault admin');
     (await dialogTitled(dialogs, 'Vault Capture')).click('Browse Vaults');
+    // The admin list holds every vault the dev database has collected, so search for the owner.
+    (await dialogTitled(dialogs, 'Browse Vaults')).click('Search', { QUERY: ownerName });
     const list = await dialogTitled(dialogs, 'Browse Vaults');
     list.click(list.button(`${ownerName}'s Vault #`).label);
     return dialogTitled(dialogs, 'Vault Action');

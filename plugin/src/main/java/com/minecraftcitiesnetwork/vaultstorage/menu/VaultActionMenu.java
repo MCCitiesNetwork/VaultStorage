@@ -1,5 +1,10 @@
 package com.minecraftcitiesnetwork.vaultstorage.menu;
 
+import com.minecraftcitiesnetwork.vaultstorage.database.DeleteResult;
+import com.minecraftcitiesnetwork.vaultstorage.database.FindResult;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
+import java.util.logging.Level;
 import com.minecraftcitiesnetwork.vaultstorage.vault.VaultAction;
 
 import io.papermc.paper.dialog.Dialog;
@@ -17,7 +22,6 @@ import com.minecraftcitiesnetwork.vaultstorage.config.DataFolder;
 import com.minecraftcitiesnetwork.vaultstorage.config.MiniMessageUtil;
 import com.minecraftcitiesnetwork.vaultstorage.config.AutoYML;
 import org.bukkit.entity.Player;
-import org.bukkit.scheduler.BukkitRunnable;
 
 import java.time.Duration;
 import java.util.ArrayList;
@@ -29,7 +33,7 @@ import java.util.UUID;
 
 /**
  * Child dialog that lets a player choose an action (view, edit, copy) for a vault.
- * Uses VaultService asynchronously to avoid blocking the main thread.
+ * Database work runs on the database executor.
  */
 public class VaultActionMenu extends ChildMenuImp {
 
@@ -157,47 +161,35 @@ public class VaultActionMenu extends ChildMenuImp {
                 }
                 actor.sendMessage(MiniMessageUtil.parseOrPlain(cfg.deleteLoading));
                 var plugin = VaultStoragePlugin.getInstance();
-                new BukkitRunnable() {
-                    @Override public void run() {
-                        final boolean ok = deleteVault(plugin);
-
-                        new BukkitRunnable() {
-                            @Override public void run() {
-                                actor.sendMessage(MiniMessageUtil.parseOrPlain(ok ? cfg.deleteOk : cfg.deleteFail));
-                                if (getParentMenu() instanceof ParentMenuImp parent) {
-                                    new VaultListMenu(actor, parent, uiContext, "").open();
-                                } else {
-                                    actor.closeDialog();
-                                }
+                Executor mainThread = plugin.getServer().getScheduler().getMainThreadExecutor(plugin);
+                CompletableFuture.supplyAsync(() -> plugin.repository().find(vaultId), plugin.databaseExecutor())
+                        .thenComposeAsync(found -> {
+                            if (!(found instanceof FindResult.Found vault)) {
+                                return CompletableFuture.completedFuture(false);
                             }
-                        }.runTask(plugin);
-                    }
-                }.runTaskAsynchronously(plugin);
+                            // The event is synchronous, so it is fired here, on the main thread.
+                            new PlayerDeleteVaultEvent(actor, vault.vault().vault()).callEvent();
+                            return CompletableFuture.supplyAsync(
+                                    () -> plugin.repository().delete(vaultId) instanceof DeleteResult.Deleted,
+                                    plugin.databaseExecutor());
+                        }, mainThread)
+                        .exceptionally(failure -> {
+                            plugin.getLogger().log(Level.SEVERE, "Could not delete vault " + vaultId + ".", failure);
+                            return false;
+                        })
+                        .thenAcceptAsync(deleted -> {
+                            actor.sendMessage(MiniMessageUtil.parseOrPlain(deleted ? cfg.deleteOk : cfg.deleteFail));
+                            if (getParentMenu() instanceof ParentMenuImp parent) {
+                                new VaultListMenu(actor, parent, uiContext, "").open();
+                            } else {
+                                actor.closeDialog();
+                            }
+                        }, mainThread);
             });
         }
 
         builder.button(MiniMessageUtil.parseOrPlain(cfg.backBtn), ctx -> new VaultListMenu(ctx.player(), (ParentMenuImp) getParentMenu(), uiContext, "").open());
         return builder.build();
-    }
-
-    private boolean deleteVault(VaultStoragePlugin plugin) {
-        boolean success;
-        try {
-            var vaultService = plugin.getVaultService();
-            var exists = vaultService.get(vaultId).isPresent();
-            if (!exists) {
-                success = false;
-            } else {
-                // Fire event
-                var vault = vaultService.get(vaultId).get();
-                new PlayerDeleteVaultEvent(getPlayer(), vault).callEvent();
-
-
-                vaultService.delete(vaultId);
-                success = true;
-            }
-        } catch (Throwable t) { success = false; }
-        return success;
     }
 
     private static VaultAction parseAction(String s) {
