@@ -43,6 +43,16 @@ val installModules by tasks.registering(Sync::class) {
 tasks {
     runServer {
         dependsOn(installModules)
+        // The plugins the host requires. Optional ones are added by hand when a module is tested.
+        downloadPlugins {
+            // By version ID: the version number alone resolves to the Fabric jar.
+            modrinth("worldedit", "YFnqiUlL") // 7.4.6, bukkit
+            modrinth("worldguard", "7.0.20")
+            modrinth("bolt", "1.2.37")
+            // 2.21.2 loads but fails to enable on 26.3. It is enough to satisfy the dependency for a
+            // boot check; replace it with a 26.3 build to exercise mail.
+            github("EssentialsX", "Essentials", "2.21.2", "EssentialsX-2.21.2.jar")
+        }
     }
 
     build {
