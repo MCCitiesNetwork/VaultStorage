@@ -25,15 +25,15 @@ Command (in‑game):
 ## For Server Managers (Installation, Database, Permissions, Menus, Operations)
 
 ### Requirements
-- Paper 1.21.8 (or compatible)
-- Java 21
-- WorldEdit and WorldGuard installed
-- Bolt installed (for ownership/protection integration)
+- Paper 26.3
+- Java 25
+- WorldEdit, WorldGuard, Bolt and Essentials installed
 
 ### Installation and first run
-1) Place the plugin JAR in your server’s plugins folder (along with WorldEdit, WorldGuard, and Bolt).
+1) Place `VaultStorage-<version>.jar` in your server's `plugins` folder.
 2) Start the server once to generate configuration files and data folders.
 3) Stop the server to configure the database.
+4) For each optional integration you want, place its module jar in `plugins/VaultStorage/modules/` (see Integrations below). The startup log lists the modules that started.
 
 ### Database Setup (MySQL)
 Edit the plugin config at: plugins/VaultStorage/config.yml
@@ -104,8 +104,19 @@ Additional placeholders available to reason texts:
 Other menu YAMLs (when present in your build) follow a similar pattern and will include per‑menu placeholders and help texts.
 
 ### Integrations
-- WorldGuard: regions are resolved live from WG’s RegionManager; overlapping regions are supported.
+- WorldGuard: regions are resolved live from WG's RegionManager; overlapping regions are supported.
 - Bolt: used to read owner of protected blocks and to remove/create protections when vaulting or placing blocks, as appropriate.
+
+Every other integration is a module: a separate jar in `plugins/VaultStorage/modules/`. A module whose plugin is not installed does nothing. An integration whose module jar is missing is off.
+
+| Module jar | Needs | Gives |
+| --- | --- | --- |
+| `namebook-adapter` | Namebook | Player names from Namebook, Java and Bedrock |
+| `floodgate-adapter` | Floodgate | Bedrock names when Namebook is absent; a chat line instead of the loading dialog for Bedrock players |
+| `chestshop-adapter` | ChestShop | Shop sign handling during capture |
+| `realty-autovault` | Realty | Automatic vaulting when a region changes occupant |
+
+Module jars must come from the same build as the plugin jar.
 
 ### Operations and troubleshooting
 Health signals in console:
@@ -123,67 +134,19 @@ Backups:
 - Schedule periodic MySQL backups (full + binlogs if available).
 - For quick rollbacks, snapshot the DB before major updates.
 
-## For Developers (API and Examples)
-VaultStorage registers services with the Bukkit Services API and performs database work off the main thread where applicable. Acquire services and program against the interfaces below.
+## For Developers
 
-### Getting services
-```java
-var services = getServer().getServicesManager();
-var vaultSvcReg = services.getRegistration(net.democracycraft.vault.api.service.VaultService.class);
-var wgSvcReg = services.getRegistration(net.democracycraft.vault.api.service.WorldGuardService.class);
-var boltSvcReg = services.getRegistration(net.democracycraft.vault.api.service.BoltService.class);
+VaultStorage has no public API: no other plugin compiles against it, and it registers nothing with the Bukkit Services API.
+
+### Building
+```bash
+./gradlew build
 ```
-Always null‑check providers before use.
+- The plugin jar is `plugin/build/libs/VaultStorage-<version>.jar`.
+- Each module jar is `modules/<name>/build/libs/<name>-<version>.jar`.
+- `./gradlew :plugin:runServer` starts a Paper 26.3 test server with the module jars installed.
 
-### VaultService (persistence)
-High‑level operations:
-- VaultEntity createVault(UUID worldUuid, int x, int y, int z, UUID ownerUuid, String material, String blockData)
-- Vault createVault(UUID worldUuid, int x, int y, int z, UUID ownerUuid, String material, String blockData, List<ItemStack> contents)
-- Optional<VaultEntity> get(UUID vaultUuid)
-- VaultEntity findByLocation(UUID worldUuid, int x, int y, int z)
-- void delete(UUID vaultUuid)
-- void setOwner(UUID vaultUuid, UUID ownerUuid)
-- UUID getOwner(UUID vaultUuid)
-- List<VaultEntity> listByOwner(UUID ownerUuid)
-- List<VaultEntity> listInWorld(UUID worldUuid)
-- void putItem(UUID vaultUuid, int slot, int amount, byte[] itemBytes)
-- void removeItem(UUID vaultUuid, int slot)
-- List<VaultItemEntity> listItems(UUID vaultUuid)
-
-Example: create a vault and get its items 
-```java
-Vault vault = vaultService.createVault(world.getUID(), x, y, z, ownerUuid, materialName, blockData, capturedItems);
-List<ItemStack> items = vault.contents();
-```
-
-### WorldGuardService (regions)
-Use to query regions for permissions or to guide UI:
-- List<VaultRegion> getRegionsAt(Block block)
-- List<VaultRegion> getRegionsIn(World world)
-
-### BoltService (protections)
-Owner and protection utilities:
-- UUID getOwner(Block block)
-- boolean isOwner(UUID playerUUID, Block block)
-- List<Block> getProtectedBlocks(UUID playerUUID, BoundingBox box, World world)
-- List<Block> getProtectedBlocksIn(BoundingBox box, World world)
-- void removeProtection(Block block)
-- void createProtection(Block block, UUID ownerUuid)
-
-### Data model overview
-At a glance:
-- Vault: identified by a UUID; bound to (worldUuid, x, y, z); has ownerUuid and metadata about the original block (material, blockData); createdAt timestamp is stored.
-- Vault items: each record stores slot index, amount, and a serialized item payload.
-- World dictionary: worlds are synchronized on enable to ensure referential integrity.
-
-Concurrency and threading:
-- Heavy or I/O operations run asynchronously.
-- UI interactions (menus, inventories) marshal back to the main thread when needed.
-
-### Extending and integrating
-- Add your own UI flows by implementing dialogs and calling VaultService.
-- Build region‑aware rules using WorldGuardService (e.g., owners/memberships with VaultRegion.isOwner/isMember).
-- Compose with Bolt protections when transforming blocks.
+See `CLAUDE.md` for the project layout and conventions.
 
 ### Credits
 
