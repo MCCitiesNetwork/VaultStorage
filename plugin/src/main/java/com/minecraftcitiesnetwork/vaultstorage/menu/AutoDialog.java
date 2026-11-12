@@ -26,7 +26,7 @@ import java.util.Objects;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
-public class AutoDialog {
+public final class AutoDialog {
     private final Dialog internal;
 
     private AutoDialog(@NotNull Dialog internal) {

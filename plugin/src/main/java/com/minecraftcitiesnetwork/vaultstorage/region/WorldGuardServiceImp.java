@@ -29,7 +29,7 @@ import java.util.UUID;
  * - Every call adapts the Bukkit world to WorldEdit and pulls the current regions from WorldGuard's RegionManager.
  * - This avoids cache invalidation complexity because regions can change frequently at runtime.
  */
-public class WorldGuardServiceImp implements WorldGuardService {
+public final class WorldGuardServiceImp implements WorldGuardService {
 
     private final RegionContainer regionContainer;
 

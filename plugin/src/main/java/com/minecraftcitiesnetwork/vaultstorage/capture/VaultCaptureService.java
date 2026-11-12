@@ -64,7 +64,7 @@ import com.minecraftcitiesnetwork.vaultstorage.capture.HangingVaultSupport;
  * - Must run on the main server thread because it interacts with the world (block state and inventories).
  *
  */
-public class VaultCaptureService {
+public final class VaultCaptureService {
 
     private final @NotNull VaultStoragePlugin plugin;
 
@@ -181,9 +181,7 @@ public class VaultCaptureService {
 
         // 1. Non-container path: treat as empty capture (remove protection)
         if (!(block.getState() instanceof Container container)) {
-            if (bolt != null) {
-                try { bolt.removeProtection(block); } catch (Throwable ignored) {}
-            }
+            unprotect(block);
             return new CaptureOutcome(true, true, originalOwner, finalOwner, List.of());
         }
 
@@ -208,11 +206,7 @@ public class VaultCaptureService {
             // If both halves of the double chest are empty, we proceed to remove the protection
             // from both blocks to fully unprotect the empty container.
             if (targetIsEmpty) {
-                if (bolt != null) {
-                    try {
-                        bolt.removeProtection(block); // bolt handles 1 protection for double chests
-                    } catch (Throwable ignored) {}
-                }
+                unprotect(block);
                 return new CaptureOutcome(true, true, originalOwner, finalOwner, List.of());
             }
         }
@@ -221,15 +215,27 @@ public class VaultCaptureService {
 
         if (targetIsEmpty) {
             // Single chest that is empty -> Just remove protection
-            if (bolt != null) {
-                try { bolt.removeProtection(block); } catch (Throwable ignored) {}
-            }
+            unprotect(block);
             return new CaptureOutcome(true, true, originalOwner, finalOwner, List.of());
         }
 
         // Nothing is removed here. The caller stores the vault through storeThenRemove, which
         // drops this block's protection and re-protects the other half once the items are safe.
         return new CaptureOutcome(false, false, originalOwner, finalOwner, List.copyOf(otherHalves));
+    }
+
+    /** Removes the block's Bolt protection. A failure is logged and the block stays protected. */
+    private void unprotect(@NotNull Block block) {
+        BoltService bolt = this.plugin.bolt();
+        if (bolt == null) {
+            return;
+        }
+        try {
+            bolt.removeProtection(block);
+        } catch (RuntimeException ex) {
+            this.plugin.getLogger().log(Level.WARNING, "Could not remove the Bolt protection at "
+                    + block.getWorld().getName() + " " + block.getX() + "," + block.getY() + "," + block.getZ() + ".", ex);
+        }
     }
 
     /**
@@ -498,11 +504,7 @@ public class VaultCaptureService {
                 // Empty item frame: unlock supporting block only (like empty non-container); do not vault or remove entity.
                 if (hang instanceof ItemFrame frame && HangingVaultSupport.isItemFrameDisplayEmpty(frame)) {
                     BoltService bolt = plugin.bolt();
-                    if (bolt != null) {
-                        try {
-                            bolt.removeProtection(supporting);
-                        } catch (Throwable ignored) {}
-                    }
+                    unprotect(supporting);
                     actor.sendMessage(plugin.text().of(MessageKeys.CAPTURE_EMPTY_CAPTURE_SKIPPED));
                     return;
                 }
@@ -638,9 +640,7 @@ public class VaultCaptureService {
         ChestShopService chestShop = plugin.chestShop();
         BoltService bolt = plugin.bolt();
         for (Block signBlock : shopSigns) {
-            if (bolt != null) {
-                try { bolt.removeProtection(signBlock); } catch (Throwable ignored) {}
-            }
+            unprotect(signBlock);
             chestShop.removeShopSign(actor, signBlock);
         }
     }

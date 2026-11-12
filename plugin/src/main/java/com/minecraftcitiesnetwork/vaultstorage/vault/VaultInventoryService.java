@@ -37,7 +37,7 @@ import org.jetbrains.annotations.Nullable;
  * Editing claims the vault for as long as it is open, so two people cannot edit it, or edit it
  * while it is being placed, and saves the whole contents in one transaction on close.
  */
-public class VaultInventoryService implements Listener {
+public final class VaultInventoryService implements Listener {
 
     private final @NotNull VaultStoragePlugin plugin;
 

@@ -16,7 +16,7 @@ import java.util.Map;
  * Lightweight, multi-purpose loading child menu to indicate progress while work happens asynchronously.
  * This menu is YAML-configurable and supports placeholders like other menus.
  */
-public class LoadingMenu extends ChildMenuImp {
+public final class LoadingMenu extends ChildMenuImp {
 
 
 

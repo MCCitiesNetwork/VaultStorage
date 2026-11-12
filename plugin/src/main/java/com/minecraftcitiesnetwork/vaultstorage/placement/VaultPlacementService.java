@@ -38,7 +38,7 @@ import org.jetbrains.annotations.Nullable;
  * <p>The vault is never deleted before its block exists, and a claimed vault cannot be placed a
  * second time, so a failure at any step leaves the items in at least one place and never two.
  */
-public class VaultPlacementService {
+public final class VaultPlacementService {
 
     private final @NotNull VaultStoragePlugin plugin;
 

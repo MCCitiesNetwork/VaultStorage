@@ -30,7 +30,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.function.Consumer;
 
-public class VaultRegionScanner {
+public final class VaultRegionScanner {
 
     private final @NotNull VaultStoragePlugin plugin;
 

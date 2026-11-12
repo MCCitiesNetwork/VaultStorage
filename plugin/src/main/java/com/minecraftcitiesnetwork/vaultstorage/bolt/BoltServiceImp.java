@@ -23,7 +23,7 @@ import java.util.UUID;
  * Service implementation that integrates with Bolt to query and manage block protections.
  * This implementation delegates double chest handling to higher-level services.
  */
-public class BoltServiceImp implements BoltService {
+public final class BoltServiceImp implements BoltService {
 
     private final BoltAPI api;
     private final VaultStoragePlugin plugin;

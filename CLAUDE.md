@@ -40,7 +40,7 @@ Under `com.minecraftcitiesnetwork.vaultstorage`, grouped by feature:
 
 | Package | Holds |
 | --- | --- |
-| (root) | `VaultStoragePlugin`, `Integrations` |
+| (root) | `VaultStoragePlugin` (owns and hands out every service), `Integrations` |
 | `capture` | capture service, capture policy, hanging support |
 | `placement` | placement service |
 | `vault` | vault types, the vault inventory, item serialization, events |
@@ -75,9 +75,9 @@ step of the programme below.
   `required: false` and `join-classpath: true`. Module class loaders are parented to the host's.
 - **Relocations live only in `vaultstorage-shared-relocation`.** Modules apply it too, so their
   references to plugin-infrastructure land on the host's relocated copy.
-- **New and rewritten classes meet the playbook's `code-style` in full.** Classes that have only
-  been moved keep their old style (`getInstance()`, `get` accessors, missing nullability
-  annotations) until their step.
+- **Every class meets the playbook's `code-style`.** There is no static way to the plugin: a
+  class takes what it needs in its constructor, and a child menu takes the plugin from its
+  parent. `VaultCaptureService` is the one class still to be split; see the step 7 spec.
 - **`VaultRepository` is the only way to the database.** One method is one unit of work and one
   transaction. It blocks: call it on `VaultStoragePlugin.databaseExecutor()`, never on the main
   thread. Outcomes are sealed result types; only a broken database is an exception.
@@ -148,7 +148,7 @@ Specs and plans are in `docs/superpowers/`. One spec and one plan per step.
 | 4. Config and messages | done | Configurate records, `messages.yml`, reload |
 | 5. Commands and permissions | done | Brigadier, `vaultstorage.command.*` |
 | 6. Menus | done | vault labels, delete confirmation, loading dialogs that end, whole-sentence keys |
-| 7. Sweep | outline | code style everywhere, dead code removed |
+| 7. Sweep | done, except splitting `VaultCaptureService` | no singleton, dead code removed, accessors, annotations |
 
 Step 3 so far, on `refactor/capture-placement` (plan: `docs/superpowers/plans/2026-11-12-capture-placement-autovault.md`):
 

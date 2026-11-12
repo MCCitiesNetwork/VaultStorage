@@ -6,7 +6,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 /** Resolves what a player typed, a UUID or a name, to a UUID. */
-public class UniqueIdentifierResolver {
+public final class UniqueIdentifierResolver {
 
     private final @NotNull NameSource names;
 

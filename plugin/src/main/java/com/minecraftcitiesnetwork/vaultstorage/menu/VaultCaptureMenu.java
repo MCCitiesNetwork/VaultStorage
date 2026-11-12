@@ -25,7 +25,7 @@ import java.util.Map;
  * </ul>
  * Action bar reflects vaultability in real time using the same logic. Session remains active until the player cancels with a left-click.
  */
-public class VaultCaptureMenu extends ParentMenuImp {
+public final class VaultCaptureMenu extends ParentMenuImp {
 
 
 

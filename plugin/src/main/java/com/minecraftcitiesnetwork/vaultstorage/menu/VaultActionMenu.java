@@ -35,7 +35,7 @@ import java.util.UUID;
  * Child dialog that lets a player choose an action (view, edit, copy) for a vault.
  * Database work runs on the database executor.
  */
-public class VaultActionMenu extends ChildMenuImp {
+public final class VaultActionMenu extends ChildMenuImp {
 
     private static final String KEY_ACTION = "ACTION";
 

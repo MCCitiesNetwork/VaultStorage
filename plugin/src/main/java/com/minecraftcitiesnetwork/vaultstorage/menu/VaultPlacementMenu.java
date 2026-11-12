@@ -32,7 +32,7 @@ import java.util.UUID;
 /**
  * Placement UI that mirrors the capture flow but places a selected vault relatively to the clicked face.
  */
-public class VaultPlacementMenu extends ChildMenuImp {
+public final class VaultPlacementMenu extends ChildMenuImp {
 
     private final UUID vaultId;
 

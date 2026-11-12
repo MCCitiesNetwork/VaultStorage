@@ -26,7 +26,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 
-public class VaultScanServiceImpl implements VaultScanService {
+public final class VaultScanServiceImpl implements VaultScanService {
 
     private final @NotNull VaultStoragePlugin plugin;
 

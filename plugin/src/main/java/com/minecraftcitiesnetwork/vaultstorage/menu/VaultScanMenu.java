@@ -50,7 +50,7 @@ import java.util.concurrent.ConcurrentHashMap;
  *   <li>Containers with items are vaulted and removed; remaining halves of double chests are re-protected.</li>
  * </ul>
  */
-public class VaultScanMenu extends ChildMenuImp {
+public final class VaultScanMenu extends ChildMenuImp {
 
     public enum FilterMode {
         BLOCK,

@@ -18,7 +18,7 @@ import java.util.UUID;
  * - A single, managed action bar task to avoid leaks across modes.
  * - A simple mode flag to enforce mutual exclusion between flows.
  */
-public class VaultSessionManager {
+public final class VaultSessionManager {
     /** Current player session mode. */
     public enum Mode { NONE, CAPTURE, PLACEMENT }
 
@@ -59,7 +59,7 @@ public class VaultSessionManager {
         /** Cancels and clears the current action bar task if any. */
         public void clearActionBarTask() {
             if (this.actionBarTask != null) {
-                try { this.actionBarTask.cancel(); } catch (Throwable ignored) {}
+                this.actionBarTask.cancel();
                 this.actionBarTask = null;
             }
         }

@@ -24,7 +24,7 @@ import java.util.Map;
  * Child menu that lists regions in the current world with pagination and a text filter.
  * Selecting a region opens VaultScanMenu in results mode.
  */
-public class VaultRegionListMenu extends ChildMenuImp {
+public final class VaultRegionListMenu extends ChildMenuImp {
 
 
     /**

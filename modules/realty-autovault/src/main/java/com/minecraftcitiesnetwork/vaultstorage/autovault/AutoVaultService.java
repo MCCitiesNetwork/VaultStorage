@@ -42,7 +42,7 @@ import java.util.function.Function;
  * is not in the allowed set ({new occupant} plus the region's WorldGuard owners/members). Runs on the
  * main thread; chunk loads are async.
  */
-public class AutoVaultService {
+public final class AutoVaultService {
 
     private final VaultStoragePlugin plugin;
     // Main-thread only: populated from the Realty event handler and the scheduled sweep task.

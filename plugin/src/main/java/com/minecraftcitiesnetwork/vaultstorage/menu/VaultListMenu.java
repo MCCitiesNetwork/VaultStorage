@@ -39,7 +39,7 @@ import org.jetbrains.annotations.Nullable;
  * <p>The page is read on the database executor, one count and one query however many vaults
  * exist. It used to read every vault on the main thread and show each as a button.
  */
-public class VaultListMenu extends ChildMenuImp {
+public final class VaultListMenu extends ChildMenuImp {
 
     /** Vaults per page, from settings.yml; read each time, so a reload takes effect at the next open. */
     private int pageSize() {
