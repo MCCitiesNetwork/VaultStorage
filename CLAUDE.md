@@ -140,6 +140,9 @@ part of `build`. It needs Docker and Node.
 - Use `minecraft:tp` and `minecraft:item`, so another plugin's command of the same name cannot
   shadow them.
 - Bolt answers on the action bar, which a bot's chat log does not hold.
+- Click an entity with the "interact at" form of `use_entity` (`mouse: 2`); the plain form does
+  not reach this server from a 1.21.11 bot. See `tests/containers.spec.ts`.
+- A chest's `type` is from its own point of view: facing north, `left` is the west block.
 - Menus are Paper dialogs: `tests/dialogs.ts` reads and clicks them. A loading dialog comes
   between most screens.
 - The test server's log is `plugin/src/test/e2e/generated/local/run/logs/latest.log`.
@@ -157,8 +160,10 @@ member vaulting a non-member's chest; a non-member, a co-member's chest and a ch
 region all being refused; placement refused on land the owner has no part in and allowed on
 their own GriefPrevention claim.
 
-Not covered live: sweeps (they need Realty to trigger one), hangings, double chests and
-ChestShop. Shared steps are in `tests/vaults.ts`.
+Also covered live: one half of a double chest being vaulted and the other staying locked for its
+owner; a locked item frame being vaulted with the item it shows.
+
+Not covered live: sweeps (they need Realty to trigger one) and ChestShop. Shared steps are in `tests/vaults.ts`.
 
 ## Rules for the capture and placement code
 
