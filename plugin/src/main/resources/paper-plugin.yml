@@ -1,17 +1,23 @@
 name: VaultStorage
 version: "${version}"
 main: com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin
-api-version: '1.21'
-authors: [ Alepando ]
-depend: [ Bolt , WorldGuard, WorldEdit, Essentials ]
-softdepend: [ ChestShop, Realty ]
+api-version: "26.3"
+description: Stores locked containers as vaults when a region changes hands.
+authors: [Alepando]
 
-commands:
-  vault:
-    description: Vault storage tools
-    usage: /vault [menu]
-    permission: vaultstorage.user
+# join-classpath lets this plugin, and the modules it loads, reach each dependency's classes.
+dependencies:
+  server:
+    Bolt:       { load: BEFORE, required: true,  join-classpath: true }
+    WorldGuard: { load: BEFORE, required: true,  join-classpath: true }
+    WorldEdit:  { load: BEFORE, required: true,  join-classpath: true }
+    Essentials: { load: BEFORE, required: true,  join-classpath: true }
+    floodgate:  { load: BEFORE, required: false, join-classpath: true }
+    Namebook:   { load: BEFORE, required: false, join-classpath: true }
+    ChestShop:  { load: BEFORE, required: false, join-classpath: true }
+    Realty:     { load: BEFORE, required: false, join-classpath: true }
 
+# Every permission is declared here with a description and a default.
 permissions:
   vaultstorage.user:
     description: Allows using basic vault commands

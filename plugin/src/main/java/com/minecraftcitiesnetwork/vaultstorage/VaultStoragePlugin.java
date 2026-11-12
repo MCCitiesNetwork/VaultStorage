@@ -9,7 +9,9 @@ import com.minecraftcitiesnetwork.vaultstorage.chestshop.ChestShopService;
 import com.minecraftcitiesnetwork.vaultstorage.scan.VaultScanService;
 import com.minecraftcitiesnetwork.vaultstorage.database.VaultService;
 import com.minecraftcitiesnetwork.vaultstorage.region.WorldGuardService;
+import com.minecraftcitiesnetwork.vaultstorage.command.LegacyVaultCommand;
 import com.minecraftcitiesnetwork.vaultstorage.command.VaultCommand;
+import io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents;
 import com.minecraftcitiesnetwork.vaultstorage.database.DatabaseSchema;
 import com.minecraftcitiesnetwork.vaultstorage.database.MySQLManager;
 import com.minecraftcitiesnetwork.vaultstorage.database.VaultDAOImpl;
@@ -169,11 +171,9 @@ public final class VaultStoragePlugin extends JavaPlugin {
         VaultPlacementMenu.ensureConfig();
         LoadingMenu.ensureConfig();
 
-        if (getCommand("vault") != null) {
-            var cmd = new VaultCommand();
-            getCommand("vault").setExecutor(cmd);
-            getCommand("vault").setTabCompleter(cmd);
-        }
+        VaultCommand vaultCommand = new VaultCommand();
+        getLifecycleManager().registerEventHandler(LifecycleEvents.COMMANDS, event ->
+                event.registrar().register("vault", "Vault storage tools", new LegacyVaultCommand(vaultCommand)));
 
         // Validate defined permissions vs plugin.yml
         validatePermissionsMapping();
@@ -190,7 +190,7 @@ public final class VaultStoragePlugin extends JavaPlugin {
     private void validatePermissionsMapping() {
         try {
             java.util.Set<String> pluginNodes = new java.util.HashSet<>();
-            for (Permission p : getDescription().getPermissions()) {
+            for (Permission p : getPluginMeta().getPermissions()) {
                 pluginNodes.add(p.getName());
             }
             java.util.Set<String> enumNodes = new java.util.HashSet<>();
