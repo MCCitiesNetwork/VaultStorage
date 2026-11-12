@@ -14,8 +14,6 @@ import com.minecraftcitiesnetwork.vaultstorage.database.DatabaseSchema;
 import com.minecraftcitiesnetwork.vaultstorage.database.MySQLManager;
 import com.minecraftcitiesnetwork.vaultstorage.database.VaultDAOImpl;
 import com.minecraftcitiesnetwork.vaultstorage.database.WorldEntity;
-import com.minecraftcitiesnetwork.vaultstorage.autovault.RealtyOccupantChangeListener;
-import com.minecraftcitiesnetwork.vaultstorage.autovault.AutoVaultService;
 import com.minecraftcitiesnetwork.vaultstorage.bolt.BoltServiceImp;
 import com.minecraftcitiesnetwork.vaultstorage.capture.VaultCaptureService;
 import com.minecraftcitiesnetwork.vaultstorage.vault.VaultInventoryService;
@@ -23,7 +21,6 @@ import com.minecraftcitiesnetwork.vaultstorage.placement.VaultPlacementService;
 import com.minecraftcitiesnetwork.vaultstorage.scan.VaultScanServiceImpl;
 import com.minecraftcitiesnetwork.vaultstorage.database.VaultServiceImpl;
 import com.minecraftcitiesnetwork.vaultstorage.region.WorldGuardServiceImp;
-import com.minecraftcitiesnetwork.vaultstorage.config.ConfigPaths;
 import com.minecraftcitiesnetwork.vaultstorage.session.VaultSessionManager;
 import com.minecraftcitiesnetwork.vaultstorage.config.ConfigInitializer;
 import com.minecraftcitiesnetwork.vaultstorage.menu.VaultActionMenu;
@@ -62,7 +59,6 @@ public final class VaultStoragePlugin extends JavaPlugin {
     private VaultPlacementService placementService;
     private VaultInventoryService inventoryService;
     private VaultScanService scanService;
-    private AutoVaultService autoVaultService;
 
 
     // Integration services
@@ -170,14 +166,6 @@ public final class VaultStoragePlugin extends JavaPlugin {
         // Validate defined permissions vs plugin.yml
         validatePermissionsMapping();
 
-        // Realty soft dependency: auto-vault containers when a region's owner/tenant changes.
-        if (getServer().getPluginManager().getPlugin("Realty") != null
-                && getConfig().getBoolean(ConfigPaths.AUTOVAULT_ENABLED.getPath(), true)) {
-            this.autoVaultService = new AutoVaultService(this);
-            getServer().getPluginManager().registerEvents(new RealtyOccupantChangeListener(autoVaultService), this);
-            getLogger().info("Realty detected: auto-vault on region occupant change enabled.");
-        }
-
         startModules();
     }
 
@@ -237,7 +225,6 @@ public final class VaultStoragePlugin extends JavaPlugin {
         if (this.modules != null) {
             this.modules.stop();
         }
-        if (this.autoVaultService != null) this.autoVaultService.shutdown();
         if (this.mysql != null) this.mysql.disconnect();
     }
 
