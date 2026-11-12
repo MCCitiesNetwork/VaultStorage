@@ -1,0 +1,39 @@
+[versions]
+java = "25"
+minecraft = "26.3"
+paper-api = "26.3.+"
+annotations = "24.1.0"
+junit = "5.14.3"
+checkstyle = "14.4.0"
+shadow = "9.4.1"
+run-paper = "3.1.0"
+plugin-infrastructure = "1.0.0-SNAPSHOT"
+namebook-api = "1.0.0-SNAPSHOT"
+democracylib = "e5ddf4ac24"
+bolt = "1.1.33"
+worldguard = "7.0.20"
+essentialsx = "2.21.2"
+floodgate-api = "2.2.5-SNAPSHOT"
+chestshop = "3.12.2"
+realty-paper-api = "1.4.0"
+
+[libraries]
+shadow-gradle-plugin = { module = "com.gradleup.shadow:shadow-gradle-plugin", version.ref = "shadow" }
+paper-api = { module = "io.papermc.paper:paper-api", version.ref = "paper-api" }
+annotations = { module = "org.jetbrains:annotations", version.ref = "annotations" }
+junit-bom = { module = "org.junit:junit-bom", version.ref = "junit" }
+junit-jupiter = { module = "org.junit.jupiter:junit-jupiter" }
+junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher" }
+plugin-infrastructure = { module = "com.minecraftcitiesnetwork:plugin-infrastructure", version.ref = "plugin-infrastructure" }
+namebook-api = { module = "com.minecraftcitiesnetwork:namebook-api", version.ref = "namebook-api" }
+democracylib = { module = "com.github.MCCitiesNetwork:DemocracyLib", version.ref = "democracylib" }
+bolt-bukkit = { module = "org.popcraft:bolt-bukkit", version.ref = "bolt" }
+bolt-common = { module = "org.popcraft:bolt-common", version.ref = "bolt" }
+worldguard = { module = "com.sk89q.worldguard:worldguard-bukkit", version.ref = "worldguard" }
+essentialsx = { module = "net.essentialsx:EssentialsX", version.ref = "essentialsx" }
+floodgate-api = { module = "org.geysermc.floodgate:api", version.ref = "floodgate-api" }
+chestshop = { module = "com.acrobot.chestshop:chestshop", version.ref = "chestshop" }
+realty-paper-api = { module = "io.github.md5sha256:realty-paper-api", version.ref = "realty-paper-api" }
+
+[plugins]
+run-paper = { id = "xyz.jpenilla.run-paper", version.ref = "run-paper" }
