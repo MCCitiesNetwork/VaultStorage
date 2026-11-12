@@ -1,9 +1,6 @@
 package com.minecraftcitiesnetwork.vaultstorage.capture;
 
 import io.papermc.paper.datacomponent.DataComponentTypes;
-import com.minecraftcitiesnetwork.vaultstorage.database.legacy.VaultService;
-import com.minecraftcitiesnetwork.vaultstorage.database.legacy.VaultEntity;
-import com.minecraftcitiesnetwork.vaultstorage.database.legacy.VaultItemEntity;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.entity.GlowItemFrame;
@@ -14,10 +11,7 @@ import org.bukkit.inventory.ItemStack;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
 
 /**
  * Helpers for hanging capture: supporting block resolution, stacks to store, and merge target selection.
@@ -77,35 +71,5 @@ public final class HangingVaultSupport {
             return out;
         }
         return List.of();
-    }
-
-    /** Vault id and first slot index for a batch append. */
-    public record TargetVault(@NotNull UUID vaultUuid, int startSlot) {}
-
-    /**
-     * Oldest owned vault first (by {@link VaultEntity#createdAtEpochMillis}), first with enough tail slots.
-     * @param vaultService vault access
-     * @param ownerUuid vault owner
-     * @param neededSlots contiguous slots required
-     * @return target vault and start slot, or empty if none fit
-     */
-    public static @NotNull Optional<TargetVault> findFirstVaultWithSpace(
-            @NotNull VaultService vaultService,
-            @NotNull UUID ownerUuid,
-            int neededSlots
-    ) {
-        if (neededSlots <= 0 || neededSlots > MAX_VAULT_SLOTS) {
-            return Optional.empty();
-        }
-        List<VaultEntity> owned = new ArrayList<>(vaultService.listByOwner(ownerUuid));
-        owned.sort(Comparator.comparingLong(e -> e.createdAtEpochMillis != null ? e.createdAtEpochMillis : Long.MAX_VALUE));
-        for (VaultEntity ve : owned) {
-            List<VaultItemEntity> items = vaultService.listItems(ve.uuid);
-            int maxSlot = items.stream().mapToInt(it -> it.slot).max().orElse(-1);
-            if (maxSlot + neededSlots <= MAX_VAULT_SLOTS - 1) {
-                return Optional.of(new TargetVault(ve.uuid, maxSlot + 1));
-            }
-        }
-        return Optional.empty();
     }
 }

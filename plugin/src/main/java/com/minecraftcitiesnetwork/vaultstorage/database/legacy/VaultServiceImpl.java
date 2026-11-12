@@ -114,6 +114,12 @@ public final class VaultServiceImpl implements VaultService {
         vaultEntity.material = storedMaterial;
         vaultEntity.blockData = blockData;
 
+        return vaultEntity;
+    }
+
+    @Override
+    public void mailOwner(@NotNull UUID worldUuid, @NotNull UUID actor, int x, int y, int z,
+                          @NotNull UUID ownerUuid) {
         Essentials essentials = VaultStoragePlugin.getInstance().getEssentials();
         User sender = essentials.getUser(actor);
 
@@ -121,7 +127,7 @@ public final class VaultServiceImpl implements VaultService {
 
         User recipient = essentials.getUser(ownerUuid);
         if(sender == null || recipient == null) {
-            return vaultEntity;
+            return;
         }
         String senderName = sender.getName();
         String recipientName = recipient.getName();
@@ -138,8 +144,6 @@ public final class VaultServiceImpl implements VaultService {
                 .serialize(MiniMessageUtil.parseOrPlain(cfg.vaultCreatedMessage, placeholders));
 
         VaultStoragePlugin.getInstance().getMailService().sendMail(recipient, sender, message);
-
-        return vaultEntity;
     }
 
     private void addRegionPlaceHolder(@NotNull UUID worldUuid, int x, int y, int z, Map<String, String> placeholders) {

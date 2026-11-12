@@ -5,7 +5,6 @@ import com.minecraftcitiesnetwork.vaultstorage.vault.Dto;
 import com.minecraftcitiesnetwork.vaultstorage.capture.PlayerVaultEvent;
 import com.minecraftcitiesnetwork.vaultstorage.bolt.BoltService;
 import com.minecraftcitiesnetwork.vaultstorage.chestshop.ChestShopService;
-import com.minecraftcitiesnetwork.vaultstorage.database.legacy.VaultService;
 import com.minecraftcitiesnetwork.vaultstorage.vault.VaultDtoImp;
 import com.minecraftcitiesnetwork.vaultstorage.vault.VaultImp;
 import com.minecraftcitiesnetwork.vaultstorage.vault.ItemSerialization;
@@ -49,9 +48,14 @@ import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executor;
+import java.util.logging.Level;
+import com.minecraftcitiesnetwork.vaultstorage.database.AppendResult;
+import com.minecraftcitiesnetwork.vaultstorage.database.NewVault;
+import com.minecraftcitiesnetwork.vaultstorage.database.VaultItem;
+import org.bukkit.Chunk;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
-import com.minecraftcitiesnetwork.vaultstorage.database.legacy.VaultItemEntity;
 import com.minecraftcitiesnetwork.vaultstorage.capture.VaultCapturePolicy;
 import com.minecraftcitiesnetwork.vaultstorage.permission.VaultPermission;
 import com.minecraftcitiesnetwork.vaultstorage.session.VaultSessionManager;
@@ -71,17 +75,6 @@ import org.jspecify.annotations.NonNull;
  *
  */
 public class VaultCaptureService {
-
-    /**
-     * Serializes hanging persistence per Bolt owner across every caller of {@link #persistHangingStacks} — both the
-     * offline auto-vault sweep and the interactive capture session dispatch it on async tasks. Each captured hanging
-     * runs its find-or-create-vault, slot assignment, and putItems as one atomic unit; without this, concurrent
-     * same-owner captures race — both read the same free slot (which {@code putItems} then overwrites via ON
-     * DUPLICATE KEY UPDATE, losing one hanging) or both create a fresh vault. Keyed by owner so unrelated owners
-     * still persist in parallel. Entries are retained for the process lifetime — one bare monitor per distinct owner,
-     * bounded by the player base; do not add eviction, which would reintroduce a lock-lifecycle race.
-     */
-    private final ConcurrentHashMap<UUID, Object> hangingPersistLocks = new ConcurrentHashMap<>();
 
     /**
      * Validates that a UUID is not null and not all-zeros.
@@ -149,20 +142,16 @@ public class VaultCaptureService {
     }
 
     /**
-     * Captures the given container block's inventory and metadata into a new Vault.
-     * Contract:
-     * - The block must be a Container; otherwise throws IllegalArgumentException. (Non-container blocks never reach this path.)
-     * - Clears the block's inventory and removes the block (sets to AIR).
-     * - Returns a new {@link VaultImp} with items, material, location, timestamp, and block data string.
-     * - Does NOT perform an emptiness check; callers should invoke {@link #isContainerEmpty(Block)} beforehand when conditional behavior is required.
-     * <p>This method must be called on the main thread.</p>
+     * Describes the container as the vault it would become: its items, material, location and
+     * block data. Reads only; the block is removed by {@link #storeThenRemove} once the vault is
+     * stored. Must be called on the main thread.
      */
-    public VaultImp captureFromBlock(Player actor, Block block) {
-        return captureFromBlock(actor.getUniqueId(), block);
+    public VaultImp describeAsVault(Player actor, Block block) {
+        return describeAsVault(actor.getUniqueId(), block);
     }
 
-    /** Player-free variant of {@link #captureFromBlock(Player, Block)}; the vault is owned by {@code vaultOwnerUuid}. */
-    public VaultImp captureFromBlock(UUID vaultOwnerUuid, Block block) {
+    /** Player-free variant of {@link #describeAsVault(Player, Block)}. */
+    public VaultImp describeAsVault(UUID vaultOwnerUuid, Block block) {
         if (!(block.getState() instanceof Container container)) {
             throw new IllegalArgumentException("Target block is not a container.");
         }
@@ -172,13 +161,11 @@ public class VaultCaptureService {
                 .filter(is -> is.getType() != Material.AIR && is.getAmount() > 0)
                 .collect(Collectors.toList());
 
-        // Clear inventory and remove block
-        captureInv.clear();
+        // Reads only. The block is removed by the capture pipeline, after the vault is stored.
         Material material = block.getType();
         var location = block.getLocation();
         Instant when = Instant.now();
         String blockDataString = block.getBlockData().getAsString();
-        block.setType(Material.AIR);
 
         UUID vaultId = UUID.randomUUID();
         return new VaultImp(vaultOwnerUuid, vaultId, stacks, material, location, when, blockDataString);
@@ -266,27 +253,45 @@ public class VaultCaptureService {
             return new CaptureOutcome(true, true, null, originalOwner, finalOwner, List.of());
         }
 
-        // Always remove protection from clicked block before capturing
-        if (bolt != null) {
-            try { bolt.removeProtection(block); } catch (Throwable ignored) {}
-        }
+        // Nothing is removed here. The caller stores the vault through storeThenRemove, which
+        // drops this block's protection and re-protects the other half once the items are safe.
+        VaultImp vault = describeAsVault(finalOwnerFallback, block);
 
-        // Re-protect other half(s) immediately if they exist
-        List<Block> reProtected = new ArrayList<>();
-        if (bolt != null && !otherHalves.isEmpty()) {
-            for (Block half : otherHalves) {
-                try {
-                    bolt.createProtection(half, finalOwner);
-                    reProtected.add(half);
-                } catch (Throwable ignored) {}
-            }
-        }
-
-        // VaultImp owner carries the capturing identity; persistence uses CaptureOutcome.finalOwner().
-        VaultImp vault = captureFromBlock(finalOwnerFallback, block);
-
-        return new CaptureOutcome(false, true, vault, originalOwner, finalOwner, List.copyOf(reProtected));
+        return new CaptureOutcome(false, false, vault, originalOwner, finalOwner, List.copyOf(otherHalves));
     }
+
+    /**
+     * Stores the container as a vault for {@code owner}, then removes it from the world. Call on
+     * the main thread; the future completes there and never exceptionally.
+     */
+    private @NotNull CompletableFuture<CaptureResult> storeThenRemove(@NotNull Block block, @NotNull UUID owner,
+                                                                    @NotNull List<Block> otherHalves) {
+        var plugin = VaultStoragePlugin.getInstance();
+        CapturePipeline<Block> pipeline = new CapturePipeline<>(plugin.repository(),
+                new BukkitContainerAccess(plugin.getBoltService(), owner, otherHalves, plugin.getLogger()),
+                plugin.databaseExecutor(), plugin.getServer().getScheduler().getMainThreadExecutor(plugin),
+                plugin.getLogger());
+        return pipeline.capture(block, owner);
+    }
+
+    /** Mails the owner off the main thread; a failed mail is logged and changes nothing else. */
+    private static void mailOwner(@NotNull Block block, @NotNull UUID actor, @NotNull UUID owner) {
+        var plugin = VaultStoragePlugin.getInstance();
+        UUID world = block.getWorld().getUID();
+        int x = block.getX();
+        int y = block.getY();
+        int z = block.getZ();
+        CompletableFuture.runAsync(() -> plugin.getVaultService().mailOwner(world, actor, x, y, z, owner),
+                plugin.databaseExecutor()).exceptionally(failure -> {
+                    plugin.getLogger().log(Level.WARNING, "Could not mail " + owner + " about a new vault.", failure);
+                    return null;
+                });
+    }
+
+    private static final String CHANGED_MEANWHILE =
+            "<yellow>That container changed while it was being saved. Nothing was taken; try again.</yellow>";
+    private static final String SAVE_FAILED =
+            "<red>The vault could not be saved. Nothing was removed.</red>";
 
     private static @NotNull List<Block> getHalves(Block block, Container container) {
         List<Block> otherHalves = new ArrayList<>();
@@ -526,7 +531,7 @@ public class VaultCaptureService {
                 var plugin = VaultStoragePlugin.getInstance();
                 UUID finalOwner = outcome.finalOwner();
 
-                ensureValidOwnerUUID(finalOwner, actor).thenAccept(validatedOwner -> {
+                ensureValidOwnerUUID(finalOwner, actor).thenAcceptAsync(validatedOwner -> {
                     if (validatedOwner == null) {
 
                         new BukkitRunnable(){
@@ -547,40 +552,25 @@ public class VaultCaptureService {
                         return;
                     }
 
-                    new BukkitRunnable() {
-                        @Override public void run() {
-                            var vaultService = plugin.getVaultService();
-                            UUID worldId = finalCaptureBlock.getWorld().getUID();
-                            UUID newId;
-                            {
-                                var created = vaultService.createVault(worldId, actor.getUniqueId(), finalCaptureBlock.getX(), finalCaptureBlock.getY(), finalCaptureBlock.getZ(), validatedOwner,
+                    storeThenRemove(finalCaptureBlock, validatedOwner, outcome.reProtectedHalves()).thenAccept(result -> {
+                        busy[0] = false;
+                        switch (result) {
+                            case CaptureResult.Vaulted vaulted -> {
+                                var dto = new VaultDtoImp(vaulted.vault(), validatedOwner, List.of(),
                                         vault.blockMaterial() == null ? null : vault.blockMaterial().name(),
-                                        vault.blockDataString());
-                                newId = created.uuid;
-                                plugin.getLogger().info(
-                                    "[VaultCaptureService] Vault created successfully: ID=" + newId + " Owner=" + validatedOwner + " for player " + actor.getName()
-                                );
+                                        null, System.currentTimeMillis());
+                                plugin.getSessionManager().getOrCreate(actor.getUniqueId()).setLastVaultDto(dto);
+                                actor.sendMessage(MiniMessageUtil.parseOrPlain(texts.capturedOk));
+                                mailOwner(finalCaptureBlock, actor.getUniqueId(), validatedOwner);
+                                new PlayerVaultEvent(actor, vault).callEvent();
                             }
-                            List<VaultItemEntity> batch = toItemBatch(newId, vault.contents());
-                            if (!batch.isEmpty()) {
-                                vaultService.putItems(newId, batch);
-                            }
-                            new BukkitRunnable() {
-                                @Override public void run() {
-                                    var dto = new VaultDtoImp(newId, validatedOwner, List.of(),
-                                            vault.blockMaterial() == null ? null : vault.blockMaterial().name(),
-                                            null, System.currentTimeMillis());
-                                    VaultStoragePlugin.getInstance().getSessionManager().getOrCreate(actor.getUniqueId()).setLastVaultDto(dto);
-                                    actor.sendMessage(MiniMessageUtil.parseOrPlain(texts.capturedOk));
-
-                                    new PlayerVaultEvent(actor, vault).callEvent();
-
-                                    busy[0] = false;
-                                }
-                            }.runTask(plugin);
+                            case CaptureResult.ChangedMeanwhile changed ->
+                                    actor.sendMessage(MiniMessageUtil.parseOrPlain(CHANGED_MEANWHILE));
+                            case CaptureResult.Failed failed ->
+                                    actor.sendMessage(MiniMessageUtil.parseOrPlain(SAVE_FAILED));
                         }
-                    }.runTaskAsynchronously(plugin);
-                });
+                    });
+                }, plugin.getServer().getScheduler().getMainThreadExecutor(plugin));
             }
 
             @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = false)
@@ -636,36 +626,31 @@ public class VaultCaptureService {
                         return;
                     }
 
-                    new BukkitRunnable() {
-                        @Override public void run() {
-                            var plugin = VaultStoragePlugin.getInstance();
-                            UUID vaultUuid = persistHangingStacks(stacks, validatedOwner, actor.getUniqueId(), supporting);
-
-                            new BukkitRunnable() {
-                                @Override public void run() {
-                                    if (hang.isValid()) {
-                                        hang.remove();
-                                    }
-                                    Material vm = stacks.get(0).getType();
-                                    VaultImp vaultEvt = new VaultImp(
-                                            validatedOwner,
-                                            vaultUuid,
-                                            stacks,
-                                            vm,
-                                            supporting.getLocation(),
-                                            Instant.now(),
-                                            supporting.getBlockData().getAsString()
-                                    );
-                                    VaultStoragePlugin.getInstance().getSessionManager().getOrCreate(actor.getUniqueId())
-                                            .setLastVaultDto(new VaultDtoImp(vaultUuid, validatedOwner, List.of(),
-                                                    vm.name(), null, System.currentTimeMillis()));
-                                    actor.sendMessage(MiniMessageUtil.parseOrPlain(texts.capturedOk));
-                                    new PlayerVaultEvent(actor, vaultEvt).callEvent();
-                                    busy[0] = false;
+                    var plugin = VaultStoragePlugin.getInstance();
+                    // Stored first, removed after: a failed save leaves the entity where it is.
+                    CompletableFuture
+                            .supplyAsync(() -> persistHangingStacks(stacks, validatedOwner, actor.getUniqueId(), supporting),
+                                    plugin.databaseExecutor())
+                            .thenAcceptAsync(vaultUuid -> {
+                                if (hang.isValid()) {
+                                    hang.remove();
                                 }
-                            }.runTask(plugin);
-                        }
-                    }.runTaskAsynchronously(VaultStoragePlugin.getInstance());
+                                Material vm = stacks.get(0).getType();
+                                VaultImp vaultEvt = new VaultImp(validatedOwner, vaultUuid, stacks, vm,
+                                        supporting.getLocation(), Instant.now(), supporting.getBlockData().getAsString());
+                                plugin.getSessionManager().getOrCreate(actor.getUniqueId())
+                                        .setLastVaultDto(new VaultDtoImp(vaultUuid, validatedOwner, List.of(),
+                                                vm.name(), null, System.currentTimeMillis()));
+                                actor.sendMessage(MiniMessageUtil.parseOrPlain(texts.capturedOk));
+                                new PlayerVaultEvent(actor, vaultEvt).callEvent();
+                            }, plugin.getServer().getScheduler().getMainThreadExecutor(plugin))
+                            .exceptionally(failure -> {
+                                plugin.getLogger().log(Level.SEVERE, "Hanging capture failed for " + actor.getName()
+                                        + "; the entity was left in place.", failure);
+                                actor.sendMessage(MiniMessageUtil.parseOrPlain(SAVE_FAILED));
+                                return null;
+                            })
+                            .whenComplete((done, failure) -> busy[0] = false);
                 });
             }
         });
@@ -822,8 +807,8 @@ public class VaultCaptureService {
         UUID finalOwner = outcome.finalOwner();
         var plugin = VaultStoragePlugin.getInstance();
 
-        // CRITICAL: Validate finalOwner UUID before persisting
-        ensureValidOwnerUUID(finalOwner, actor).thenAccept(validatedOwner -> {
+        // The owner is validated first; the rest runs on the main thread, where the pipeline starts.
+        ensureValidOwnerUUID(finalOwner, actor).thenAcceptAsync(validatedOwner -> {
             if (validatedOwner == null) {
                 actor.sendMessage(MiniMessageUtil.parseOrPlain(
                     "<red>Error: Could not determine vault owner. Capture aborted.</red>"
@@ -837,37 +822,29 @@ public class VaultCaptureService {
                 return;
             }
 
-            new BukkitRunnable(){
-                @Override public void run() {
-                    VaultService vaultService = plugin.getVaultService();
-                    UUID worldId = block.getWorld().getUID();
-                    UUID newId;
-                    {
-                        var created = vaultService.createVault(worldId, actor.getUniqueId(), block.getX(), block.getY(), block.getZ(), validatedOwner,
-                                vault.blockMaterial() == null ? null : vault.blockMaterial().name(),
-                                vault.blockDataString());
-                        newId = created.uuid;
-                        plugin.getLogger().info(
-                            "[VaultCaptureService] Direct vault created: ID=" + newId + " Owner=" + validatedOwner + " for player " + actor.getName()
-                        );
+            storeThenRemove(block, validatedOwner, outcome.reProtectedHalves()).thenAccept(result -> {
+                switch (result) {
+                    case CaptureResult.Vaulted vaulted -> {
+                        plugin.getSessionManager().getOrCreate(actor.getUniqueId())
+                                .setLastVaultDto(new VaultDtoImp(vaulted.vault(), validatedOwner, List.of(),
+                                        vault.blockMaterial() == null ? null : vault.blockMaterial().name(),
+                                        null, System.currentTimeMillis()));
+                        actor.sendMessage(MiniMessageUtil.parseOrPlain(texts.capturedOk));
+                        mailOwner(block, actor.getUniqueId(), validatedOwner);
+                        new PlayerVaultEvent(actor, vault).callEvent();
+                        onDoneMain.accept(true);
                     }
-                    List<VaultItemEntity> batch = toItemBatch(newId, vault.contents());
-                    if (!batch.isEmpty()) vaultService.putItems(newId, batch);
-
-                    new BukkitRunnable(){
-                        @Override public void run() {
-                            VaultStoragePlugin.getInstance().getSessionManager().getOrCreate(actor.getUniqueId())
-                                    .setLastVaultDto(new VaultDtoImp(newId, validatedOwner, List.of(),
-                                            vault.blockMaterial() == null ? null : vault.blockMaterial().name(),
-                                            null, System.currentTimeMillis()));
-                            actor.sendMessage(MiniMessageUtil.parseOrPlain(texts.capturedOk));
-                            new PlayerVaultEvent(actor, vault).callEvent();
-                            onDoneMain.accept(true);
-                        }
-                    }.runTask(plugin);
+                    case CaptureResult.ChangedMeanwhile changed -> {
+                        actor.sendMessage(MiniMessageUtil.parseOrPlain(CHANGED_MEANWHILE));
+                        onDoneMain.accept(false);
+                    }
+                    case CaptureResult.Failed failed -> {
+                        actor.sendMessage(MiniMessageUtil.parseOrPlain(SAVE_FAILED));
+                        onDoneMain.accept(false);
+                    }
                 }
-            }.runTaskAsynchronously(plugin);
-        });
+            });
+        }, plugin.getServer().getScheduler().getMainThreadExecutor(plugin));
     }
 
     /**
@@ -886,15 +863,6 @@ public class VaultCaptureService {
             return;
         }
 
-        // Drop any ChestShop sign left on the now-captured container.
-        ChestShopService chestShop = plugin.getChestShopService();
-        if (chestShop != null && chestShop.isAvailable()) {
-            List<Block> shopSigns = chestShop.findShopSigns(block);
-            if (!shopSigns.isEmpty()) {
-                removeAttachedChestShopSigns(null, shopSigns);
-            }
-        }
-
         UUID finalOwner = outcome.finalOwner();
         if (!UniqueIdentifierResolver.isValidUUID(finalOwner)) {
             plugin.getLogger().warning(
@@ -904,24 +872,25 @@ public class VaultCaptureService {
             return;
         }
 
-        VaultImp vault = outcome.vault();
-        new BukkitRunnable() {
-            @Override public void run() {
-                VaultService vaultService = plugin.getVaultService();
-                UUID worldId = block.getWorld().getUID();
-                var created = vaultService.createVault(worldId, initiatorUuid, block.getX(), block.getY(), block.getZ(), finalOwner,
-                        vault.blockMaterial() == null ? null : vault.blockMaterial().name(),
-                        vault.blockDataString());
-                UUID newId = created.uuid;
-                plugin.getLogger().info(
-                        "[VaultCaptureService] Offline vault created: ID=" + newId + " owner=" + finalOwner + " initiator=" + initiatorUuid);
-
-                List<VaultItemEntity> batch = toItemBatch(newId, vault.contents());
-                if (!batch.isEmpty()) vaultService.putItems(newId, batch);
-                // Automated capture: no PlayerVaultEvent, just signal the notifier.
-                onVaulted.run();
+        storeThenRemove(block, finalOwner, outcome.reProtectedHalves()).thenAccept(result -> {
+            if (!(result instanceof CaptureResult.Vaulted vaulted)) {
+                // Already logged by the pipeline. The container stays for the next sweep.
+                return;
             }
-        }.runTaskAsynchronously(plugin);
+            plugin.getLogger().info("[VaultCaptureService] Offline vault created: ID=" + vaulted.vault()
+                    + " owner=" + finalOwner + " initiator=" + initiatorUuid);
+            // Drop any ChestShop sign left where the container was.
+            ChestShopService chestShop = plugin.getChestShopService();
+            if (chestShop != null && chestShop.isAvailable()) {
+                List<Block> shopSigns = chestShop.findShopSigns(block);
+                if (!shopSigns.isEmpty()) {
+                    removeAttachedChestShopSigns(null, shopSigns);
+                }
+            }
+            mailOwner(block, initiatorUuid, finalOwner);
+            // Automated capture: no PlayerVaultEvent, just signal the notifier.
+            onVaulted.run();
+        });
     }
 
     /**
@@ -940,67 +909,57 @@ public class VaultCaptureService {
 
         var plugin = VaultStoragePlugin.getInstance();
         Block supporting = HangingVaultSupport.resolveSupportingBlock(hang);
-        new BukkitRunnable() {
-            @Override public void run() {
-                persistHangingStacks(stacks, boltOwner, initiatorUuid, supporting);
-                onVaulted.run();
-                new BukkitRunnable() {
-                    @Override public void run() {
-                        if (hang.isValid()) hang.remove();
+        Executor mainThread = plugin.getServer().getScheduler().getMainThreadExecutor(plugin);
+        // Held until the entity is dealt with. The sweep only loaded this chunk for a moment, and
+        // an entity in an unloaded chunk can no longer be removed: its items would then exist twice.
+        Chunk chunk = hang.getLocation().getChunk();
+        chunk.addPluginChunkTicket(plugin);
+        CompletableFuture
+                .supplyAsync(() -> persistHangingStacks(stacks, boltOwner, initiatorUuid, supporting),
+                        plugin.databaseExecutor())
+                .thenAcceptAsync(vaultUuid -> {
+                    if (hang.isValid()) {
+                        hang.remove();
+                    } else {
+                        plugin.getLogger().warning("[VaultCaptureService] A hanging entity stored in vault " + vaultUuid
+                                + " was gone before it could be removed; its items may exist twice.");
                     }
-                }.runTask(plugin);
-            }
-        }.runTaskAsynchronously(plugin);
+                    onVaulted.run();
+                }, mainThread)
+                .exceptionally(failure -> {
+                    plugin.getLogger().log(Level.SEVERE, "Offline hanging capture failed at "
+                            + supporting.getWorld().getName() + " " + supporting.getX() + "," + supporting.getY() + ","
+                            + supporting.getZ() + "; the entity was left in place.", failure);
+                    return null;
+                })
+                .whenCompleteAsync((done, failure) -> chunk.removePluginChunkTicket(plugin), mainThread);
     }
 
     /**
-     * Stores hanging stacks into an existing vault owned by {@code boltOwner} that has room, or a new vault
-     * anchored at {@code supporting} and created by {@code creatorUuid}. Runs on the async persistence thread;
-     * returns the target vault id.
+     * Stores hanging stacks at the end of the owner's oldest vault with room, or in a new vault
+     * anchored at {@code supporting}. One transaction, with the chosen vault locked, so two
+     * captures for one owner cannot take the same slots. Blocks on the database.
      */
     private UUID persistHangingStacks(@NotNull List<ItemStack> stacks, @NotNull UUID boltOwner, @NotNull UUID creatorUuid, @NotNull Block supporting) {
         var plugin = VaultStoragePlugin.getInstance();
-        VaultService vaultService = plugin.getVaultService();
-        // Atomic per owner: find-or-create the target vault, claim its free slots, and write them without another
-        // concurrent capture for the same owner interleaving and clobbering the same slot. See hangingPersistLocks.
-        synchronized (hangingPersistLocks.computeIfAbsent(boltOwner, k -> new Object())) {
-            var target = HangingVaultSupport.findFirstVaultWithSpace(vaultService, boltOwner, stacks.size());
-            UUID vaultUuid;
-            int startSlot;
-            if (target.isPresent()) {
-                vaultUuid = target.get().vaultUuid();
-                startSlot = target.get().startSlot();
-            } else {
-                // Persisted material must be a block; placement uses Block#setType (item names are invalid).
-                var created = vaultService.createVault(supporting.getWorld().getUID(), creatorUuid,
-                        supporting.getX(), supporting.getY(), supporting.getZ(), boltOwner, Material.CHEST.name(), null);
-                vaultUuid = created.uuid;
-                startSlot = 0;
-                plugin.getLogger().info("[VaultCaptureService] Hanging capture created vault ID=" + vaultUuid + " owner=" + boltOwner);
+        List<VaultItem> items = new ArrayList<>(stacks.size());
+        for (int offset = 0; offset < stacks.size(); offset++) {
+            ItemStack stack = stacks.get(offset);
+            items.add(new VaultItem(offset, stack.getAmount(), ItemSerialization.toBytes(stack)));
+        }
+        // The stored material must be a block: placement uses Block#setType.
+        NewVault ifNoneFits = new NewVault(supporting.getWorld().getUID(), supporting.getWorld().getName(),
+                supporting.getX(), supporting.getY(), supporting.getZ(), boltOwner, Material.CHEST.name(), null);
+        AppendResult result = plugin.repository().appendItems(boltOwner, items,
+                HangingVaultSupport.MAX_VAULT_SLOTS, ifNoneFits);
+        return switch (result) {
+            case AppendResult.Appended appended -> appended.vault();
+            case AppendResult.Created created -> {
+                plugin.getLogger().info("[VaultCaptureService] Hanging capture created vault ID=" + created.vault()
+                        + " owner=" + boltOwner);
+                mailOwner(supporting, creatorUuid, boltOwner);
+                yield created.vault();
             }
-            vaultService.putItems(vaultUuid, toItemBatch(vaultUuid, stacks, startSlot));
-            return vaultUuid;
-        }
-    }
-
-    /** Serializes a vault's contents into persistable item rows starting at slot 0, skipping empty slots. */
-    private static List<VaultItemEntity> toItemBatch(UUID vaultId, List<ItemStack> items) {
-        return toItemBatch(vaultId, items, 0);
-    }
-
-    /** Serializes items into persistable rows assigned consecutive slots from {@code startSlot}, skipping empty slots. */
-    private static List<VaultItemEntity> toItemBatch(UUID vaultId, List<ItemStack> items, int startSlot) {
-        List<VaultItemEntity> batch = new ArrayList<>(items.size());
-        int slot = startSlot;
-        for (ItemStack itemStack : items) {
-            if (itemStack == null) continue;
-            VaultItemEntity vie = new VaultItemEntity();
-            vie.vaultUuid = vaultId;
-            vie.slot = slot++;
-            vie.amount = itemStack.getAmount();
-            vie.item = ItemSerialization.toBytes(itemStack);
-            batch.add(vie);
-        }
-        return batch;
+        };
     }
 }

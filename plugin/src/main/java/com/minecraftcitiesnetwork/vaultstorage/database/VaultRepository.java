@@ -15,7 +15,7 @@ import org.jetbrains.annotations.NotNull;
  * <p>Every method blocks on the database and must be called off the main thread. Outcomes a
  * caller must handle are result types; only a broken database is an exception.
  */
-public final class VaultRepository {
+public final class VaultRepository implements VaultStore {
 
     private final @NotNull VaultDatabase database;
     private final @NotNull Clock clock;
@@ -52,6 +52,7 @@ public final class VaultRepository {
     }
 
     /** Creates a vault and its items together: either all of it is stored or none of it. */
+    @Override
     public @NotNull UUID create(@NotNull NewVault vault, @NotNull List<VaultItem> items) {
         try (SqlSessionWrapper wrapper = this.database.openSession()) {
             UUID uuid = insertVault(wrapper, vault);
@@ -89,6 +90,7 @@ public final class VaultRepository {
     }
 
     /** Deletes a vault; its items go with it. */
+    @Override
     public @NotNull DeleteResult delete(@NotNull UUID vault) {
         try (SqlSessionWrapper wrapper = this.database.openSession(true)) {
             return wrapper.vaults().delete(vault) > 0 ? new DeleteResult.Deleted() : new DeleteResult.NoSuchVault();
