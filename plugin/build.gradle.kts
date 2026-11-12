@@ -16,7 +16,6 @@ dependencies {
     compileOnly(libs.essentialsx) {
         exclude(group = "org.spigotmc", module = "spigot-api")
     }
-    compileOnly(libs.floodgate.api)
     compileOnly(libs.chestshop)
     compileOnly(libs.realty.paper.api) { isTransitive = false }
     // compileOnly is on neither test classpath; tests name Paper's profile type.
@@ -31,6 +30,7 @@ val moduleJars: Configuration by configurations.creating {
 
 dependencies {
     moduleJars(project(path = ":modules:namebook-adapter", configuration = "moduleJar"))
+    moduleJars(project(path = ":modules:floodgate-adapter", configuration = "moduleJar"))
 }
 
 val installModules by tasks.registering(Sync::class) {

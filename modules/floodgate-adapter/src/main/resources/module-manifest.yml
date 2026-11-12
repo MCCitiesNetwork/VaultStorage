@@ -1,0 +1,5 @@
+module-name: floodgate-adapter
+entry-class: com.minecraftcitiesnetwork.vaultstorage.floodgate.FloodgateModule
+author: MCCitiesNetwork
+expected-plugin-class: com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin
+reloadable: false

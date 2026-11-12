@@ -25,7 +25,6 @@ import com.minecraftcitiesnetwork.vaultstorage.scan.VaultScanServiceImpl;
 import com.minecraftcitiesnetwork.vaultstorage.database.VaultServiceImpl;
 import com.minecraftcitiesnetwork.vaultstorage.region.WorldGuardServiceImp;
 import com.minecraftcitiesnetwork.vaultstorage.config.ConfigPaths;
-import com.minecraftcitiesnetwork.vaultstorage.floodgate.BedrockUniqueIdentifierRetriever;
 import com.minecraftcitiesnetwork.vaultstorage.session.VaultSessionManager;
 import com.minecraftcitiesnetwork.vaultstorage.config.ConfigInitializer;
 import com.minecraftcitiesnetwork.vaultstorage.menu.VaultActionMenu;
@@ -37,7 +36,6 @@ import com.minecraftcitiesnetwork.vaultstorage.menu.VaultPlacementMenu;
 import com.minecraftcitiesnetwork.vaultstorage.menu.LoadingMenu;
 import com.minecraftcitiesnetwork.vaultstorage.permission.VaultPermission;
 import net.essentialsx.api.v2.services.mail.MailService;
-import com.minecraftcitiesnetwork.vaultstorage.names.NameSource;
 import com.minecraftcitiesnetwork.vaultstorage.names.Names;
 import com.minecraftcitiesnetwork.vaultstorage.names.PaperProfileNameSource;
 import com.minecraftcitiesnetwork.pluginInfrastructure.modules.ModuleLifecycleManager;
@@ -45,16 +43,12 @@ import com.minecraftcitiesnetwork.pluginInfrastructure.modules.ModuleLoader;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Optional;
 import java.util.logging.Level;
-import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
 import org.bukkit.Bukkit;
 import org.bukkit.World;
 import org.bukkit.permissions.Permission;
 import org.bukkit.plugin.RegisteredServiceProvider;
 import org.bukkit.plugin.java.JavaPlugin;
-import org.geysermc.floodgate.api.FloodgateApi;
 
 /**
  * Main plugin entry point responsible for bootstrapping configuration, database, and services.
@@ -81,7 +75,6 @@ public final class VaultStoragePlugin extends JavaPlugin {
     private BoltService boltService;
     private MailService mailService;
     private Essentials essentials;
-    private BedrockUniqueIdentifierRetriever bedrockUniqueIdentifierRetriever;
 
     // Database wiring
     private MySQLManager mysql;
@@ -139,23 +132,6 @@ public final class VaultStoragePlugin extends JavaPlugin {
         // Register VaultService in Bukkit services
 
         // Integration services
-        this.bedrockUniqueIdentifierRetriever = new BedrockUniqueIdentifierRetriever(FloodgateApi.getInstance());
-        // Until Floodgate moves into its module, the host fills the Bedrock slots itself.
-        BedrockUniqueIdentifierRetriever bedrock = this.bedrockUniqueIdentifierRetriever;
-        this.integrations.bedrockNames(new NameSource() {
-            @Override
-            public CompletableFuture<Optional<String>> nameOf(UUID player) {
-                return bedrock.getPlayerName(player).thenApply(Optional::ofNullable)
-                        .exceptionally(failure -> Optional.empty());
-            }
-
-            @Override
-            public CompletableFuture<Optional<UUID>> uuidOf(String name) {
-                return bedrock.getUniqueIdentifier(name).thenApply(Optional::ofNullable)
-                        .exceptionally(failure -> Optional.empty());
-            }
-        });
-        this.integrations.bedrockClient(FloodgateApi.getInstance()::isFloodgatePlayer);
         this.worldGuardService = new WorldGuardServiceImp();
         this.boltService = new BoltServiceImp(this);
 
