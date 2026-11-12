@@ -36,6 +36,7 @@ import com.minecraftcitiesnetwork.vaultstorage.database.DatabaseSettings;
 import com.minecraftcitiesnetwork.vaultstorage.database.VaultDatabase;
 import com.minecraftcitiesnetwork.vaultstorage.database.VaultRepository;
 import com.minecraftcitiesnetwork.vaultstorage.database.VaultStorageSchemaMigrator;
+import com.minecraftcitiesnetwork.vaultstorage.session.SessionQuitListener;
 import java.io.IOException;
 import java.sql.SQLException;
 import java.util.concurrent.Executor;
@@ -161,6 +162,8 @@ public final class VaultStoragePlugin extends JavaPlugin {
         VaultRegionListMenu.ensureConfig();
         VaultPlacementMenu.ensureConfig();
         LoadingMenu.ensureConfig();
+
+        getServer().getPluginManager().registerEvents(new SessionQuitListener(this.sessionManager), this);
 
         VaultCommand vaultCommand = new VaultCommand();
         getLifecycleManager().registerEventHandler(LifecycleEvents.COMMANDS, event ->
