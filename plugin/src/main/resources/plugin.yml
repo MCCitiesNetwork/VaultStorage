@@ -1,6 +1,6 @@
 name: VaultStorage
 version: "${version}"
-main: net.democracycraft.vault.VaultStoragePlugin
+main: com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin
 api-version: '1.21'
 authors: [ Alepando ]
 depend: [ Bolt , WorldGuard, WorldEdit, Essentials ]

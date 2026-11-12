@@ -1,0 +1,342 @@
+package com.minecraftcitiesnetwork.vaultstorage.capture;
+
+import com.minecraftcitiesnetwork.vaultstorage.permission.VaultPermission;
+
+import com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin;
+import com.minecraftcitiesnetwork.vaultstorage.vault.Dto;
+import com.minecraftcitiesnetwork.vaultstorage.region.VaultRegion;
+import com.minecraftcitiesnetwork.vaultstorage.bolt.BoltService;
+import com.minecraftcitiesnetwork.vaultstorage.region.WorldGuardService;
+import com.minecraftcitiesnetwork.vaultstorage.capture.HangingVaultSupport;
+import org.bukkit.block.Block;
+import org.bukkit.entity.Entity;
+import org.bukkit.entity.Hanging;
+import org.bukkit.entity.Player;
+import org.bukkit.util.BoundingBox;
+
+import java.io.Serializable;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.UUID;
+
+/**
+ * Policy evaluator for vault capture (placement) actions.
+ * <p>
+ * Enforces rules based on Bolt ownership and WorldGuard region participation.
+ */
+public final class VaultCapturePolicy {
+
+    private VaultCapturePolicy() {}
+
+    public record Decision(boolean allowed, boolean hasOverride, boolean actorParticipantAny,
+                           boolean containerOwnerParticipantAny, boolean actorIsContainerOwner,
+                           boolean disallowedOwnerSelf, boolean baseAllowed, UUID containerOwner, Reason reason,
+                           List<RegionStatus> regionStatuses) implements Dto, Serializable {
+        public enum Reason {
+            /**
+             * Allowed (no blocking condition).
+             */
+            ALLOWED,
+            /**
+             * Actor participates in an overlapping region and also is container owner (self-disallow).
+             */
+            OWNER_SELF_IN_REGION,
+            /**
+             * Container owner (original owner) is participant of at least one overlapping region, blocking participant capture.
+             */
+            CONTAINER_OWNER_IN_OVERLAP,
+            /**
+             * Actor not involved (no membership/ownership) and container is not owned by actor.
+             */
+            NOT_INVOLVED_NOT_OWNER,
+            /**
+             * Container has no Bolt owner and actor lacks override permission.
+             */
+            UNPROTECTED_NO_OVERRIDE,
+            /**
+             * The block is outside of any region.
+             */
+            NOT_IN_REGION,
+            /**
+             * The entity type is not supported for non-admin vaulting.
+             */
+            ENTITIES_REQUIRE_ADMIN
+        }
+    }
+
+    public record RegionStatus(String regionId, boolean actorParticipant, boolean containerOwnerParticipates) implements Dto, Serializable {
+        /*
+         * Per-region participation snapshot.
+         * actorParticipant: true if the actor is owner or member of this specific region.
+         * containerOwnerParticipates: true if the container's Bolt owner is owner or member of this specific region.
+         */
+    }
+
+    /**
+     * Evaluate vaulting permission for the given actor and block.
+     * Rules recap: requires Bolt owner; requires region participation unless override is present.
+     *
+     */
+    public static Decision evaluate(Player actor, Block block) {
+        BoltService bolt = VaultStoragePlugin.getInstance().getBoltService();
+        UUID originalOwner = null;
+        if (bolt != null) {
+            try {
+                originalOwner = bolt.getOwner(block);
+            } catch (Throwable t) {
+                VaultStoragePlugin.getInstance().getLogger().warning("[VaultCapturePolicy] Error obtaining Bolt owner for block in "
+                        + formatBlock(block) + ": " + t.getClass().getSimpleName() + " - " + t.getMessage());
+            }
+        }
+
+        // Log actor UUID for debugging Bedrock player issues
+        UUID actorUUID = actor.getUniqueId();
+        if (actorUUID.toString().matches("0{8}-0{4}-0{4}-0{4}-0{12}")) {
+            VaultStoragePlugin.getInstance().getLogger().warning("[VaultCapturePolicy] Invalid actor UUID for player " + actor.getName() + ": " + actorUUID);
+        }
+
+        return evaluateBlockPolicy(actor, block, originalOwner, false);
+    }
+
+    /**
+     * Same Bolt and WorldGuard rules as {@link #evaluate(Player, Block)}, but does not apply the
+     * "hangings near block" restriction (used when vaulting the hanging entity itself).
+     * @param actor player performing capture
+     * @param hanging the hanging entity being captured
+     * @param supportingBlock block the hanging is attached to
+     */
+    public static Decision evaluateHangingCapture(Player actor, Hanging hanging, Block supportingBlock) {
+        BoltService bolt = VaultStoragePlugin.getInstance().getBoltService();
+        UUID originalOwner = null;
+        if (bolt != null) {
+            try {
+                originalOwner = bolt.getOwner(hanging);
+                if (originalOwner == null) {
+                    originalOwner = bolt.getOwner(supportingBlock);
+                }
+            } catch (Throwable t) {
+                VaultStoragePlugin.getInstance().getLogger().warning("[VaultCapturePolicy] Error obtaining Bolt owner for hanging entity in "
+                        + formatBlock(supportingBlock) + ": " + t.getClass().getSimpleName() + " - " + t.getMessage());
+            }
+        }
+
+        UUID actorUUID = actor.getUniqueId();
+        if (actorUUID.toString().matches("0{8}-0{4}-0{4}-0{4}-0{12}")) {
+            VaultStoragePlugin.getInstance().getLogger().warning("[VaultCapturePolicy] Invalid actor UUID for player " + actor.getName() + ": " + actorUUID);
+        }
+
+        return evaluateBlockPolicy(actor, supportingBlock, originalOwner, false);
+    }
+
+    private static Decision evaluateBlockPolicy(Player actor, Block block, UUID originalOwner, boolean hangableRestricted) {
+        boolean hasOverride = VaultPermission.ACTION_PLACE_OVERRIDE.has(actor);
+        boolean actorIsContainerOwner = originalOwner != null && originalOwner.equals(actor.getUniqueId());
+
+        RegionParticipation participation = computeRegionParticipation(actor, block, originalOwner);
+        boolean actorParticipantAny = participation.actorParticipantAny();
+        boolean containerOwnerParticipantAny = participation.containerOwnerParticipantAny();
+        boolean inAnyRegion = participation.inAnyRegion();
+        List<RegionStatus> perRegionDebug = participation.perRegionDebug();
+
+        boolean disallowedOwnerSelf = actorParticipantAny && actorIsContainerOwner;
+        boolean baseAllowed;
+
+        if (actorParticipantAny) {
+            // Actor is a participant of at least one relevant (non-parent) region
+            // Can vault if: block has owner, actor is not the owner, and owner is not participant of any relevant region
+            baseAllowed = (originalOwner != null) && !actorIsContainerOwner && !containerOwnerParticipantAny;
+        } else {
+            // Actor is not a participant of any relevant region
+            // Can only vault their own blocks
+            baseAllowed = actorIsContainerOwner;
+        }
+
+
+        boolean allowed = (originalOwner != null)
+                && !disallowedOwnerSelf
+                && !hangableRestricted
+                && ((inAnyRegion && baseAllowed) || hasOverride);
+
+        Decision.Reason reason = switch (Boolean.TRUE) {
+            case Boolean b when allowed -> Decision.Reason.ALLOWED;
+            case Boolean b when hangableRestricted -> Decision.Reason.ENTITIES_REQUIRE_ADMIN;
+            case Boolean b when !inAnyRegion -> Decision.Reason.NOT_IN_REGION;
+            case Boolean b when disallowedOwnerSelf -> Decision.Reason.OWNER_SELF_IN_REGION;
+            case Boolean b when actorParticipantAny && containerOwnerParticipantAny -> Decision.Reason.CONTAINER_OWNER_IN_OVERLAP;
+            case Boolean b when originalOwner == null -> Decision.Reason.UNPROTECTED_NO_OVERRIDE;
+            default -> Decision.Reason.NOT_INVOLVED_NOT_OWNER;
+        };
+
+        return new Decision(
+                allowed,
+                hasOverride,
+                actorParticipantAny,
+                containerOwnerParticipantAny,
+                actorIsContainerOwner,
+                disallowedOwnerSelf,
+                baseAllowed,
+                originalOwner,
+                reason,
+                perRegionDebug
+        );
+    }
+
+    private record RegionParticipation(boolean inAnyRegion, boolean actorParticipantAny,
+                                       boolean containerOwnerParticipantAny, List<RegionStatus> perRegionDebug) {}
+
+    /** Scans WorldGuard regions at the block and computes actor/owner participation flags. */
+    private static RegionParticipation computeRegionParticipation(Player actor, Block block, UUID originalOwner) {
+        WorldGuardService wgs = VaultStoragePlugin.getInstance().getWorldGuardService();
+
+        boolean actorParticipantAny = false;
+        boolean containerOwnerParticipantAny = false;
+        boolean inAnyRegion = false;
+        List<RegionStatus> perRegionDebug = List.of();
+
+        if (wgs != null) {
+            List<VaultRegion> regions = List.of();
+            try {
+                regions = wgs.getRegionsAt(block);
+            } catch (Throwable t) {
+                VaultStoragePlugin.getInstance().getLogger().warning("[VaultCapturePolicy] Error obtaining WorldGuard regions for block in "
+                        + formatBlock(block) + ": " + t.getClass().getSimpleName() + " - " + t.getMessage());
+            }
+
+            inAnyRegion = !regions.isEmpty();
+            UUID actorUuid = actor.getUniqueId();
+            List<RegionStatus> debugList = new ArrayList<>();
+
+            for (var region : regions) {
+                boolean actorParticipant = false;
+                boolean containerOwnerParticipates = false;
+                try {
+                    actorParticipant = region.isPartOfRegion(actorUuid);
+                    if (originalOwner != null) {
+                        containerOwnerParticipates = region.isPartOfRegion(originalOwner);
+                    }
+                } catch (Throwable t) {
+                    VaultStoragePlugin.getInstance().getLogger().warning("[VaultCapturePolicy] Error evaluating participation for region "
+                            + region.id() + " para bloque en " + formatBlock(block) + ": " + t.getClass().getSimpleName() + " - " + t.getMessage());
+                }
+
+                BoundingBox box;
+                try {
+                    box = region.boundingBox();
+                } catch (Throwable t) {
+                    VaultStoragePlugin.getInstance().getLogger().warning("[VaultCapturePolicy] Error obtaining boundingBox for region "
+                            + region.id() + ": " + t.getClass().getSimpleName() + " - " + t.getMessage());
+                    debugList.add(new RegionStatus(region.id(), actorParticipant, containerOwnerParticipates));
+                    if (actorParticipant) actorParticipantAny = true;
+                    if (containerOwnerParticipates) containerOwnerParticipantAny = true;
+                    continue;
+                }
+
+                final BoundingBox currentBox = box;
+                boolean isParent = false;
+                try {
+                    isParent = regions.stream().anyMatch(r -> r != region && safeContains(currentBox, r));
+                } catch (Throwable t) {
+                    VaultStoragePlugin.getInstance().getLogger().warning("[VaultCapturePolicy] Error evaluating parent/child for region "
+                            + region.id() + ": " + t.getClass().getSimpleName() + " - " + t.getMessage());
+                }
+
+                boolean actorCountedHere = actorParticipant && !isParent;
+                if (actorCountedHere) {
+                    actorParticipantAny = true;
+                }
+
+                if (containerOwnerParticipates) {
+                    containerOwnerParticipantAny = true;
+                }
+
+                debugList.add(new RegionStatus(region.id(), actorParticipant, containerOwnerParticipates));
+            }
+
+            perRegionDebug = Collections.unmodifiableList(debugList);
+        }
+
+        return new RegionParticipation(inAnyRegion, actorParticipantAny, containerOwnerParticipantAny, perRegionDebug);
+    }
+
+    /**
+     * Evaluate whether the actor may remove a ChestShop sign on the given container.
+     * Same region participation rule as {@link #evaluate(Player, Block)}, but does not require a Bolt owner.
+     */
+    public static Decision evaluateChestShopSignRemoval(Player actor, Block containerBlock) {
+        BoltService bolt = VaultStoragePlugin.getInstance().getBoltService();
+        UUID originalOwner = null;
+        if (bolt != null) {
+            try {
+                originalOwner = bolt.getOwner(containerBlock);
+            } catch (Throwable t) {
+                VaultStoragePlugin.getInstance().getLogger().warning("[VaultCapturePolicy] Error obtaining Bolt owner for block in "
+                        + formatBlock(containerBlock) + ": " + t.getClass().getSimpleName() + " - " + t.getMessage());
+            }
+        }
+
+        boolean hasOverride = VaultPermission.ACTION_PLACE_OVERRIDE.has(actor);
+        boolean actorIsContainerOwner = originalOwner != null && originalOwner.equals(actor.getUniqueId());
+        RegionParticipation participation = computeRegionParticipation(actor, containerBlock, originalOwner);
+
+        // Same region gate as capture, but no Bolt-owner requirement.
+        boolean allowed = (participation.inAnyRegion() && participation.actorParticipantAny()) || hasOverride;
+
+        Decision.Reason reason = allowed
+                ? Decision.Reason.ALLOWED
+                : (!participation.inAnyRegion() ? Decision.Reason.NOT_IN_REGION : Decision.Reason.NOT_INVOLVED_NOT_OWNER);
+
+        return new Decision(
+                allowed,
+                hasOverride,
+                participation.actorParticipantAny(),
+                participation.containerOwnerParticipantAny(),
+                actorIsContainerOwner,
+                false,
+                allowed,
+                originalOwner,
+                reason,
+                participation.perRegionDebug()
+        );
+    }
+
+    /**
+     * Evaluate vaulting permission for a specific entity (e.g. from Scan Menu).
+     */
+    public static Decision evaluate(Player actor, Entity entity) {
+        if (entity instanceof Hanging hanging) {
+            Block supporting = HangingVaultSupport.resolveSupportingBlock(hanging);
+            return evaluateHangingCapture(actor, hanging, supporting);
+        }
+
+        boolean hasOverride = VaultPermission.ACTION_PLACE_OVERRIDE.has(actor);
+        boolean isAdmin = VaultPermission.ADMIN.has(actor);
+
+        if (!isAdmin) {
+            return new Decision(false, hasOverride, false, false, false, false, false, null, Decision.Reason.ENTITIES_REQUIRE_ADMIN, List.of());
+        }
+
+        return new Decision(true, hasOverride, false, false, false, false, true, null, Decision.Reason.ALLOWED, List.of());
+    }
+
+    private static String formatBlock(Block block) {
+        if (block == null) {
+            return "<null>";
+        } else {
+            block.getWorld();
+        }
+        return block.getWorld().getName() + "@" + block.getX() + "," + block.getY() + "," + block.getZ() + "[" + block.getType() + "]";
+    }
+
+    private static boolean safeContains(BoundingBox outer, VaultRegion innerRegion) {
+        try {
+            BoundingBox inner = innerRegion.boundingBox();
+            return outer.contains(inner);
+        } catch (Throwable t) {
+            VaultStoragePlugin.getInstance().getLogger().warning("[VaultCapturePolicy] Error in safeContains for region "
+                    + innerRegion.id() + ": " + t.getClass().getSimpleName() + " - " + t.getMessage());
+            return false;
+        }
+    }
+}
+
