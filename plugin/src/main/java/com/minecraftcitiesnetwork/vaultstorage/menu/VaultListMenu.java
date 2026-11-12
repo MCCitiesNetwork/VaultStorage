@@ -42,8 +42,10 @@ import org.jetbrains.annotations.Nullable;
  */
 public class VaultListMenu extends ChildMenuImp {
 
-    /** Vaults per page: enough to be useful, few enough for a dialog. */
-    static final int PAGE_SIZE = 20;
+    /** Vaults per page, from settings.yml; read each time, so a reload takes effect at the next open. */
+    private static int pageSize() {
+        return VaultStoragePlugin.getInstance().settings().get().vaultList().pageSize();
+    }
 
     private final VaultUIContext uiContext;
     private final String query;
@@ -218,8 +220,8 @@ public class VaultListMenu extends ChildMenuImp {
         }
         VaultFilter filter = new VaultFilter(scope.owner(), null);
         // Count first, so a page past the end becomes the last page instead of an empty one.
-        Paging paging = Paging.of(repository.count(filter), PAGE_SIZE, this.requestedPage);
-        return repository.page(filter, paging.offset(), PAGE_SIZE);
+        Paging paging = Paging.of(repository.count(filter), pageSize(), this.requestedPage);
+        return repository.page(filter, paging.offset(), pageSize());
     }
 
     private void load() {
@@ -242,7 +244,7 @@ public class VaultListMenu extends ChildMenuImp {
                         }));
                     }
                     return CompletableFuture.allOf(lookups.toArray(new CompletableFuture[0])).thenApply(done -> {
-                        Paging paging = Paging.of(page.total(), PAGE_SIZE, this.requestedPage);
+                        Paging paging = Paging.of(page.total(), pageSize(), this.requestedPage);
                         List<Entry> entries = new ArrayList<>();
                         int index = paging.offset() + 1;
                         for (VaultSummary vault : page.vaults()) {

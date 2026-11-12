@@ -15,6 +15,7 @@ dependencies {
     compileOnly(libs.paper.api)
     // Bundled and relocated; modules reach it through the host's class loader.
     implementation(libs.plugin.infrastructure)
+    implementation(libs.configurate.yaml)
     implementation(libs.mybatis)
     implementation(libs.mariadb.java.client)
     compileOnly(libs.bolt.bukkit)

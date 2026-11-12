@@ -14,7 +14,6 @@ import com.minecraftcitiesnetwork.vaultstorage.placement.VaultPlacementService;
 import com.minecraftcitiesnetwork.vaultstorage.scan.VaultScanServiceImpl;
 import com.minecraftcitiesnetwork.vaultstorage.region.WorldGuardServiceImp;
 import com.minecraftcitiesnetwork.vaultstorage.session.VaultSessionManager;
-import com.minecraftcitiesnetwork.vaultstorage.config.ConfigInitializer;
 import com.minecraftcitiesnetwork.vaultstorage.menu.VaultActionMenu;
 import com.minecraftcitiesnetwork.vaultstorage.menu.VaultCaptureMenu;
 import com.minecraftcitiesnetwork.vaultstorage.menu.VaultListMenu;
@@ -27,7 +26,6 @@ import com.minecraftcitiesnetwork.vaultstorage.names.Names;
 import com.minecraftcitiesnetwork.vaultstorage.names.PaperProfileNameSource;
 import com.minecraftcitiesnetwork.pluginInfrastructure.modules.ModuleLifecycleManager;
 import com.minecraftcitiesnetwork.pluginInfrastructure.modules.ModuleLoader;
-import com.minecraftcitiesnetwork.vaultstorage.config.ConfigPaths;
 import com.minecraftcitiesnetwork.vaultstorage.database.DatabaseSettings;
 import com.minecraftcitiesnetwork.vaultstorage.database.VaultDatabase;
 import com.minecraftcitiesnetwork.vaultstorage.database.VaultRepository;
@@ -38,7 +36,15 @@ import com.minecraftcitiesnetwork.vaultstorage.config.AutoYML;
 import com.minecraftcitiesnetwork.vaultstorage.config.DataFolder;
 import com.minecraftcitiesnetwork.vaultstorage.config.MailConfig;
 import com.minecraftcitiesnetwork.vaultstorage.vault.OwnerNotifications;
+import com.minecraftcitiesnetwork.vaultstorage.config.ConfigFiles;
+import com.minecraftcitiesnetwork.vaultstorage.config.LegacyConfigImport;
+import com.minecraftcitiesnetwork.vaultstorage.config.PluginSettings;
 import java.io.IOException;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
+import org.spongepowered.configurate.ConfigurationNode;
 import java.util.concurrent.CompletableFuture;
 import java.sql.SQLException;
 import java.util.concurrent.Executor;
@@ -68,6 +74,7 @@ public final class VaultStoragePlugin extends JavaPlugin {
 
     // Integration services
     private final Integrations integrations = new Integrations();
+    private final AtomicReference<PluginSettings> settings = new AtomicReference<>();
     private ModuleLifecycleManager<VaultStoragePlugin> modules;
     private Names names;
     private OwnerNotifications ownerNotifications;
@@ -114,6 +121,9 @@ public final class VaultStoragePlugin extends JavaPlugin {
     /** What feature modules supply; read at use time. */
     public Integrations integrations() { return integrations; }
 
+    /** settings.yml. Read it through the reference each time: a reload swaps what it holds. */
+    public AtomicReference<PluginSettings> settings() { return settings; }
+
     /** Player name and UUID lookups. */
     public Names names() { return names; }
 
@@ -123,11 +133,18 @@ public final class VaultStoragePlugin extends JavaPlugin {
     @Override
     public void onEnable() {
         instance = this;
-        // Ensure config exists and has defaults
-        ConfigInitializer.ensureMysqlDefaults(this);
+        // Settings first: the plugin cannot run without them, and the server is still starting.
+        DatabaseSettings databaseSettings;
+        try {
+            databaseSettings = loadConfiguration();
+        } catch (IOException ex) {
+            getLogger().log(Level.SEVERE, "Could not load the configuration. VaultStorage is disabled.", ex);
+            getServer().getPluginManager().disablePlugin(this);
+            return;
+        }
 
         // Database first: nothing may register against a database that cannot store a vault.
-        if (!startDatabase()) {
+        if (!startDatabase(databaseSettings)) {
             getServer().getPluginManager().disablePlugin(this);
             return;
         }
@@ -224,19 +241,51 @@ public final class VaultStoragePlugin extends JavaPlugin {
     }
 
     /**
+     * Reads database.yml and settings.yml, creating each from the bundled default the first
+     * time. Values from the 1.x config.yml are carried over into a file as it is created.
+     */
+    private DatabaseSettings loadConfiguration() throws IOException {
+        ConfigFiles files = new ConfigFiles(getDataFolder().toPath(), getLogger());
+        ConfigurationNode old = files.legacy();
+        boolean carryOver = !old.node("mysql", "host").virtual();
+        if (carryOver && !files.exists("database.yml")) {
+            getLogger().info("Carrying the settings in config.yml over to database.yml and settings.yml."
+                    + " config.yml is no longer read and can be deleted.");
+        }
+
+        Map<String, String> database = new HashMap<>();
+        Map<String, String> scan = new HashMap<>();
+        if (carryOver) {
+            database.put("url", LegacyConfigImport.databaseUrl(
+                    old.node("mysql", "host").getString("localhost"), old.node("mysql", "port").getInt(3306),
+                    old.node("mysql", "database").getString("vault_storage"),
+                    old.node("mysql", "useSSL").getBoolean(false)));
+            database.put("username", old.node("mysql", "user").getString("root"));
+            database.put("password", old.node("mysql", "password").getString(""));
+            for (String key : List.of("batch-size", "cache-ttl-seconds", "cooldown-seconds")) {
+                if (!old.node("scan", key).virtual()) {
+                    scan.put("scan." + key, String.valueOf(old.node("scan", key).getLong()));
+                }
+            }
+        }
+
+        DatabaseSettings databaseSettings = files.load("database.yml", ConfigFiles.bundled(getClass(), "database.yml"),
+                text -> LegacyConfigImport.fill(text, database)).get(DatabaseSettings.class);
+        PluginSettings pluginSettings = files.load("settings.yml", ConfigFiles.bundled(getClass(), "settings.yml"),
+                text -> LegacyConfigImport.fill(text, scan)).get(PluginSettings.class);
+        if (databaseSettings == null || pluginSettings == null) {
+            throw new IOException("database.yml or settings.yml is empty");
+        }
+        this.settings.set(pluginSettings);
+        return databaseSettings;
+    }
+
+    /**
      * Connects, migrates the schema and builds the repository. A failure is logged and reported
      * to the caller, which disables the plugin: a half-started plugin would remove blocks it
      * cannot store.
      */
-    private boolean startDatabase() {
-        var config = getConfig();
-        DatabaseSettings settings = new DatabaseSettings(
-                config.getString(ConfigPaths.MYSQL_HOST.getPath(), "localhost"),
-                config.getInt(ConfigPaths.MYSQL_PORT.getPath(), 3306),
-                config.getString(ConfigPaths.MYSQL_DATABASE.getPath(), "vault_storage"),
-                config.getString(ConfigPaths.MYSQL_USER.getPath(), "root"),
-                config.getString(ConfigPaths.MYSQL_PASSWORD.getPath(), ""),
-                config.getBoolean(ConfigPaths.MYSQL_USE_SSL.getPath(), false));
+    private boolean startDatabase(DatabaseSettings settings) {
         try {
             this.database = new VaultDatabase(settings);
             new VaultStorageSchemaMigrator().migrate(this.database.dataSource(), getLogger());
@@ -248,9 +297,8 @@ public final class VaultStoragePlugin extends JavaPlugin {
             });
             return true;
         } catch (SQLException | RuntimeException ex) {
-            getLogger().log(Level.SEVERE, "Could not connect to or migrate the database at "
-                    + settings.host() + ":" + settings.port() + "/" + settings.database()
-                    + ". VaultStorage is disabled.", ex);
+            getLogger().log(Level.SEVERE, "Could not connect to or migrate the database at " + settings.url()
+                    + ". Check database.yml. VaultStorage is disabled.", ex);
             return false;
         }
     }

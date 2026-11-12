@@ -9,7 +9,6 @@ import com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin;
 import com.minecraftcitiesnetwork.vaultstorage.region.VaultRegion;
 import com.minecraftcitiesnetwork.vaultstorage.bolt.BoltService;
 import com.minecraftcitiesnetwork.vaultstorage.region.WorldGuardService;
-import com.minecraftcitiesnetwork.vaultstorage.config.ConfigPaths;
 import com.minecraftcitiesnetwork.vaultstorage.config.MiniMessageUtil;
 import com.minecraftcitiesnetwork.vaultstorage.autovault.RegionKey;
 import com.minecraftcitiesnetwork.vaultstorage.autovault.SweepFilter;
@@ -34,6 +33,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 
 /**
@@ -48,10 +48,18 @@ public class AutoVaultService {
     // Main-thread only: populated from the Realty event handler and the scheduled sweep task.
     private final Map<RegionKey, BukkitTask> pending = new HashMap<>();
     private final PendingSweepStore store;
+    // Read at use time: a reload swaps what it holds.
+    private final AtomicReference<AutoVaultSettings> settings;
 
-    public AutoVaultService(@NotNull VaultStoragePlugin plugin, @NotNull PendingSweepStore store) {
+    // Moves to messages.yml with the rest of the wording.
+    private static final String NOTIFY_MESSAGE = "<yellow>Locked containers and items left here by the previous"
+            + " occupant have been cleared into their vault storage.</yellow>";
+
+    public AutoVaultService(@NotNull VaultStoragePlugin plugin, @NotNull PendingSweepStore store,
+                            @NotNull AtomicReference<AutoVaultSettings> settings) {
         this.plugin = plugin;
         this.store = store;
+        this.settings = settings;
     }
 
     /**
@@ -84,10 +92,11 @@ public class AutoVaultService {
      * @param initiator the new occupant (owner/tenant); recorded as vault creator and exempt from vaulting
      */
     public void submit(@NotNull UUID worldId, @NotNull String regionId, @NotNull UUID initiator) {
-        if (!plugin.getConfig().getBoolean(ConfigPaths.AUTOVAULT_ENABLED.getPath(), true)) {
+        AutoVaultSettings current = this.settings.get();
+        if (!current.enabled()) {
             return;
         }
-        long delayTicks = Math.max(0L, plugin.getConfig().getLong(ConfigPaths.AUTOVAULT_DELAY_TICKS.getPath(), 1200L));
+        long delayTicks = current.delayTicks();
         PendingSweep sweep = new PendingSweep(worldId, regionId, initiator, Instant.now().plusMillis(delayTicks * 50L));
         // Stored so that a restart during the grace period does not lose the sweep.
         CompletableFuture.runAsync(() -> this.store.save(sweep), this.plugin.databaseExecutor())
@@ -122,7 +131,7 @@ public class AutoVaultService {
      * from async capture tasks, and hops the message send onto the main thread.
      */
     private Runnable vaultedNotifier(@NotNull UUID initiator) {
-        if (!plugin.getConfig().getBoolean(ConfigPaths.AUTOVAULT_NOTIFY_OCCUPANT.getPath(), true)) {
+        if (!this.settings.get().notifyOccupant()) {
             return () -> {};
         }
         AtomicBoolean sent = new AtomicBoolean(false);
@@ -135,16 +144,16 @@ public class AutoVaultService {
                 if (occupant == null) {
                     return;
                 }
-                String template = plugin.getConfig().getString(ConfigPaths.AUTOVAULT_NOTIFY_MESSAGE.getPath());
-                if (template == null || template.isBlank()) {
-                    return;
-                }
-                occupant.sendMessage(MiniMessageUtil.parseOrPlain(template));
+                occupant.sendMessage(MiniMessageUtil.parseOrPlain(NOTIFY_MESSAGE));
             });
         };
     }
 
     private void runSweep(@NotNull RegionKey key, @NotNull UUID initiator) {
+        if (!this.settings.get().enabled()) {
+            // Turned off while it waited. The stored sweep stays for a restart with it back on.
+            return;
+        }
         World world = Bukkit.getWorld(key.worldId());
         if (world == null) {
             // The world is not loaded. The stored sweep stays and is tried again after a restart.
@@ -170,7 +179,7 @@ public class AutoVaultService {
                 ? CompletableFuture.completedFuture(null)
                 : vaultBlocks(key.worldId(), displaced, initiator, onVaulted, sweep);
         CompletableFuture<Void> hangingsDispatched =
-                plugin.getConfig().getBoolean(ConfigPaths.AUTOVAULT_INCLUDE_HANGINGS.getPath(), true)
+                this.settings.get().includeHangings()
                         ? vaultHangings(key.worldId(), region.boundingBox(), filter, initiator, onVaulted, sweep)
                         : CompletableFuture.completedFuture(null);
 
@@ -277,7 +286,7 @@ public class AutoVaultService {
     private <T> @NotNull CompletableFuture<Void> forEachChunkPaced(@NotNull UUID worldId, @NotNull List<T> items,
                                                                   @NotNull Function<T, int[]> chunkOf,
                                                                   @NotNull ChunkWork<T> work) {
-        final int maxInFlight = Math.max(1, plugin.getConfig().getInt(ConfigPaths.SCAN_BATCH_SIZE.getPath(), 50));
+        final int maxInFlight = Math.max(1, plugin.settings().get().scan().batchSize());
         CompletableFuture<Void> dispatched = new CompletableFuture<>();
 
         new BukkitRunnable() {

@@ -9,6 +9,8 @@ val prefix = "com.minecraftcitiesnetwork.vaultstorage.libraries"
 tasks.named<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("shadowJar") {
     listOf(
         "com.minecraftcitiesnetwork.pluginInfrastructure",
+        "org.spongepowered",
+        "io.leangen.geantyref",
         "org.apache.ibatis",
         "org.mariadb.jdbc",
     ).forEach {

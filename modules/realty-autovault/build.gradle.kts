@@ -11,6 +11,9 @@ dependencies {
     compileOnly(libs.worldguard)
     // The module keeps its pending sweeps in a table of its own, through the host's MyBatis.
     compileOnly(libs.mybatis)
+    // Its own config.yml, read with the host's Configurate.
+    compileOnly(libs.configurate.yaml)
+    testImplementation(libs.configurate.yaml)
     // Database tests run against the real engine and need a running Docker daemon.
     testImplementation(libs.mybatis)
     testImplementation(libs.plugin.infrastructure)

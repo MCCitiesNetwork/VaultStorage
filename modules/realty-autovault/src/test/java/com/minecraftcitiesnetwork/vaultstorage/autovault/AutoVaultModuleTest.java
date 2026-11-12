@@ -24,7 +24,7 @@ class AutoVaultModuleTest {
                 "entry-class: com.minecraftcitiesnetwork.vaultstorage.autovault.AutoVaultModule"));
         Assertions.assertTrue(manifest.contains(
                 "expected-plugin-class: " + VaultStoragePlugin.class.getName()));
-        Assertions.assertTrue(manifest.contains("reloadable: false"));
+        Assertions.assertTrue(manifest.contains("reloadable: true"));
     }
 
     /**

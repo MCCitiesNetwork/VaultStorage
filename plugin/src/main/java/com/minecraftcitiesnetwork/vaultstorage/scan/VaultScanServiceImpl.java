@@ -10,7 +10,6 @@ import com.minecraftcitiesnetwork.vaultstorage.scan.ScanResult;
 import com.minecraftcitiesnetwork.vaultstorage.scan.VaultScanService;
 import com.minecraftcitiesnetwork.vaultstorage.menu.VaultScanMenu;
 import com.minecraftcitiesnetwork.vaultstorage.menu.VaultUIContext;
-import com.minecraftcitiesnetwork.vaultstorage.config.ConfigPaths;
 import com.minecraftcitiesnetwork.vaultstorage.scan.VaultRegionScanner;
 import org.bukkit.entity.Player;
 
@@ -38,7 +37,7 @@ public class VaultScanServiceImpl implements VaultScanService {
         // Check cache
         if (cache.containsKey(key)) {
             CacheEntry entry = cache.get(key);
-            long ttlSeconds = VaultStoragePlugin.getInstance().getConfig().getLong(ConfigPaths.SCAN_CACHE_TTL_SECONDS.getPath(), 60);
+            long ttlSeconds = VaultStoragePlugin.getInstance().settings().get().scan().cacheTtlSeconds();
             if (Instant.now().isBefore(entry.timestamp.plusSeconds(ttlSeconds))) {
                 // Cache hit and valid
                 callback.accept(List.copyOf(entry.results));

@@ -12,7 +12,6 @@ import com.minecraftcitiesnetwork.vaultstorage.capture.VaultCapturePolicy;
 import com.minecraftcitiesnetwork.vaultstorage.scan.ScanResult;
 import com.minecraftcitiesnetwork.vaultstorage.menu.VaultScanMenu;
 import com.minecraftcitiesnetwork.vaultstorage.menu.VaultUIContext;
-import com.minecraftcitiesnetwork.vaultstorage.config.ConfigPaths;
 import com.minecraftcitiesnetwork.vaultstorage.config.MiniMessageUtil;
 import org.bukkit.World;
 import org.bukkit.block.Block;
@@ -128,7 +127,7 @@ public class VaultRegionScanner {
             this.protections = protections;
             this.world = world;
             this.actorOwnsRegion = actorOwnsRegion;
-            this.batchSize = VaultStoragePlugin.getInstance().getConfig().getInt(ConfigPaths.SCAN_BATCH_SIZE.getPath(), 50);
+            this.batchSize = VaultStoragePlugin.getInstance().settings().get().scan().batchSize();
         }
 
         @Override

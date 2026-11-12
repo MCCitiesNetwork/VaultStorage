@@ -14,7 +14,6 @@ import com.minecraftcitiesnetwork.vaultstorage.menu.AutoDialog;
 import com.minecraftcitiesnetwork.vaultstorage.menu.ParentMenu;
 import com.minecraftcitiesnetwork.vaultstorage.capture.VaultCapturePolicy;
 import com.minecraftcitiesnetwork.vaultstorage.capture.VaultCaptureService;
-import com.minecraftcitiesnetwork.vaultstorage.config.ConfigPaths;
 import com.minecraftcitiesnetwork.vaultstorage.config.DataFolder;
 import com.minecraftcitiesnetwork.vaultstorage.config.MiniMessageUtil;
 import com.minecraftcitiesnetwork.vaultstorage.config.AutoYML;
@@ -197,7 +196,7 @@ public class VaultScanMenu extends ChildMenuImp {
         var session = VaultStoragePlugin.getInstance().getSessionManager().getOrCreate(player.getUniqueId());
         long now = System.currentTimeMillis();
         long last = session.getLastScanTime();
-        long cooldownMs = VaultStoragePlugin.getInstance().getConfig().getLong(ConfigPaths.SCAN_COOLDOWN_SECONDS.getPath(), 20) * 1000;
+        long cooldownMs = VaultStoragePlugin.getInstance().settings().get().scan().cooldownSeconds() * 1000;
         if (now - last < cooldownMs) {
             long remaining = (cooldownMs - (now - last)) / 1000;
             player.sendMessage(MiniMessageUtil.parseOrPlain(cfg().scanCooldown, Map.of("%time%", String.valueOf(remaining))));

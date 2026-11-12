@@ -23,7 +23,7 @@ public final class VaultDatabase implements AutoCloseable {
 
     public VaultDatabase(@NotNull DatabaseSettings settings) {
         PooledDataSource pooled = new PooledDataSource("org.mariadb.jdbc.Driver", settings.jdbcUrl(),
-                settings.user(), settings.password());
+                settings.username(), settings.password());
         // A connection the server dropped while idle is replaced instead of handed out.
         pooled.setPoolPingEnabled(true);
         pooled.setPoolPingQuery("SELECT 1");

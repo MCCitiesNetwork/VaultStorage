@@ -1,0 +1,9 @@
+# Where VaultStorage keeps its vaults. MariaDB 10.11 or later; MySQL is not supported.
+#
+# The url has no "jdbc:" in front. Add options after a question mark, for example
+# "mariadb://db.example:3306/vault_storage?sslMode=verify-full".
+#
+# This file is read once, at startup. A reload does not re-read it.
+url: "mariadb://localhost:3306/vault_storage"
+username: "root"
+password: ""

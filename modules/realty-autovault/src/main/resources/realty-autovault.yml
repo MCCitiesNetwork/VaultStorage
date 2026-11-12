@@ -1,0 +1,17 @@
+# Auto-vault: when a Realty region changes occupant (bought, transferred or rented), the
+# Bolt-locked containers left in it are vaulted for their owners. A container is left alone
+# when its lock owner is the new occupant or a WorldGuard owner or member of the region.
+#
+# The bundled default of this file is rewritten to defaults/config.yml on every start.
+
+# false turns the feature off. Sweeps already waiting are kept and not run.
+enabled: true
+
+# Grace period between the occupant change and the sweep.
+delay-seconds: 60
+
+# Also vault Bolt-locked item frames and paintings.
+include-hangings: true
+
+# Tell the new occupant, if online, when a sweep vaulted something. Once per sweep.
+notify-occupant: true
