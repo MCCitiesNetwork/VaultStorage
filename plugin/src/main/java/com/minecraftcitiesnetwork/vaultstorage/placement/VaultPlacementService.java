@@ -1,5 +1,6 @@
 package com.minecraftcitiesnetwork.vaultstorage.placement;
 
+import com.minecraftcitiesnetwork.vaultstorage.config.MessageKeys;
 import com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin;
 import com.minecraftcitiesnetwork.vaultstorage.bolt.BoltService;
 import com.minecraftcitiesnetwork.vaultstorage.database.ClaimResult;
@@ -40,7 +41,8 @@ import org.jetbrains.annotations.Nullable;
 public class VaultPlacementService {
 
     /** Immutable result for placement operations. */
-    public record Result(boolean success, String message) {}
+    /** {@code messageKey} names the line in messages.yml that tells the player what happened. */
+    public record Result(boolean success, String messageKey) {}
 
     /**
      * Places the vault at the target. The callback runs on the main thread.
@@ -60,14 +62,14 @@ public class VaultPlacementService {
         CompletableFuture.supplyAsync(() -> repository.claim(vaultUuid), database)
                 .thenComposeAsync(claim -> switch (claim) {
                     case ClaimResult.NoSuchVault missing ->
-                            CompletableFuture.completedFuture(new Result(false, "Vault not found."));
+                            CompletableFuture.completedFuture(new Result(false, MessageKeys.INVENTORY_NOT_FOUND));
                     case ClaimResult.AlreadyClaimed held ->
-                            CompletableFuture.completedFuture(new Result(false, "Someone else is using that vault."));
+                            CompletableFuture.completedFuture(new Result(false, MessageKeys.INVENTORY_IN_USE));
                     case ClaimResult.Claimed claimed -> placeClaimed(plugin, claimed.vault(), targetLoc, database);
                 }, mainThread)
                 .exceptionally(failure -> {
                     plugin.getLogger().log(Level.SEVERE, "Placing vault " + vaultUuid + " failed.", failure);
-                    return new Result(false, "The vault could not be placed. Nothing was lost.");
+                    return new Result(false, MessageKeys.PLACEMENT_FAILED);
                 })
                 .thenAcceptAsync(reply, mainThread);
     }
@@ -81,7 +83,7 @@ public class VaultPlacementService {
             placed = placeAt(stored, targetLoc);
         } catch (RuntimeException ex) {
             plugin.getLogger().log(Level.SEVERE, "Placing vault " + vaultUuid + " failed; it stays in storage.", ex);
-            placed = new Result(false, "The vault could not be placed. Nothing was lost.");
+            placed = new Result(false, MessageKeys.PLACEMENT_FAILED);
         }
         if (!placed.success()) {
             Result refused = placed;
@@ -121,11 +123,11 @@ public class VaultPlacementService {
     private @NotNull Result placeAt(@NotNull StoredVault stored, @NotNull Location loc) {
         World world = loc.getWorld();
         if (world == null) {
-            return new Result(false, "Target world not available.");
+            return new Result(false, MessageKeys.PLACEMENT_WORLD_UNAVAILABLE);
         }
         Block target = world.getBlockAt(loc);
         if (target.getType() != Material.AIR) {
-            return new Result(false, "Target not empty.");
+            return new Result(false, MessageKeys.PLACEMENT_TARGET_NOT_EMPTY);
         }
         Material material = Material.matchMaterial(stored.vault().material());
         if (material == null || !material.isBlock()) {
@@ -148,7 +150,7 @@ public class VaultPlacementService {
         }
 
         if (!(target.getState() instanceof Container container)) {
-            return new Result(true, "Block placed.");
+            return new Result(true, MessageKeys.PLACEMENT_BLOCK_PLACED);
         }
         Inventory inventory = container.getInventory();
         inventory.clear();
@@ -165,6 +167,6 @@ public class VaultPlacementService {
                 world.dropItemNaturally(loc, leftover);
             }
         }
-        return new Result(true, "Vault placed.");
+        return new Result(true, MessageKeys.PLACEMENT_VAULT_PLACED);
     }
 }

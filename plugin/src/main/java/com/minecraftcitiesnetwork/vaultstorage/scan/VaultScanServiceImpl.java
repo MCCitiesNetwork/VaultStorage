@@ -31,7 +31,7 @@ public class VaultScanServiceImpl implements VaultScanService {
     private final Map<CacheKey, List<Consumer<List<ScanResult>>>> pendingScans = new HashMap<>();
 
     @Override
-    public void scan(Player player, String regionId, VaultUIContext context, VaultScanMenu.Config config, Consumer<List<ScanResult>> callback) {
+    public void scan(Player player, String regionId, VaultUIContext context, Consumer<List<ScanResult>> callback) {
         CacheKey key = new CacheKey(regionId, player.getUniqueId(), context.filterOwner());
 
         // Check cache
@@ -60,7 +60,7 @@ public class VaultScanServiceImpl implements VaultScanService {
         }
 
         // Cache miss or expired, perform scan
-        new VaultRegionScanner(player, regionId, context, config, results -> {
+        new VaultRegionScanner(player, regionId, context, results -> {
             if (results != null) {
                 // A copy that can shrink: forget() removes blocks from it, from any thread.
                 cache.put(key, new CacheEntry(new CopyOnWriteArrayList<>(results), Instant.now()));

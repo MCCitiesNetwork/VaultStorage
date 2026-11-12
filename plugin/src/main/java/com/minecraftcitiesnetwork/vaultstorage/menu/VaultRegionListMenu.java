@@ -1,18 +1,16 @@
 package com.minecraftcitiesnetwork.vaultstorage.menu;
 
+import com.minecraftcitiesnetwork.vaultstorage.config.MessageKeys;
+import com.minecraftcitiesnetwork.vaultstorage.config.Text;
 import io.papermc.paper.dialog.Dialog;
 import io.papermc.paper.registry.data.dialog.DialogBase;
 import io.papermc.paper.registry.data.dialog.body.DialogBody;
 import com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin;
-import com.minecraftcitiesnetwork.vaultstorage.vault.Dto;
 import com.minecraftcitiesnetwork.vaultstorage.region.VaultRegion;
 import com.minecraftcitiesnetwork.vaultstorage.region.WorldGuardService;
 import com.minecraftcitiesnetwork.vaultstorage.menu.AutoDialog;
 import com.minecraftcitiesnetwork.vaultstorage.menu.ParentMenu;
 import com.minecraftcitiesnetwork.vaultstorage.permission.VaultPermission;
-import com.minecraftcitiesnetwork.vaultstorage.config.DataFolder;
-import com.minecraftcitiesnetwork.vaultstorage.config.MiniMessageUtil;
-import com.minecraftcitiesnetwork.vaultstorage.config.AutoYML;
 import org.bukkit.World;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
@@ -29,46 +27,11 @@ import java.util.Map;
  */
 public class VaultRegionListMenu extends ChildMenuImp {
 
-    /** Menu configuration texts. */
-    public static class Config implements Dto, java.io.Serializable {
-        /** Dialog title. Placeholders: %player% %query% */
-        public String title = "<gold><bold>Regions</bold></gold>";
-        /** Header line above the list. Placeholders: %count% %page% %pages% %query% */
-        public String header = "<gray>%count% regions</gray> <dark_gray>|</dark_gray> <gray>page %page%/%pages%</gray>";
-        /** Button label for each region entry. Placeholder: %region% */
-        public String regionBtn = "<white>%region%</white>";
-        /** No results message. */
-        public String noneFound = "<gray>No regions match.</gray>";
-        /** Prev/Next page buttons. */
-        public String prevPageBtn = "<gray><< Prev</gray>";
-        public String nextPageBtn = "<gray>Next >></gray>";
-        /** Back button to return to the parent scan menu. */
-        public String backBtn = "<red><bold>Back</bold></red>";
-        /** Error when services missing. */
-        public String servicesMissing = "<red>Services not ready.</red>";
-        /** Error when region not found (race condition). */
-        public String regionNotFound = "<red>Region not found: %region%</red>";
-        /** Message when scan is on cooldown. Placeholders: %time% */
-        public String scanCooldown = "<red>Please wait %time%s before scanning again.</red>";
-    }
 
     /**
      * YAML header describing configuration placeholders.
      */
-    private static final String HEADER = String.join("\n",
-            "VaultRegionListMenu configuration.",
-            "All strings accept MiniMessage or plain text.",
-            "Placeholders:",
-            "- %player% -> current player name (title)",
-            "- %query%  -> current filter query (title, header)",
-            "- %count%  -> total results (header)",
-            "- %page%   -> current page number (1-based)",
-            "- %pages%  -> total pages",
-            "- %region% -> region id for buttons" );
 
-    private static final AutoYML<Config> YML = AutoYML.create(Config.class, "VaultRegionListMenu", DataFolder.MENUS, HEADER);
-    public static void ensureConfig() { YML.loadOrCreate(Config::new); }
-    private static Config cfg() { return YML.loadOrCreate(Config::new); }
 
     private static final int PAGE_SIZE = 6;
 
@@ -103,10 +66,9 @@ public class VaultRegionListMenu extends ChildMenuImp {
     }
 
     private Dialog build() {
-        Config config = cfg();
         AutoDialog.Builder builder = getAutoDialogBuilder();
         Map<String,String> phTitle = Map.of("%player%", getPlayer().getName(), "%query%", query == null ? "" : query);
-        builder.title(MiniMessageUtil.parseOrPlain(config.title, phTitle));
+        builder.title(Text.of(MessageKeys.REGIONS_TITLE, phTitle));
         builder.canCloseWithEscape(true);
         builder.afterAction(DialogBase.DialogAfterAction.CLOSE);
 
@@ -124,24 +86,24 @@ public class VaultRegionListMenu extends ChildMenuImp {
                     "%pages%", String.valueOf(pages),
                     "%query%", ""
             );
-            builder.addBody(DialogBody.plainMessage(MiniMessageUtil.parseOrPlain(config.header, phHeader)));
+            builder.addBody(DialogBody.plainMessage(Text.of(MessageKeys.REGIONS_HEADER, phHeader)));
 
             if (from < to) {
                 for (int i = from; i < to; i++) {
                     String id = subsetIds.get(i);
                     Map<String,String> ph = Map.of("%region%", id);
-                    builder.button(MiniMessageUtil.parseOrPlain(config.regionBtn, ph), ctx -> openResultsFor(ctx.player(), id));
+                    builder.button(Text.of(MessageKeys.REGIONS_REGION_BTN, ph), ctx -> openResultsFor(ctx.player(), id));
                 }
             } else {
-                builder.addBody(DialogBody.plainMessage(MiniMessageUtil.parseOrPlain(config.noneFound)));
+                builder.addBody(DialogBody.plainMessage(Text.of(MessageKeys.REGIONS_NONE_FOUND)));
             }
 
             if (pages > 1) {
-                if (currentPage > 0) builder.button(MiniMessageUtil.parseOrPlain(config.prevPageBtn), ctx -> new VaultRegionListMenu(ctx.player(), getParentMenu(), subsetIds, currentPage - 1).open());
-                if (currentPage < pages - 1) builder.button(MiniMessageUtil.parseOrPlain(config.nextPageBtn), ctx -> new VaultRegionListMenu(ctx.player(), getParentMenu(), subsetIds, currentPage + 1).open());
+                if (currentPage > 0) builder.button(Text.of(MessageKeys.REGIONS_PREV_PAGE_BTN), ctx -> new VaultRegionListMenu(ctx.player(), getParentMenu(), subsetIds, currentPage - 1).open());
+                if (currentPage < pages - 1) builder.button(Text.of(MessageKeys.REGIONS_NEXT_PAGE_BTN), ctx -> new VaultRegionListMenu(ctx.player(), getParentMenu(), subsetIds, currentPage + 1).open());
             }
 
-            builder.button(MiniMessageUtil.parseOrPlain(config.backBtn), ctx -> {
+            builder.button(Text.of(MessageKeys.REGIONS_BACK_BTN), ctx -> {
                 VaultUIContext backCtx = VaultPermission.ADMIN.has(ctx.player()) ? VaultUIContext.admin(ctx.player().getUniqueId()) : VaultUIContext.self(ctx.player().getUniqueId());
                 new VaultScanMenu(ctx.player(), getParentMenu(), backCtx).open();
             });
@@ -151,8 +113,8 @@ public class VaultRegionListMenu extends ChildMenuImp {
         // Browse mode
         WorldGuardService wgs = VaultStoragePlugin.getInstance().getWorldGuardService();
         if (wgs == null) {
-            builder.addBody(DialogBody.plainMessage(MiniMessageUtil.parseOrPlain(config.servicesMissing)));
-            builder.button(MiniMessageUtil.parseOrPlain(config.backBtn), ctx -> new VaultScanMenu(ctx.player(), getParentMenu()).open());
+            builder.addBody(DialogBody.plainMessage(Text.of(MessageKeys.REGIONS_SERVICES_MISSING)));
+            builder.button(Text.of(MessageKeys.REGIONS_BACK_BTN), ctx -> new VaultScanMenu(ctx.player(), getParentMenu()).open());
             return builder.build();
         }
 
@@ -172,24 +134,24 @@ public class VaultRegionListMenu extends ChildMenuImp {
                 "%pages%", String.valueOf(pages),
                 "%query%", query
         );
-        builder.addBody(DialogBody.plainMessage(MiniMessageUtil.parseOrPlain(config.header, phHeader)));
+        builder.addBody(DialogBody.plainMessage(Text.of(MessageKeys.REGIONS_HEADER, phHeader)));
 
         if (from < to) {
             for (int i = from; i < to; i++) {
                 VaultRegion r = filtered.get(i);
                 Map<String,String> ph = Map.of("%region%", r.id());
-                builder.button(MiniMessageUtil.parseOrPlain(config.regionBtn, ph), ctx -> openResultsFor(ctx.player(), r.id()));
+                builder.button(Text.of(MessageKeys.REGIONS_REGION_BTN, ph), ctx -> openResultsFor(ctx.player(), r.id()));
             }
         } else {
-            builder.addBody(DialogBody.plainMessage(MiniMessageUtil.parseOrPlain(config.noneFound)));
+            builder.addBody(DialogBody.plainMessage(Text.of(MessageKeys.REGIONS_NONE_FOUND)));
         }
 
         if (pages > 1) {
-            if (currentPage > 0) builder.button(MiniMessageUtil.parseOrPlain(config.prevPageBtn), ctx -> new VaultRegionListMenu(ctx.player(), getParentMenu(), query, currentPage - 1).open());
-            if (currentPage < pages - 1) builder.button(MiniMessageUtil.parseOrPlain(config.nextPageBtn), ctx -> new VaultRegionListMenu(ctx.player(), getParentMenu(), query, currentPage + 1).open());
+            if (currentPage > 0) builder.button(Text.of(MessageKeys.REGIONS_PREV_PAGE_BTN), ctx -> new VaultRegionListMenu(ctx.player(), getParentMenu(), query, currentPage - 1).open());
+            if (currentPage < pages - 1) builder.button(Text.of(MessageKeys.REGIONS_NEXT_PAGE_BTN), ctx -> new VaultRegionListMenu(ctx.player(), getParentMenu(), query, currentPage + 1).open());
         }
 
-        builder.button(MiniMessageUtil.parseOrPlain(config.backBtn), ctx -> {
+        builder.button(Text.of(MessageKeys.REGIONS_BACK_BTN), ctx -> {
             VaultUIContext backCtx = VaultPermission.ADMIN.has(ctx.player()) ? VaultUIContext.admin(ctx.player().getUniqueId()) : VaultUIContext.self(ctx.player().getUniqueId());
             new VaultScanMenu(ctx.player(), getParentMenu(), backCtx).open();
         });
@@ -212,7 +174,7 @@ public class VaultRegionListMenu extends ChildMenuImp {
         if (!checkCooldown(player)) return;
         VaultUIContext context = VaultPermission.ADMIN.has(player) ? VaultUIContext.admin(player.getUniqueId()) : VaultUIContext.self(player.getUniqueId());
         new LoadingMenu(player, getParentMenu(), Map.of("%player%", player.getName())).open();
-        VaultStoragePlugin.getInstance().getScanService().scan(player, regionId, context, VaultScanMenu.getConfig(), results -> {
+        VaultStoragePlugin.getInstance().getScanService().scan(player, regionId, context, results -> {
             if (results == null) return;
             new VaultScanMenu(player, getParentMenu(), context, regionId, results).open();
         });
@@ -226,7 +188,7 @@ public class VaultRegionListMenu extends ChildMenuImp {
         long cooldownMs = VaultStoragePlugin.getInstance().settings().get().scan().cooldownSeconds() * 1000;
         if (now - last < cooldownMs) {
             long remaining = (cooldownMs - (now - last)) / 1000;
-            player.sendMessage(MiniMessageUtil.parseOrPlain(cfg().scanCooldown, Map.of("%time%", String.valueOf(remaining))));
+            player.sendMessage(Text.of(MessageKeys.REGIONS_SCAN_COOLDOWN, Map.of("%time%", String.valueOf(remaining))));
             return false;
         }
         session.setLastScanTime(now);

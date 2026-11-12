@@ -38,12 +38,11 @@ Command (in‑game):
 ### Database Setup (MariaDB)
 VaultStorage needs **MariaDB 10.11 or later**. MySQL is not supported.
 
-Edit `plugins/VaultStorage/config.yml`:
-- `mysql.host`, `mysql.port`, `mysql.database`: where the database is. The database must exist.
-- `mysql.user`, `mysql.password`: an account that may create and alter tables in it.
-- `mysql.useSSL`: true or false, depending on your database setup.
+Edit `plugins/VaultStorage/database.yml`:
+- `url`: where the database is, without `jdbc:` in front, for example `mariadb://localhost:3306/vault_storage`. The database must exist. Add options after a question mark, such as `?sslMode=verify-full`.
+- `username`, `password`: an account that may create and alter tables in it.
 
-The keys keep their `mysql.` prefix for now.
+This file is read once, at startup. A reload does not re-read it.
 
 The plugin creates and upgrades its tables itself when it starts. If it cannot connect, or an upgrade fails, it logs the reason and disables itself; it does not run without a working database.
 
@@ -52,6 +51,9 @@ The first start of 2.0 converts the existing tables to a new layout. Every vault
 - **Take a database backup first.** The conversion cannot be undone by the plugin; going back to 1.x means restoring that backup.
 - It takes about a minute for a database of 80,000 vaults and a million items. The server finishes starting once it is done.
 - A vault that has no owner recorded stops the conversion with an error naming the problem. Give it an owner in the `vault_owners` table and start again.
+
+- `config.yml` is no longer read. The first start writes `database.yml`, `settings.yml` and the auto-vault module's `config.yml` from the values in it. Once those exist you can delete it.
+- **Wording you changed in `menus/` and `mail/` is not carried over.** All text is in `messages.yml` now. Move your changes there, then delete the two folders.
 
 ### Permissions
 Assign via your permissions plugin (examples: LuckPerms, PermissionsEx):
@@ -64,42 +66,20 @@ Assign via your permissions plugin (examples: LuckPerms, PermissionsEx):
 - vaultstorage.admin.override — bypass region/container checks when capturing/placing
 - vaultstorage.action.capture — allow entering capture mode and vaulting containers
 
-### Menu and Text Configuration (YAML)
-All menu and session texts are generated on first use under:
-plugins/VaultStorage/menus/
+### Configuration files
+All are under `plugins/VaultStorage/`.
 
-Most fields accept plain text or MiniMessage formatting (e.g., <gold>…</gold>). Changes take effect the next time a menu is opened.
+| File | Holds | Reloads |
+| --- | --- | --- |
+| `database.yml` | the database address and account | no |
+| `settings.yml` | scan batch size, scan cache time, scan cooldown, vaults per page | yes |
+| `messages.yml` | every sentence a player sees, as MiniMessage | yes |
+| `modules/realty-autovault/config.yml` | auto-vault: on or off, the delay, item frames, telling the occupant | yes |
 
-Key configuration groups:
-
-VaultCaptureSession.yml (capture session texts and action bar)
-- captureCancelled — chat message on cancel
-- notAllowed — when capture isn’t allowed by policy
-- emptyCaptureSkipped — when a non-container or empty container is “unlocked” (no vault)
-- capturedOk — after capturing successfully
-- noBoltOwner — shown when no Bolt owner exists but override is active; the actor will become the vault owner
-- actionBarIdle — action bar while in capture mode but not looking at a valid target
-- actionBarContainer — action bar while looking at a block
-  - Placeholders: %owner%, %vaultable%, %reasonSegment%, %admin%
-- actionBarReasonSegmentTemplate — template that wraps the human‑readable reason
-- actionBarReasonAllowedBlank — empty or custom text when allowed
-- reasonOwnerSelfInRegion — text for OWNER_SELF_IN_REGION
-- reasonContainerOwnerInOverlap — text for CONTAINER_OWNER_IN_OVERLAP
-- reasonNotInvolvedNotOwner — text for NOT_INVOLVED_NOT_OWNER
-- reasonUnprotectedNoOverride — text for UNPROTECTED_NO_OVERRIDE
-- reasonNotInRegion — text for NOT_IN_REGION
-- reasonFallback — default text when no specific mapping is used
-- actionBarUnprotectedOwner — shown for unprotected containers
-- actionBarVaultableYes / actionBarVaultableNo — yes/no labels
-- adminModeEnabled — one‑time chat notification when the actor has admin override and starts capture mode
-- actionBarAdminModeTag — optional tag appended to the action bar when override is active (injected via %admin%)
-
-Additional placeholders available to reason texts:
-- %owner% — resolved owner name (or short UUID) for display
-- %regions% — comma‑separated region ids at the target block
-- %reasonCode% — the policy reason code (e.g., OWNER_SELF_IN_REGION)
-
-Other menu YAMLs (when present in your build) follow a similar pattern and will include per‑menu placeholders and help texts.
+- `/vault reload` (needs `vaultstorage.admin`) re-reads the files marked yes. If `settings.yml` or `messages.yml` does not parse, nothing changes and the log says why.
+- The plugin never rewrites these files, so your comments stay. The defaults of the current version are written to `defaults/` on every start; compare with them after an upgrade.
+- A key you leave out of `messages.yml` uses the default wording. A key missing from `settings.yml` is named in the startup log.
+- In `messages.yml`, a word in angle brackets that is not a colour, such as `<owner>`, is filled in by the plugin. The comment above each line lists the ones it may use.
 
 ### Integrations
 - WorldGuard: regions are resolved live from WG's RegionManager; overlapping regions are supported.

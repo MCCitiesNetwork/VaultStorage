@@ -1,5 +1,8 @@
 package com.minecraftcitiesnetwork.vaultstorage.command;
 
+import java.util.Map;
+import com.minecraftcitiesnetwork.vaultstorage.config.MessageKeys;
+import com.minecraftcitiesnetwork.vaultstorage.config.Text;
 import com.minecraftcitiesnetwork.vaultstorage.command.CommandContext;
 import com.minecraftcitiesnetwork.vaultstorage.command.Subcommand;
 import com.minecraftcitiesnetwork.vaultstorage.command.AdminSubcommand;
@@ -30,7 +33,8 @@ public class VaultCommand implements CommandExecutor, TabCompleter {
             new CaptureSubcommand(),
             new OpenSubcommand(),
             new AdminSubcommand(),
-            new TransferSubcommand()
+            new TransferSubcommand(),
+            new ReloadSubcommand()
     );
 
     @Override
@@ -40,7 +44,7 @@ public class VaultCommand implements CommandExecutor, TabCompleter {
             Subcommand sub = findSub("menu");
             if (sub == null) return true; // should not happen
             if (!sub.hasPermission(sender)) {
-                sender.sendMessage("You don't have permission.");
+                sender.sendMessage(Text.of(MessageKeys.COMMAND_NO_PERMISSION));
                 return true;
             }
             sub.execute(new CommandContext(sender, label, new String[0]));
@@ -49,21 +53,21 @@ public class VaultCommand implements CommandExecutor, TabCompleter {
         String subName = args[0].toLowerCase(Locale.ROOT);
         Subcommand sub = findSub(subName);
         if (sub == null) {
-            sender.sendMessage("Unknown subcommand. Try: " + String.join(", ", visibleNames(sender)));
+            sender.sendMessage(Text.of(MessageKeys.COMMAND_UNKNOWN_SUBCOMMAND,
+                    Map.of("subcommands", String.join(", ", visibleNames(sender)))));
             return true;
         }
         if (!sub.hasPermission(sender)) {
-            sender.sendMessage("You don't have permission.");
+            sender.sendMessage(Text.of(MessageKeys.COMMAND_NO_PERMISSION));
             return true;
         }
         String[] tail = Arrays.copyOfRange(args, 1, args.length);
         try {
             sub.execute(new CommandContext(sender, label, tail));
         } catch (IllegalArgumentException ex) {
-            sender.sendMessage(ex.getMessage());
-            sender.sendMessage("Usage: /" + label + " " + sub.usage());
+            sender.sendMessage(Text.of(MessageKeys.COMMAND_USAGE, Map.of("label", label, "usage", sub.usage())));
         } catch (Exception ex) {
-            sender.sendMessage("An error occurred.");
+            sender.sendMessage(Text.of(MessageKeys.COMMAND_ERROR));
         }
         return true;
     }

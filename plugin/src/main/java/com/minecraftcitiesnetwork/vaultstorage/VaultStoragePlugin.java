@@ -14,13 +14,6 @@ import com.minecraftcitiesnetwork.vaultstorage.placement.VaultPlacementService;
 import com.minecraftcitiesnetwork.vaultstorage.scan.VaultScanServiceImpl;
 import com.minecraftcitiesnetwork.vaultstorage.region.WorldGuardServiceImp;
 import com.minecraftcitiesnetwork.vaultstorage.session.VaultSessionManager;
-import com.minecraftcitiesnetwork.vaultstorage.menu.VaultActionMenu;
-import com.minecraftcitiesnetwork.vaultstorage.menu.VaultCaptureMenu;
-import com.minecraftcitiesnetwork.vaultstorage.menu.VaultListMenu;
-import com.minecraftcitiesnetwork.vaultstorage.menu.VaultScanMenu;
-import com.minecraftcitiesnetwork.vaultstorage.menu.VaultRegionListMenu;
-import com.minecraftcitiesnetwork.vaultstorage.menu.VaultPlacementMenu;
-import com.minecraftcitiesnetwork.vaultstorage.menu.LoadingMenu;
 import com.minecraftcitiesnetwork.vaultstorage.permission.VaultPermission;
 import com.minecraftcitiesnetwork.vaultstorage.names.Names;
 import com.minecraftcitiesnetwork.vaultstorage.names.PaperProfileNameSource;
@@ -32,14 +25,16 @@ import com.minecraftcitiesnetwork.vaultstorage.database.VaultRepository;
 import com.minecraftcitiesnetwork.vaultstorage.database.VaultStorageSchemaMigrator;
 import com.minecraftcitiesnetwork.vaultstorage.session.SessionQuitListener;
 import com.minecraftcitiesnetwork.vaultstorage.placement.WorldGuardPlacementGrant;
-import com.minecraftcitiesnetwork.vaultstorage.config.AutoYML;
-import com.minecraftcitiesnetwork.vaultstorage.config.DataFolder;
-import com.minecraftcitiesnetwork.vaultstorage.config.MailConfig;
 import com.minecraftcitiesnetwork.vaultstorage.vault.OwnerNotifications;
 import com.minecraftcitiesnetwork.vaultstorage.config.ConfigFiles;
 import com.minecraftcitiesnetwork.vaultstorage.config.LegacyConfigImport;
 import com.minecraftcitiesnetwork.vaultstorage.config.PluginSettings;
+import com.minecraftcitiesnetwork.pluginInfrastructure.configurate.MessageContainer;
 import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.util.ArrayList;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -75,6 +70,7 @@ public final class VaultStoragePlugin extends JavaPlugin {
     // Integration services
     private final Integrations integrations = new Integrations();
     private final AtomicReference<PluginSettings> settings = new AtomicReference<>();
+    private final MessageContainer messages = new MessageContainer();
     private ModuleLifecycleManager<VaultStoragePlugin> modules;
     private Names names;
     private OwnerNotifications ownerNotifications;
@@ -120,6 +116,9 @@ public final class VaultStoragePlugin extends JavaPlugin {
 
     /** What feature modules supply; read at use time. */
     public Integrations integrations() { return integrations; }
+
+    /** messages.yml. One instance, reloaded in place. */
+    public MessageContainer messages() { return messages; }
 
     /** settings.yml. Read it through the reference each time: a reload swaps what it holds. */
     public AtomicReference<PluginSettings> settings() { return settings; }
@@ -173,21 +172,8 @@ public final class VaultStoragePlugin extends JavaPlugin {
 
         // External lookup services
         this.names = new Names(new PaperProfileNameSource(), this.integrations);
-        // Texts come from the old mail.yml until all text moves to messages.yml.
-        AutoYML<MailConfig> notificationTexts = AutoYML.create(MailConfig.class, "mail", DataFolder.MAIL, MailConfig.HEADER);
         this.ownerNotifications = new OwnerNotifications(this.names, this.integrations::ownerNotifier,
-                () -> notificationTexts.loadOrCreate(MailConfig::new).notificationTitle,
-                () -> notificationTexts.loadOrCreate(MailConfig::new).vaultCreatedMessage,
-                () -> notificationTexts.loadOrCreate(MailConfig::new).sweepVaultedMessage, getLogger());
-
-        // Ensure menu YAMLs exist at startup
-        VaultCaptureMenu.ensureConfig();
-        VaultListMenu.ensureConfig();
-        VaultActionMenu.ensureConfig();
-        VaultScanMenu.ensureConfig();
-        VaultRegionListMenu.ensureConfig();
-        VaultPlacementMenu.ensureConfig();
-        LoadingMenu.ensureConfig();
+                this.messages, getLogger());
 
         getServer().getPluginManager().registerEvents(new SessionQuitListener(this.sessionManager), this);
         getServer().getPluginManager().registerEvents(this.inventoryService, this);
@@ -271,13 +257,71 @@ public final class VaultStoragePlugin extends JavaPlugin {
 
         DatabaseSettings databaseSettings = files.load("database.yml", ConfigFiles.bundled(getClass(), "database.yml"),
                 text -> LegacyConfigImport.fill(text, database)).get(DatabaseSettings.class);
-        PluginSettings pluginSettings = files.load("settings.yml", ConfigFiles.bundled(getClass(), "settings.yml"),
-                text -> LegacyConfigImport.fill(text, scan)).get(PluginSettings.class);
-        if (databaseSettings == null || pluginSettings == null) {
-            throw new IOException("database.yml or settings.yml is empty");
+        if (databaseSettings == null) {
+            throw new IOException("database.yml is empty");
         }
-        this.settings.set(pluginSettings);
+        Reloadable reloadable = readReloadable(files, scan);
+        this.settings.set(reloadable.settings());
+        this.messages.load(reloadable.messages());
+        for (String unread : List.of("menus", "mail")) {
+            if (Files.isDirectory(getDataFolder().toPath().resolve(unread))) {
+                getLogger().info("The " + unread + " folder is no longer read: all wording is in messages.yml now."
+                        + " Move your changes there, then delete the folder.");
+            }
+        }
         return databaseSettings;
+    }
+
+    /** What a reload replaces. Both are parsed before either is swapped in. */
+    private record Reloadable(PluginSettings settings, ConfigurationNode messages) {
+    }
+
+    /** Reads files only; safe off the main thread. */
+    private Reloadable readReloadable(ConfigFiles files, Map<String, String> carriedOver) throws IOException {
+        PluginSettings pluginSettings = files.load("settings.yml", ConfigFiles.bundled(getClass(), "settings.yml"),
+                text -> LegacyConfigImport.fill(text, carriedOver)).get(PluginSettings.class);
+        if (pluginSettings == null) {
+            throw new IOException("settings.yml is empty");
+        }
+        return new Reloadable(pluginSettings,
+                files.loadFilled("messages.yml", ConfigFiles.bundled(getClass(), "messages.yml")));
+    }
+
+    /**
+     * Re-reads settings.yml and messages.yml, then the modules that can reload. Neither file
+     * takes effect unless both parse. database.yml is not re-read. Fails with the cause, which
+     * is also logged.
+     */
+    public CompletableFuture<Void> reload() {
+        Executor mainThread = getServer().getScheduler().getMainThreadExecutor(this);
+        return CompletableFuture
+                .supplyAsync(() -> {
+                    try {
+                        return readReloadable(new ConfigFiles(getDataFolder().toPath(), getLogger()), Map.of());
+                    } catch (IOException ex) {
+                        throw new UncheckedIOException(ex);
+                    }
+                }, this.databaseExecutor)
+                .thenAcceptAsync(reloadable -> {
+                    this.settings.set(reloadable.settings());
+                    this.messages.load(reloadable.messages());
+                }, mainThread)
+                .thenComposeAsync(swapped -> {
+                    List<CompletableFuture<Void>> reloads = new ArrayList<>();
+                    if (this.modules != null) {
+                        this.modules.getActiveModules().forEach((name, module) -> {
+                            if (module.manifest().reloadable()) {
+                                reloads.add(this.modules.reloadAsync(name));
+                            }
+                        });
+                    }
+                    return CompletableFuture.allOf(reloads.toArray(CompletableFuture[]::new));
+                }, mainThread)
+                .whenComplete((done, failure) -> {
+                    if (failure != null) {
+                        getLogger().log(Level.SEVERE, "The reload failed. The old settings are still in use.", failure);
+                    }
+                });
     }
 
     /**

@@ -25,7 +25,7 @@ class BundledConfigTest {
     void theBundledSettingsParse() throws IOException {
         PluginSettings settings = bundled("settings.yml").get(PluginSettings.class);
         Assertions.assertNotNull(settings);
-        Assertions.assertEquals(20, settings.scan().batchSize());
+        Assertions.assertEquals(50, settings.scan().batchSize());
         Assertions.assertEquals(60, settings.scan().cacheTtlSeconds());
         Assertions.assertEquals(20, settings.scan().cooldownSeconds());
         Assertions.assertEquals(20, settings.vaultList().pageSize());
@@ -48,7 +48,7 @@ class BundledConfigTest {
     @Test
     void settingsLeftOutOrNonsensicalFallBackToTheirDefaults() {
         PluginSettings.Scan scan = new PluginSettings.Scan(0, -1, -1);
-        Assertions.assertEquals(20, scan.batchSize());
+        Assertions.assertEquals(50, scan.batchSize());
         Assertions.assertEquals(0, scan.cacheTtlSeconds());
         Assertions.assertEquals(0, scan.cooldownSeconds());
         Assertions.assertEquals(20, new PluginSettings.VaultList(0).pageSize());

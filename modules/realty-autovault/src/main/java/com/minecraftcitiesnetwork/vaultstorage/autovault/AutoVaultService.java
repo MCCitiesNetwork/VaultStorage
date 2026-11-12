@@ -9,7 +9,7 @@ import com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin;
 import com.minecraftcitiesnetwork.vaultstorage.region.VaultRegion;
 import com.minecraftcitiesnetwork.vaultstorage.bolt.BoltService;
 import com.minecraftcitiesnetwork.vaultstorage.region.WorldGuardService;
-import com.minecraftcitiesnetwork.vaultstorage.config.MiniMessageUtil;
+import com.minecraftcitiesnetwork.vaultstorage.config.MessageKeys;
 import com.minecraftcitiesnetwork.vaultstorage.autovault.RegionKey;
 import com.minecraftcitiesnetwork.vaultstorage.autovault.SweepFilter;
 import com.minecraftcitiesnetwork.vaultstorage.autovault.OfflineRegionScanner;
@@ -50,10 +50,6 @@ public class AutoVaultService {
     private final PendingSweepStore store;
     // Read at use time: a reload swaps what it holds.
     private final AtomicReference<AutoVaultSettings> settings;
-
-    // Moves to messages.yml with the rest of the wording.
-    private static final String NOTIFY_MESSAGE = "<yellow>Locked containers and items left here by the previous"
-            + " occupant have been cleared into their vault storage.</yellow>";
 
     public AutoVaultService(@NotNull VaultStoragePlugin plugin, @NotNull PendingSweepStore store,
                             @NotNull AtomicReference<AutoVaultSettings> settings) {
@@ -144,7 +140,7 @@ public class AutoVaultService {
                 if (occupant == null) {
                     return;
                 }
-                occupant.sendMessage(MiniMessageUtil.parseOrPlain(NOTIFY_MESSAGE));
+                occupant.sendMessage(plugin.messages().messageFor(MessageKeys.AUTO_VAULT_OCCUPANT_NOTIFIED));
             });
         };
     }

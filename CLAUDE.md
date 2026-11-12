@@ -53,10 +53,10 @@ Under `com.minecraftcitiesnetwork.vaultstorage`, grouped by feature:
 | `command` | the `/vault` router, subcommands, `LegacyVaultCommand` |
 | `permission` | `VaultPermission` |
 | `session` | per-player session state |
-| `config` | `AutoYML`, config paths, `MiniMessageUtil` |
+| `config` | `ConfigFiles`, `PluginSettings`, `MessageKeys`, `Text`, the 1.x import |
 | `database` | MyBatis mappers, `VaultDatabase`, `VaultRepository`, the schema migrator |
 
-`menu`, `command` and `config` are layers, not features. Each is rewritten whole by a later
+`menu` and `command` are layers, not features. Each is rewritten whole by a later
 step of the programme below.
 
 ## Rules
@@ -95,6 +95,24 @@ step of the programme below.
 - **Never commit `*.sql` from the repository root.** A production snapshot is kept there for
   testing and is ignored.
 
+## Rules for config and messages
+
+- **Operator files are `database.yml`, `settings.yml`, `messages.yml`** and one `config.yml` per
+  module that needs one. `ConfigFiles` creates each from the bundled default and never writes it
+  again; the defaults go to `defaults/` on every start.
+- **Settings are records read through `VaultStoragePlugin.settings().get()` at use time.** A
+  reload swaps the reference. `database.yml` is read once.
+- **No player-facing text in Java.** A sentence is a key in `messages.yml` and a constant in
+  `MessageKeys`, named after the key; `MessageKeysTest` fails when either is missing.
+- **Runtime strings go in through `MessageContainer.value`** (or `Text.of(key, map)`, which does
+  the same). A component goes in through `MessageContainer.markup`. Never parse a runtime string.
+- **`Text` is a bridge** for classes that reach the plugin statically. A class written new takes
+  the `MessageContainer` in its constructor.
+- **A module's bundled config has its own file name** (`realty-autovault.yml`): its class loader
+  asks the host's first, so `config.yml` would find the wrong file.
+- **`/vault reload`** parses `settings.yml` and `messages.yml` off the main thread, swaps both
+  only if both parsed, then reloads modules whose manifest says `reloadable: true`.
+
 ## Standardisation programme
 
 Specs and plans are in `docs/superpowers/`. One spec and one plan per step.
@@ -104,7 +122,7 @@ Specs and plans are in `docs/superpowers/`. One spec and one plan per step.
 | 1. Scaffold, package move, modules | built; live-server checks outstanding | this layout |
 | 2. Persistence | done | MyBatis on MariaDB, the playbook schema, transactions |
 | 3. Capture, placement, auto-vault | done, except shop owners from Treasury | save before destroy, futures, two more modules |
-| 4. Config and messages | outline | Configurate records, `messages.yml`, reload |
+| 4. Config and messages | done | Configurate records, `messages.yml`, reload |
 | 5. Commands and permissions | outline | Brigadier, `vaultstorage.command.*` |
 | 6. Menus | outline | paged vault list with real labels, confirmations |
 | 7. Sweep | outline | code style everywhere, dead code removed |
@@ -162,6 +180,9 @@ their own GriefPrevention claim.
 
 Also covered live: one half of a double chest being vaulted and the other staying locked for its
 owner; a locked item frame being vaulted with the item it shows.
+
+Also covered live: `/vault reload` picking up a reworded message and refusing a file that does not
+parse.
 
 Not covered live: sweeps (they need Realty to trigger one) and ChestShop. Shared steps are in `tests/vaults.ts`.
 

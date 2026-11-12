@@ -1,5 +1,7 @@
 package com.minecraftcitiesnetwork.vaultstorage.scan;
 
+import com.minecraftcitiesnetwork.vaultstorage.config.MessageKeys;
+import com.minecraftcitiesnetwork.vaultstorage.config.Text;
 import java.util.LinkedHashSet;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -10,9 +12,7 @@ import com.minecraftcitiesnetwork.vaultstorage.bolt.BoltService;
 import com.minecraftcitiesnetwork.vaultstorage.region.WorldGuardService;
 import com.minecraftcitiesnetwork.vaultstorage.capture.VaultCapturePolicy;
 import com.minecraftcitiesnetwork.vaultstorage.scan.ScanResult;
-import com.minecraftcitiesnetwork.vaultstorage.menu.VaultScanMenu;
 import com.minecraftcitiesnetwork.vaultstorage.menu.VaultUIContext;
-import com.minecraftcitiesnetwork.vaultstorage.config.MiniMessageUtil;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
@@ -34,17 +34,15 @@ public class VaultRegionScanner {
     private final Player player;
     private final String regionId;
     private final VaultUIContext uiContext;
-    private final VaultScanMenu.Config config;
     private final Consumer<List<ScanResult>> callback;
     private BukkitTask task;
     /** Chunks held loaded for this scan. Main thread only. */
     private final List<Chunk> heldChunks = new ArrayList<>();
 
-    public VaultRegionScanner(Player player, String regionId, VaultUIContext uiContext, VaultScanMenu.Config config, Consumer<List<ScanResult>> callback) {
+    public VaultRegionScanner(Player player, String regionId, VaultUIContext uiContext, Consumer<List<ScanResult>> callback) {
         this.player = player;
         this.regionId = regionId;
         this.uiContext = uiContext;
-        this.config = config;
         this.callback = callback;
     }
 
@@ -54,7 +52,7 @@ public class VaultRegionScanner {
         BoltService boltService = VaultStoragePlugin.getInstance().getBoltService();
 
         if (worldGuardService == null || boltService == null) {
-            player.sendMessage(MiniMessageUtil.parseOrPlain(config.servicesMissing));
+            player.sendMessage(Text.of(MessageKeys.SCAN_SERVICES_MISSING));
             callback.accept(null);
             return;
         }
@@ -63,7 +61,7 @@ public class VaultRegionScanner {
         var regions = worldGuardService.getRegionsIn(world);
         var target = regions.stream().filter(r -> r.id().equalsIgnoreCase(regionId)).findFirst();
         if (target.isEmpty()) {
-            player.sendMessage(MiniMessageUtil.parseOrPlain(config.regionNotFound, Map.of("%region%", regionId)));
+            player.sendMessage(Text.of(MessageKeys.SCAN_REGION_NOT_FOUND, Map.of("%region%", regionId)));
             callback.accept(null);
             return;
         }

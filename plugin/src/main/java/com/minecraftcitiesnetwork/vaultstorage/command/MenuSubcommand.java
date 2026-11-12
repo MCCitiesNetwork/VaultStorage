@@ -1,5 +1,7 @@
 package com.minecraftcitiesnetwork.vaultstorage.command;
 
+import com.minecraftcitiesnetwork.vaultstorage.config.MessageKeys;
+import com.minecraftcitiesnetwork.vaultstorage.config.Text;
 import com.minecraftcitiesnetwork.vaultstorage.command.CommandContext;
 import com.minecraftcitiesnetwork.vaultstorage.command.Subcommand;
 import com.minecraftcitiesnetwork.vaultstorage.menu.VaultCaptureMenu;
@@ -27,7 +29,7 @@ public class MenuSubcommand implements Subcommand {
     public void execute(@NonNull CommandContext ctx) {
         CommandSender sender = ctx.sender();
         if (!(sender instanceof Player player)) {
-            sender.sendMessage("Only players can use this.");
+            sender.sendMessage(Text.of(MessageKeys.COMMAND_PLAYERS_ONLY));
             return;
         }
 
@@ -36,7 +38,7 @@ public class MenuSubcommand implements Subcommand {
             String username = ctx.args()[0];
             var plugin = VaultStoragePlugin.getInstance();
 
-            player.sendMessage("Resolving player...");
+            player.sendMessage(Text.of(MessageKeys.COMMAND_MENU_RESOLVING));
 
             // Use centralized UUID resolver
             UniqueIdentifierResolver resolver = new UniqueIdentifierResolver(plugin.names());
@@ -44,14 +46,14 @@ public class MenuSubcommand implements Subcommand {
                 Player current = Bukkit.getPlayer(player.getUniqueId());
                 if (current == null || !current.isOnline()) return;
                 if (resolved == null) {
-                    current.sendMessage("Player not found.");
+                    current.sendMessage(Text.of(MessageKeys.COMMAND_MENU_PLAYER_NOT_FOUND));
                     return;
                 }
                 if (resolved.equals(current.getUniqueId())) {
                     new VaultCaptureMenu(current).open();
                 } else {
                     if (!VaultPermission.ADMIN.has(current)) {
-                        current.sendMessage("You don't have permission to open other players' vaults.");
+                        current.sendMessage(Text.of(MessageKeys.COMMAND_MENU_NO_PERMISSION_OTHERS));
                         return;
                     }
                     new VaultCaptureMenu(current, VaultUIContext.adminFiltered(current.getUniqueId(), resolved)).open();

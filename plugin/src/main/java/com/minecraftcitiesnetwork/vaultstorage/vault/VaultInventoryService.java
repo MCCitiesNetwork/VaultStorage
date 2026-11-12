@@ -1,5 +1,7 @@
 package com.minecraftcitiesnetwork.vaultstorage.vault;
 
+import com.minecraftcitiesnetwork.vaultstorage.config.MessageKeys;
+import com.minecraftcitiesnetwork.vaultstorage.config.Text;
 import com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin;
 import com.minecraftcitiesnetwork.vaultstorage.database.ClaimResult;
 import com.minecraftcitiesnetwork.vaultstorage.database.FindResult;
@@ -17,7 +19,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.logging.Level;
 import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -73,7 +74,7 @@ public class VaultInventoryService implements Listener {
                 .thenAcceptAsync(entry -> {
                     Loaded loaded = entry.getKey();
                     if (loaded.vault().isEmpty()) {
-                        player.sendMessage(loaded.refusal());
+                        player.sendMessage(Text.of(loaded.refusal()));
                         return;
                     }
                     if (!player.isOnline()) {
@@ -85,12 +86,12 @@ public class VaultInventoryService implements Listener {
                 .exceptionally(failure -> {
                     plugin.getLogger().log(Level.SEVERE, "Could not open vault " + vaultId + ".", failure);
                     releaseIfEditing(plugin, vaultId, editing);
-                    player.sendMessage("The vault could not be opened.");
+                    player.sendMessage(Text.of(MessageKeys.INVENTORY_OPEN_FAILED));
                     return null;
                 });
     }
 
-    /** A loaded vault, or the reason there is none to show. */
+    /** A loaded vault, or the messages.yml key of the reason there is none to show. */
     private record Loaded(@NotNull Optional<StoredVault> vault, @NotNull String refusal) {
     }
 
@@ -98,13 +99,13 @@ public class VaultInventoryService implements Listener {
         if (editing) {
             return switch (plugin.repository().claim(vaultId)) {
                 case ClaimResult.Claimed claimed -> new Loaded(Optional.of(claimed.vault()), "");
-                case ClaimResult.AlreadyClaimed held -> new Loaded(Optional.empty(), "Someone else is using that vault.");
-                case ClaimResult.NoSuchVault missing -> new Loaded(Optional.empty(), "Vault not found.");
+                case ClaimResult.AlreadyClaimed held -> new Loaded(Optional.empty(), MessageKeys.INVENTORY_IN_USE);
+                case ClaimResult.NoSuchVault missing -> new Loaded(Optional.empty(), MessageKeys.INVENTORY_NOT_FOUND);
             };
         }
         return switch (plugin.repository().find(vaultId)) {
             case FindResult.Found found -> new Loaded(Optional.of(found.vault()), "");
-            case FindResult.NoSuchVault missing -> new Loaded(Optional.empty(), "Vault not found.");
+            case FindResult.NoSuchVault missing -> new Loaded(Optional.empty(), MessageKeys.INVENTORY_NOT_FOUND);
         };
     }
 
@@ -123,9 +124,7 @@ public class VaultInventoryService implements Listener {
                              @NotNull VaultAction action, @Nullable Runnable reopenCallback) {
         int highestSlot = stored.items().stream().mapToInt(VaultItemEntity::slot).max().orElse(-1);
         int size = Math.min(MAX_SIZE, Math.max(ROW, ((highestSlot + 1 + ROW - 1) / ROW) * ROW));
-        Component title = Component.text("Owner: ", NamedTextColor.WHITE)
-                .append(Component.text(ownerName, NamedTextColor.GOLD))
-                .append(Component.text(" - " + action.name(), NamedTextColor.GRAY));
+        Component title = Text.of(MessageKeys.INVENTORY_TITLE, Map.of("owner", ownerName, "action", action.name()));
         VaultView view = new VaultView(stored.vault().uuid(), action, reopenCallback);
         Inventory inventory = Bukkit.createInventory(view, size, title);
         view.inventory(inventory);
@@ -187,7 +186,7 @@ public class VaultInventoryService implements Listener {
                     plugin.getLogger().log(Level.SEVERE, "Vault " + view.vault() + " could not be saved after "
                             + event.getPlayer().getName() + " edited it. It keeps its previous contents; what they"
                             + " put in is lost and what they took out exists twice.", failure);
-                    event.getPlayer().sendMessage("The vault could not be saved. Tell staff.");
+                    event.getPlayer().sendMessage(Text.of(MessageKeys.INVENTORY_SAVE_FAILED));
                     return null;
                 })
                 .thenRunAsync(() -> {

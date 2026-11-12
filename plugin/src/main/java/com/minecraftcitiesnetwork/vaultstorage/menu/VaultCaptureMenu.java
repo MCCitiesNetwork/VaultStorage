@@ -1,16 +1,14 @@
 package com.minecraftcitiesnetwork.vaultstorage.menu;
 
+import com.minecraftcitiesnetwork.vaultstorage.config.MessageKeys;
+import com.minecraftcitiesnetwork.vaultstorage.config.Text;
 import io.papermc.paper.dialog.Dialog;
 import io.papermc.paper.registry.data.dialog.DialogBase;
 import io.papermc.paper.registry.data.dialog.body.DialogBody;
 import com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin;
-import com.minecraftcitiesnetwork.vaultstorage.vault.Dto;
 import com.minecraftcitiesnetwork.vaultstorage.menu.AutoDialog;
 import com.minecraftcitiesnetwork.vaultstorage.permission.VaultPermission;
 import com.minecraftcitiesnetwork.vaultstorage.capture.VaultCaptureService;
-import com.minecraftcitiesnetwork.vaultstorage.config.DataFolder;
-import com.minecraftcitiesnetwork.vaultstorage.config.MiniMessageUtil;
-import com.minecraftcitiesnetwork.vaultstorage.config.AutoYML;
 import org.bukkit.entity.Player;
 
 import java.util.Map;
@@ -29,48 +27,9 @@ import java.util.Map;
  */
 public class VaultCaptureMenu extends ParentMenuImp {
 
-    /** Configurable menu texts. */
-    public static class Config implements Dto {
-        /** Dialog title. Supports %player% placeholder. */
-        public String title = "<gold><bold>Vault Capture</bold></gold>";
-        /** Instruction line explaining how to start capture. Supports %player%. */
-        public String instruction = "<gray>Click any block to convert it into a Vault. Containers with items will be removed; non-containers or empty containers only remove Bolt protection.</gray>";
-        /** Instruction line explaining how to cancel. Supports %player%. */
-        public String cancelHint = "<gray>Left-click anywhere to cancel.</gray>";
-        /** Button to start capture mode. Supports %player%. */
-        public String startBtn = "<green><bold>Start Capture</bold></green>";
-        /** Button to browse vaults. Supports %player%. */
-        public String browseBtn = "<green>Browse Vaults</green>";
-        /** Button to close dialog. Supports %player%. */
-        public String closeBtn = "<red><bold>Close</bold></red>";
 
-        public String emptyCaptureSkipped = "Protection removed.";
-        /** Button to open the scan menu. */
-        public String openScanBtn = "<yellow>Scan Region</yellow>";
-    }
 
-    private static final String HEADER = String.join("\n",
-            "VaultCaptureMenu configuration.",
-            "All strings accept MiniMessage or plain text.",
-            "General placeholders:",
-            "- %player% -> current player name",
-            "- %owner%  -> block Bolt owner name/UUID or 'unprotected' text",
-            "- %vaultable% -> yes/no value (actionBarVaultableYes / actionBarVaultableNo)",
-            "- %reasonSegment% -> preformatted segment starting with prefix (blank if allowed)",
-            "- %reason% -> resolved human readable reason text (inside reason segment template)",
-            "- %reasonCode% -> enum code (OWNER_SELF_IN_REGION, CONTAINER_OWNER_IN_OVERLAP, NOT_INVOLVED_NOT_OWNER, UNPROTECTED_NO_OVERRIDE, NOT_IN_REGION, ALLOWED)",
-            "- %regions% -> comma separated region ids overlapping target (action bar only)",
-            "Capture flow placeholders:",
-            "- Used inside reason* fields: %player% %owner% %regions% %reasonCode%",
-            "Customization notes:",
-            "- Set actionBarReasonSegmentTemplate to blank to hide reasons entirely.",
-            "- Provide your own coloring/formatting per reason* field.",
-            "- Deprecated fields retained for backward compatibility: reasonAllowedBlank, reasonActorMemberBlockedLegacy." );
-
-    private static final AutoYML<Config> YML = AutoYML.create(Config.class, "VaultCaptureMenu", DataFolder.MENUS, HEADER);
-    private static Config cfg() { return YML.loadOrCreate(Config::new); }
     /** Ensures the YAML file for this menu exists by creating defaults if missing. */
-    public static void ensureConfig() { YML.loadOrCreate(Config::new); }
 
     private final VaultUIContext uiContext;
 
@@ -91,7 +50,6 @@ public class VaultCaptureMenu extends ParentMenuImp {
      * @return the constructed dialog instance
      */
     private Dialog build() {
-        Config cfg = cfg();
         AutoDialog.Builder builder = getAutoDialogBuilder();
         Map<String,String> phSelf = new java.util.HashMap<>();
         phSelf.put("%player%", getPlayer().getName());
@@ -100,18 +58,18 @@ public class VaultCaptureMenu extends ParentMenuImp {
         } else if (uiContext.admin()) {
             phSelf.put("%filterOwner%", "ALL");
         }
-        builder.title(MiniMessageUtil.parseOrPlain(cfg.title, phSelf));
+        builder.title(Text.of(MessageKeys.CAPTURE_MENU_TITLE, phSelf));
         builder.canCloseWithEscape(true);
         builder.afterAction(DialogBase.DialogAfterAction.CLOSE);
 
-        builder.addBody(DialogBody.plainMessage(MiniMessageUtil.parseOrPlain(cfg.instruction, phSelf)));
-        builder.addBody(DialogBody.plainMessage(MiniMessageUtil.parseOrPlain(cfg.cancelHint, phSelf)));
+        builder.addBody(DialogBody.plainMessage(Text.of(MessageKeys.CAPTURE_MENU_INSTRUCTION, phSelf)));
+        builder.addBody(DialogBody.plainMessage(Text.of(MessageKeys.CAPTURE_MENU_CANCEL_HINT, phSelf)));
 
         // Start capture mode now delegates fully to VaultCaptureService
-        builder.button(MiniMessageUtil.parseOrPlain(cfg.startBtn, phSelf), ctx -> {
+        builder.button(Text.of(MessageKeys.CAPTURE_MENU_START_BTN, phSelf), ctx -> {
             Player actor = ctx.player();
             if (!VaultPermission.ACTION_CAPTURE.has(actor)) {
-                actor.sendMessage("You don't have permission to capture blocks.");
+                actor.sendMessage(Text.of(MessageKeys.CAPTURE_NO_PERMISSION));
                 return;
             }
             VaultCaptureService svc = VaultStoragePlugin.getInstance().getCaptureService();
@@ -119,14 +77,13 @@ public class VaultCaptureMenu extends ParentMenuImp {
             actor.closeDialog();
         });
 
-        builder.button(MiniMessageUtil.parseOrPlain(cfg.openScanBtn, phSelf), ctx -> new VaultScanMenu(ctx.player(), this, uiContext).open());
-        builder.button(MiniMessageUtil.parseOrPlain(cfg.browseBtn, phSelf), ctx -> new VaultListMenu(ctx.player(), this, uiContext, "").open());
-        builder.button(MiniMessageUtil.parseOrPlain(cfg.closeBtn, phSelf), ctx -> {});
+        builder.button(Text.of(MessageKeys.CAPTURE_MENU_OPEN_SCAN_BTN, phSelf), ctx -> new VaultScanMenu(ctx.player(), this, uiContext).open());
+        builder.button(Text.of(MessageKeys.CAPTURE_MENU_BROWSE_BTN, phSelf), ctx -> new VaultListMenu(ctx.player(), this, uiContext, "").open());
+        builder.button(Text.of(MessageKeys.CAPTURE_MENU_CLOSE_BTN, phSelf), ctx -> {});
         return builder.build();
     }
 
     /** Public accessor for empty capture message (used by command subcaptures). */
-    public static String emptyCaptureMessage() { return cfg().emptyCaptureSkipped; }
 
     @Override
     public void open() {

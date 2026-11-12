@@ -1,5 +1,7 @@
 package com.minecraftcitiesnetwork.vaultstorage.command;
 
+import com.minecraftcitiesnetwork.vaultstorage.config.MessageKeys;
+import com.minecraftcitiesnetwork.vaultstorage.config.Text;
 import com.minecraftcitiesnetwork.vaultstorage.database.FindResult;
 import java.util.concurrent.CompletableFuture;
 import java.util.logging.Level;
@@ -31,7 +33,7 @@ public class OpenSubcommand implements Subcommand {
     @Override
     public void execute(CommandContext ctx) {
         if (!ctx.isPlayer()) {
-            ctx.sender().sendMessage("Only players can use this.");
+            ctx.sender().sendMessage(Text.of(MessageKeys.COMMAND_PLAYERS_ONLY));
             return;
         }
         String idStr = ctx.require(0, "vaultId");
@@ -39,7 +41,7 @@ public class OpenSubcommand implements Subcommand {
         try {
             id = UUID.fromString(idStr);
         } catch (IllegalArgumentException ex) {
-            ctx.sender().sendMessage("Invalid vault id.");
+            ctx.sender().sendMessage(Text.of(MessageKeys.COMMAND_OPEN_INVALID_ID));
             return;
         }
         Player p = ctx.asPlayer();
@@ -48,11 +50,11 @@ public class OpenSubcommand implements Subcommand {
         try {
             action = VaultAction.valueOf(mode.toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException ex) {
-            ctx.sender().sendMessage("Unknown action. Use view|copy|edit.");
+            ctx.sender().sendMessage(Text.of(MessageKeys.COMMAND_OPEN_UNKNOWN_ACTION));
             return;
         }
         if (!VaultPermission.has(p, VaultPermission.from(action))) {
-            ctx.sender().sendMessage("You don't have permission for that action.");
+            ctx.sender().sendMessage(Text.of(MessageKeys.COMMAND_OPEN_NO_PERMISSION));
             return;
         }
 
@@ -63,18 +65,18 @@ public class OpenSubcommand implements Subcommand {
         CompletableFuture.supplyAsync(() -> plugin.repository().find(id), plugin.databaseExecutor())
                 .thenAcceptAsync(found -> {
                     if (!(found instanceof FindResult.Found vault)) {
-                        p.sendMessage("Vault not found.");
+                        p.sendMessage(Text.of(MessageKeys.INVENTORY_NOT_FOUND));
                         return;
                     }
                     if (!admin && !vault.vault().vault().ownerUuid().equals(opener)) {
-                        p.sendMessage("You don't have access to that vault.");
+                        p.sendMessage(Text.of(MessageKeys.COMMAND_OPEN_NO_ACCESS));
                         return;
                     }
                     plugin.getInventoryService().openVirtualInventory(p, id, action);
                 }, plugin.getServer().getScheduler().getMainThreadExecutor(plugin))
                 .exceptionally(failure -> {
                     plugin.getLogger().log(Level.SEVERE, "Could not open vault " + id + ".", failure);
-                    p.sendMessage("The vault could not be opened.");
+                    p.sendMessage(Text.of(MessageKeys.INVENTORY_OPEN_FAILED));
                     return null;
                 });
     }

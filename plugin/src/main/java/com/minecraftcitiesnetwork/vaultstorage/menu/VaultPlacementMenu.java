@@ -1,5 +1,7 @@
 package com.minecraftcitiesnetwork.vaultstorage.menu;
 
+import com.minecraftcitiesnetwork.vaultstorage.config.MessageKeys;
+import com.minecraftcitiesnetwork.vaultstorage.config.Text;
 import com.minecraftcitiesnetwork.vaultstorage.database.VaultFilter;
 import java.util.concurrent.CompletableFuture;
 import java.util.logging.Level;
@@ -7,16 +9,12 @@ import io.papermc.paper.dialog.Dialog;
 import io.papermc.paper.registry.data.dialog.DialogBase;
 import io.papermc.paper.registry.data.dialog.body.DialogBody;
 import com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin;
-import com.minecraftcitiesnetwork.vaultstorage.vault.Dto;
 import com.minecraftcitiesnetwork.vaultstorage.placement.PlayerPlaceVaultEvent;
 import com.minecraftcitiesnetwork.vaultstorage.menu.AutoDialog;
 import com.minecraftcitiesnetwork.vaultstorage.permission.VaultPermission;
 import com.minecraftcitiesnetwork.vaultstorage.placement.VaultPlacementService;
 import com.minecraftcitiesnetwork.vaultstorage.session.VaultSessionManager;
 import com.minecraftcitiesnetwork.vaultstorage.session.VaultSessionManager.Mode;
-import com.minecraftcitiesnetwork.vaultstorage.config.DataFolder;
-import com.minecraftcitiesnetwork.vaultstorage.config.MiniMessageUtil;
-import com.minecraftcitiesnetwork.vaultstorage.config.AutoYML;
 import org.bukkit.Location;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
@@ -39,50 +37,10 @@ public class VaultPlacementMenu extends ChildMenuImp {
 
     private final UUID vaultId;
 
-    /** Configurable menu texts for placement. */
-    public static class Config implements Dto {
-        /** Dialog title. Supports %player%. */
-        public String title = "<gold><bold>Vault Placement</bold></gold>";
-        /** Instruction line explaining how to start placement. Supports %player%. */
-        public String instruction = "<gray>Right-click a block face to place the vault adjacently. Left-click to cancel.</gray>";
-        /** Button to start placement mode. */
-        public String startBtn = "<yellow><bold>Start Placement</bold></yellow>";
-        /** Button to go back. */
-        public String backBtn = "<red><bold>Back</bold></red>";
-        /** Chat message when placement is cancelled. */
-        public String placementCancelled = "Placement cancelled.";
-        /** Actionbar while not looking at a valid target. */
-        public String actionBarIdle = "<yellow>Placement mode</yellow> - Right-click a block face. <gray>Left-click to cancel.</gray>";
-        /** Actionbar when looking at a block. Placeholder %placeable% yes/no */
-        public String actionBarTarget = "<gray>Placeable:</gray> <white>%placeable%</white>";
-        /** Text shown when allowed to place. */
-        public String placeYes = "yes";
-        /** Text shown when NOT allowed to place. */
-        public String placeNo = "no";
-        /** Message when player lacks membership and no override permission. */
-        public String notAllowed = "<red>You must be a region member/owner or have override permission.</red>";
-        /** Success prefix for placement (placeholder %msg%). */
-        public String placeOk = "<green>%msg%</green>";
-        /** Failure prefix for placement (placeholder %msg%). */
-        public String placeFail = "<red>%msg%</red>";
-        /** Loading message shown while placement completes. */
-        public String loading = "<gray>Processing placement, please wait...</gray>";
-    }
 
-    private static final String HEADER = String.join("\n",
-            "VaultPlacementMenu configuration.",
-            "Fields accept MiniMessage or plain strings.",
-            "Placeholders:",
-            "- %player% -> actor/player name",
-            "- %placeable% -> yes/no",
-            "- %msg% -> placement result"
-    );
 
-    private static final AutoYML<Config> YML = AutoYML.create(Config.class, "VaultPlacementMenu", DataFolder.MENUS, HEADER);
     private final VaultUIContext context;
-    private static Config cfg() { return YML.loadOrCreate(Config::new); }
     /** Ensure YAML exists. */
-    public static void ensureConfig() { YML.loadOrCreate(Config::new); }
 
     public VaultPlacementMenu(Player player, ParentMenuImp parent, UUID vaultId, VaultUIContext context) {
         super(player, parent, "vault_place_" + vaultId);
@@ -92,15 +50,14 @@ public class VaultPlacementMenu extends ChildMenuImp {
     }
 
     private Dialog build() {
-        Config c = cfg();
         AutoDialog.Builder builder = getAutoDialogBuilder();
-        builder.title(MiniMessageUtil.parseOrPlain(c.title, Map.of("%player%", getPlayer().getName())));
+        builder.title(Text.of(MessageKeys.PLACEMENT_TITLE, Map.of("%player%", getPlayer().getName())));
         builder.canCloseWithEscape(true);
         builder.afterAction(DialogBase.DialogAfterAction.CLOSE);
 
-        builder.addBody(DialogBody.plainMessage(MiniMessageUtil.parseOrPlain(c.instruction, Map.of("%player%", getPlayer().getName()))));
-        builder.button(MiniMessageUtil.parseOrPlain(c.startBtn), ctx -> startPlacement(ctx.player()));
-        builder.button(MiniMessageUtil.parseOrPlain(c.backBtn), ctx -> getParentMenu().open());
+        builder.addBody(DialogBody.plainMessage(Text.of(MessageKeys.PLACEMENT_INSTRUCTION, Map.of("%player%", getPlayer().getName()))));
+        builder.button(Text.of(MessageKeys.PLACEMENT_START_BTN), ctx -> startPlacement(ctx.player()));
+        builder.button(Text.of(MessageKeys.PLACEMENT_BACK_BTN), ctx -> getParentMenu().open());
         return builder.build();
     }
 
@@ -122,7 +79,6 @@ public class VaultPlacementMenu extends ChildMenuImp {
      * </p>
      */
     private void startPlacement(Player actor) {
-        Config config = cfg();
         VaultSessionManager.Session session = VaultStoragePlugin.getInstance().getSessionManager().getOrCreate(actor.getUniqueId());
         // Switch to PLACEMENT mode, cancelling any prior capture/placement state
         session.switchTo(Mode.PLACEMENT);
@@ -146,7 +102,7 @@ public class VaultPlacementMenu extends ChildMenuImp {
                     if (actionbarTask[0] != null) actionbarTask[0].cancel();
                     session.clearActionBarTask();
                     session.switchTo(Mode.NONE);
-                    actor.sendMessage(MiniMessageUtil.parseOrPlain(config.placementCancelled));
+                    actor.sendMessage(Text.of(MessageKeys.PLACEMENT_PLACEMENT_CANCELLED));
                     return; // Do NOT reopen menu
                 }
                 if (action != Action.RIGHT_CLICK_BLOCK) return;
@@ -159,13 +115,13 @@ public class VaultPlacementMenu extends ChildMenuImp {
 
                 // The place permission, and somewhere the player may place: any grant, or the override.
                 if (!VaultPermission.ACTION_PLACE.has(actor)) {
-                    actor.sendMessage(MiniMessageUtil.parseOrPlain("<red>You don't have permission to place vaults.</red>"));
+                    actor.sendMessage(Text.of(MessageKeys.PLACEMENT_NO_PERMISSION));
                     return;
                 }
                 boolean allowed = VaultPermission.ACTION_PLACE_OVERRIDE.has(actor)
                         || VaultStoragePlugin.getInstance().integrations().mayPlace(actor.getUniqueId(), targetLoc);
                 if (!allowed) {
-                    actor.sendMessage(MiniMessageUtil.parseOrPlain(config.notAllowed));
+                    actor.sendMessage(Text.of(MessageKeys.PLACEMENT_NOT_ALLOWED));
                     return; // Stay in placement mode
                 }
 
@@ -181,8 +137,7 @@ public class VaultPlacementMenu extends ChildMenuImp {
                     var plugin = VaultStoragePlugin.getInstance();
                     new BukkitRunnable() {
                         @Override public void run() {
-                            Map<String,String> placeHolders = Map.of("%msg%", result.message());
-                            actor.sendMessage(MiniMessageUtil.parseOrPlain(result.success() ? config.placeOk : config.placeFail, placeHolders));
+                            actor.sendMessage(Text.of(result.messageKey()));
                             if (result.success()) {
                                 // Fire Vault placed event
                                 new PlayerPlaceVaultEvent(actor, targetLoc).callEvent();
@@ -194,7 +149,7 @@ public class VaultPlacementMenu extends ChildMenuImp {
                                             if (left > 0) {
                                                 new VaultListMenu(actor, (ParentMenuImp) getParentMenu(), context, "").open();
                                             } else {
-                                                actor.sendMessage("You have no more vaults to place.");
+                                                actor.sendMessage(Text.of(MessageKeys.PLACEMENT_NONE_LEFT));
                                                 actor.closeDialog();
                                             }
                                         }, plugin.getServer().getScheduler().getMainThreadExecutor(plugin))
@@ -221,14 +176,14 @@ public class VaultPlacementMenu extends ChildMenuImp {
                 }
                 Block target = actor.getTargetBlockExact(6);
                 if (target == null) {
-                    actor.sendActionBar(MiniMessageUtil.parseOrPlain(config.actionBarIdle));
+                    actor.sendActionBar(Text.of(MessageKeys.PLACEMENT_ACTION_BAR_IDLE));
                     return;
                 }
                 boolean allowed = VaultPermission.ACTION_PLACE.has(actor)
                         && (VaultPermission.ACTION_PLACE_OVERRIDE.has(actor)
                         || VaultStoragePlugin.getInstance().integrations().mayPlace(actor.getUniqueId(), target.getLocation()));
-                var ph = Map.of("%placeable%", allowed ? config.placeYes : config.placeNo);
-                actor.sendActionBar(MiniMessageUtil.parseOrPlain(config.actionBarTarget, ph));
+                var ph = Map.of("%placeable%", Text.plain(allowed ? MessageKeys.PLACEMENT_PLACE_YES : MessageKeys.PLACEMENT_PLACE_NO));
+                actor.sendActionBar(Text.of(MessageKeys.PLACEMENT_ACTION_BAR_TARGET, ph));
             }
         }.runTaskTimer(VaultStoragePlugin.getInstance(), 0L, 5L);
         session.setActionBarTask(actionbarTask[0]);

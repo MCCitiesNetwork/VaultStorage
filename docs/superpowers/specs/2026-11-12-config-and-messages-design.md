@@ -1,7 +1,7 @@
 # Config and messages — design
 
 Date: 2026-11-12
-Status: written while implementing; decisions below were taken by default and are open to change
+Status: implemented; the two decisions below were taken by default and are open to change
 Step 4 of 7. Depends on step 3.
 
 ## Goal
@@ -81,3 +81,9 @@ divided by 20 into `delay-seconds`.
 - **Operators' custom wording is not carried over.** They re-apply it in `messages.yml`.
 - **`config.yml` and the old menu files stay on disk** until an operator deletes them.
 - **There is one language.** No per-player locale.
+- **Yes/no and filter names are still inserted into a sentence** (`scan.vaultable-yes`,
+  `placement.place-yes`, `scan.filter-*`), so an operator cannot reorder them. Step 6 rewrites the
+  menus and gives each case its own key.
+- **Menus, commands and the capture service reach messages through the static `Text` bridge.**
+  They take a `MessageContainer` in their constructor when steps 5 to 7 rewrite them.
+- **`scan.batch-size` keeps the 1.x default of 50.**

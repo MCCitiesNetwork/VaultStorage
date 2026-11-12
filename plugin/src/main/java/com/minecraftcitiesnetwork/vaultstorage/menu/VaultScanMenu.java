@@ -1,11 +1,12 @@
 package com.minecraftcitiesnetwork.vaultstorage.menu;
 
+import com.minecraftcitiesnetwork.vaultstorage.config.MessageKeys;
+import com.minecraftcitiesnetwork.vaultstorage.config.Text;
 import io.papermc.paper.dialog.Dialog;
 import io.papermc.paper.registry.data.dialog.DialogBase;
 import io.papermc.paper.registry.data.dialog.body.DialogBody;
 import io.papermc.paper.registry.data.dialog.input.DialogInput;
 import com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin;
-import com.minecraftcitiesnetwork.vaultstorage.vault.Dto;
 import com.minecraftcitiesnetwork.vaultstorage.scan.ScanResult;
 import com.minecraftcitiesnetwork.vaultstorage.region.VaultRegion;
 import com.minecraftcitiesnetwork.vaultstorage.bolt.BoltService;
@@ -14,9 +15,6 @@ import com.minecraftcitiesnetwork.vaultstorage.menu.AutoDialog;
 import com.minecraftcitiesnetwork.vaultstorage.menu.ParentMenu;
 import com.minecraftcitiesnetwork.vaultstorage.capture.VaultCapturePolicy;
 import com.minecraftcitiesnetwork.vaultstorage.capture.VaultCaptureService;
-import com.minecraftcitiesnetwork.vaultstorage.config.DataFolder;
-import com.minecraftcitiesnetwork.vaultstorage.config.MiniMessageUtil;
-import com.minecraftcitiesnetwork.vaultstorage.config.AutoYML;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
@@ -70,69 +68,10 @@ public class VaultScanMenu extends ChildMenuImp {
         }
     }
 
-    /** YAML-backed configuration for the scan UI and messages. */
-    public static class Config implements Dto {
-        /** Dialog title. Placeholders: %player% */
-        public String title = "<gold><bold>Vault Scan</bold></gold>";
-        /** Message when no results. */
-        public String noneFound = "<gray>No protected blocks found in this region.</gray>";
-        /** Error when services missing. */
-        public String servicesMissing = "<red>Scan unavailable: services not ready.</red>";
-        /** Results header. Placeholders: %region% %count% */
-        public String resultsHeader = "<gold><bold>Region %region%</bold></gold> <gray>(%count% results)</gray>";
-        /** Per-entry descriptive line. Placeholders: %x% %y% %z% %owner% %kind% %vaultable% */
-        public String entryLine = "<gray>- %index% </gray><white>(%x%, %y%, %z%)</white> <gray>owner:</gray> <white>%owner%</white> <gray>|</gray> <white>%kind%</white> <gray>| vaultable:</gray> <white>%vaultable%</white>";
-        /** Button label for vault action. */
-        public String entryVaultButton = "<yellow>(vault) - %index%</yellow>";
-        /** Button label for teleport action. */
-        public String entryTeleportButton = "<aqua>(teleport)</aqua>";
-        // Browse/search controls
-        /** Label for region search/filter input. */
-        public String searchLabel = "<gray>Search regions</gray>";
-        /** Button to apply region filter and open the list menu. */
-        public String searchBtn = "<aqua>Search</aqua>";
-        /** Button to detect the region at the player's current location. */
-        public String hereBtn = "<yellow>Here</yellow>";
-        /** Error when region not found. */
-        public String regionNotFound = "<red>Region not found: %region%</red>";
-        /** Message when actor not allowed to vault an entry (overlapping-region policy). */
-        public String notAllowed = "<red>Not allowed by region/block rules.</red>";
-        /** Message when scan is on cooldown. Placeholders: %time% */
-        public String scanCooldown = "<red>Please wait %time%s before scanning again.</red>";
-        /** Optional per-entry vaultable flag yes. */
-        public String vaultableYes = "yes";
-        /** Optional per-entry vaultable flag no. */
-        public String vaultableNo = "no";
-        /**
-         * Maximum number of entries to render per page when showing results.
-         * Keep this reasonably small to avoid dialog overflow and client lag.
-         */
-        public int pageSize = 5;
-        /** Button label for navigating to the previous page. */
-        public String prevBtn = "<yellow>< Prev</yellow>";
-        /** Button label for navigating to the next page. */
-        public String nextBtn = "<yellow>Next ></yellow>";
-        /** Label shown indicating the current page and total pages. Placeholders: %page% %total% */
-        public String pageLabel = "<gray>Page %page% / %total%</gray>";
-        /** Toggle button label for the vault entry type filter. Visible only in results mode. Placeholder: %mode% */
-        public String filterBtn = "<gray>[Filter: %mode%]</gray>";
-    }
 
-    private static final String HEADER = String.join("\n",
-            "VaultScanMenu configuration.",
-            "Placeholders:",
-            "- %player% -> actor/player name",
-            "- %region% -> region id",
-            "- %count% -> number of results",
-            "- %x% %y% %z% %owner% -> entry values",
-            "Fields:",
-            "- emptyCaptureSkipped -> message when a vaulted container was empty and persistence skipped"
-    );
 
-    private static final AutoYML<Config> YML = AutoYML.create(Config.class, "VaultScanMenu", DataFolder.MENUS, HEADER);
-    private static Config cfg() { return YML.loadOrCreate(Config::new); }
-    public static Config getConfig() { return cfg(); }
-    public static void ensureConfig() { YML.loadOrCreate(Config::new); }
+    /** Scan results shown on one page: few enough for a dialog. */
+    private static final int RESULTS_PER_PAGE = 5;
 
     private final String regionId; // null -> browse/search mode; non-null -> results mode
     private final List<ScanResult> entries; // only used in results mode (full set from computeEntries: containers + other protected blocks like paintings)
@@ -199,7 +138,7 @@ public class VaultScanMenu extends ChildMenuImp {
         long cooldownMs = VaultStoragePlugin.getInstance().settings().get().scan().cooldownSeconds() * 1000;
         if (now - last < cooldownMs) {
             long remaining = (cooldownMs - (now - last)) / 1000;
-            player.sendMessage(MiniMessageUtil.parseOrPlain(cfg().scanCooldown, Map.of("%time%", String.valueOf(remaining))));
+            player.sendMessage(Text.of(MessageKeys.SCAN_SCAN_COOLDOWN, Map.of("%time%", String.valueOf(remaining))));
             return false;
         }
         session.setLastScanTime(now);
@@ -207,35 +146,34 @@ public class VaultScanMenu extends ChildMenuImp {
     }
 
     private Dialog build() {
-        Config config = cfg();
         AutoDialog.Builder builder = getAutoDialogBuilder();
         Map<String,String> placeholdersSelf = Map.of("%player%", getPlayer().getName());
-        builder.title(MiniMessageUtil.parseOrPlain(config.title, placeholdersSelf));
+        builder.title(Text.of(MessageKeys.SCAN_TITLE, placeholdersSelf));
         builder.canCloseWithEscape(true);
         builder.afterAction(DialogBase.DialogAfterAction.CLOSE);
 
         if (regionId == null) {
             // Browse/search root: only Search input/button and Here. No region listing here.
-            builder.addBody(DialogBody.plainMessage(MiniMessageUtil.parseOrPlain(config.searchLabel)));
-            builder.addInput(DialogInput.text("QUERY", MiniMessageUtil.parseOrPlain(config.searchLabel)).labelVisible(true).build());
-            builder.buttonWithPlayer(MiniMessageUtil.parseOrPlain(config.searchBtn), null, Duration.ofMinutes(5), 1, (player, response) -> {
+            builder.addBody(DialogBody.plainMessage(Text.of(MessageKeys.SCAN_SEARCH_LABEL)));
+            builder.addInput(DialogInput.text("QUERY", Text.of(MessageKeys.SCAN_SEARCH_LABEL)).labelVisible(true).build());
+            builder.buttonWithPlayer(Text.of(MessageKeys.SCAN_SEARCH_BTN), null, Duration.ofMinutes(5), 1, (player, response) -> {
                 String q = Optional.ofNullable(response.getText("QUERY")).orElse("").trim();
                 // VaultRegionListMenu does not accept uiContext; use its (player, parent, query, page) constructor
                 new VaultRegionListMenu(player, getParentMenu(), q, 0).open();
             });
 
             // "Here" button: detect region at player's current location and open results or list if multiple
-            builder.button(MiniMessageUtil.parseOrPlain(config.hereBtn), ctx -> {
+            builder.button(Text.of(MessageKeys.SCAN_HERE_BTN), ctx -> {
                 WorldGuardService wgs = VaultStoragePlugin.getInstance().getWorldGuardService();
                 if (wgs == null) {
-                    ctx.player().sendMessage(MiniMessageUtil.parseOrPlain(config.servicesMissing));
+                    ctx.player().sendMessage(Text.of(MessageKeys.SCAN_SERVICES_MISSING));
                     return;
                 }
                 var all = wgs.getRegionsIn(ctx.player().getWorld());
                 var loc = ctx.player().getLocation();
                 List<VaultRegion> containing = all.stream().filter(r -> r.contains(loc.getX(), loc.getY(), loc.getZ())).toList();
                 if (containing.isEmpty()) {
-                    ctx.player().sendMessage(MiniMessageUtil.parseOrPlain("<red>No region at your location.</red>"));
+                    ctx.player().sendMessage(Text.of(MessageKeys.SCAN_NO_REGION_HERE));
                     return;
                 }
                 if (containing.size() > 1) {
@@ -247,7 +185,7 @@ public class VaultScanMenu extends ChildMenuImp {
                 VaultRegion only = containing.getFirst();
                 if (!checkCooldown(ctx.player())) return;
                 new LoadingMenu(ctx.player(), getParentMenu(), Map.of("%player%", ctx.player().getName())).open();
-                VaultStoragePlugin.getInstance().getScanService().scan(ctx.player(), only.id(), uiContext, config, blocks -> {
+                VaultStoragePlugin.getInstance().getScanService().scan(ctx.player(), only.id(), uiContext, blocks -> {
                     if (blocks == null) return;
                     new VaultScanMenu(ctx.player(), getParentMenu(), uiContext, only.id(), blocks, 0).open();
                 });
@@ -259,35 +197,35 @@ public class VaultScanMenu extends ChildMenuImp {
         // Results mode
         List<ScanResult> visibleEntries = applyTypeFilter(entries, filterMode);
         int size = visibleEntries.size();
-        int perPage = Math.max(1, config.pageSize);
+        int perPage = Math.max(1, RESULTS_PER_PAGE);
         int totalPages = Math.max(1, (int) Math.ceil(size / (double) perPage));
         int currentPage = Math.min(pageIndex, totalPages - 1);
         int startIndex = currentPage * perPage;
         int endIndex = Math.min(startIndex + perPage, size);
 
         Map<String,String> placeholdersHeader = Map.of("%region%", regionId, "%count%", String.valueOf(visibleEntries.size()));
-        builder.addBody(DialogBody.plainMessage(MiniMessageUtil.parseOrPlain(config.resultsHeader, placeholdersHeader)));
+        builder.addBody(DialogBody.plainMessage(Text.of(MessageKeys.SCAN_RESULTS_HEADER, placeholdersHeader)));
 
         // When ENTITY filter is active, render entity protections separately
         if (filterMode == FilterMode.ENTITY) {
             BoltService boltService = VaultStoragePlugin.getInstance().getBoltService();
             WorldGuardService worldGuardService = VaultStoragePlugin.getInstance().getWorldGuardService();
             if (boltService == null || worldGuardService == null) {
-                builder.addBody(DialogBody.plainMessage(MiniMessageUtil.parseOrPlain(config.servicesMissing)));
-                addFilterButton(builder, config, currentPage);
+                builder.addBody(DialogBody.plainMessage(Text.of(MessageKeys.SCAN_SERVICES_MISSING)));
+                addFilterButton(builder, currentPage);
                 return builder.build();
             }
             VaultRegion region = worldGuardService.getRegionById(regionId, getWorld());
             if (region == null) {
-                builder.addBody(DialogBody.plainMessage(MiniMessageUtil.parseOrPlain(config.regionNotFound, Map.of("%region%", regionId))));
-                addFilterButton(builder, config, currentPage);
+                builder.addBody(DialogBody.plainMessage(Text.of(MessageKeys.SCAN_REGION_NOT_FOUND, Map.of("%region%", regionId))));
+                addFilterButton(builder, currentPage);
                 return builder.build();
             }
             Map<EntityProtection, Entity> protections = boltService.getProtectedEntities(getPlayer().getWorld(), region.boundingBox());
             int eSize = protections.size();
             if (eSize == 0) {
-                builder.addBody(DialogBody.plainMessage(MiniMessageUtil.parseOrPlain("<gray>No protected entities found in this region.</gray>")));
-                addFilterButton(builder, config, currentPage);
+                builder.addBody(DialogBody.plainMessage(Text.of(MessageKeys.SCAN_NO_ENTITIES)));
+                addFilterButton(builder, currentPage);
                 return builder.build();
             }
             int eTotalPages = Math.max(1, (int) Math.ceil(eSize / (double) perPage));
@@ -318,7 +256,7 @@ public class VaultScanMenu extends ChildMenuImp {
                 String entityName = protections.get(protection).getType().name();
 
                 var decision = VaultCapturePolicy.evaluate(getPlayer(), protections.get(protection));
-                String vaultable = decision.allowed() ? cfg().vaultableYes : cfg().vaultableNo;
+                String vaultable = Text.plain(decision.allowed() ? MessageKeys.SCAN_VAULTABLE_YES : MessageKeys.SCAN_VAULTABLE_NO);
 
                 Map<String,String> placeholdersEntry = Map.of(
                         "%x%", String.valueOf(entityLoc.getBlockX()),
@@ -329,12 +267,12 @@ public class VaultScanMenu extends ChildMenuImp {
                         "%owner%", ownerName,
                         "%vaultable%", vaultable
                 );
-                builder.addBody(DialogBody.plainMessage(MiniMessageUtil.parseOrPlain(config.entryLine, placeholdersEntry)));
+                builder.addBody(DialogBody.plainMessage(Text.of(MessageKeys.SCAN_ENTRY_LINE, placeholdersEntry)));
                 // Remove protection button for entity (calls BoltService#removeProtection with the EntityProtection instance)
-                builder.sizableButton(MiniMessageUtil.parseOrPlain(config.entryVaultButton, placeholdersEntry), ctx -> {
+                builder.sizableButton(Text.of(MessageKeys.SCAN_ENTRY_VAULT_BUTTON, placeholdersEntry), ctx -> {
                     var check = VaultCapturePolicy.evaluate(ctx.player(), protections.get(protection));
                     if (!check.allowed()) {
-                        ctx.player().sendMessage(MiniMessageUtil.parseOrPlain(cfg().notAllowed));
+                        ctx.player().sendMessage(Text.of(MessageKeys.SCAN_NOT_ALLOWED));
                         return;
                     }
 
@@ -348,24 +286,24 @@ public class VaultScanMenu extends ChildMenuImp {
 
             // Navigation for entity pages
             if (eCurrentPage > 0) {
-                builder.button(MiniMessageUtil.parseOrPlain(config.prevBtn), ctx -> new VaultScanMenu(ctx.player(), getParentMenu(), uiContext, regionId, entries, eCurrentPage - 1, FilterMode.ENTITY).open());
+                builder.button(Text.of(MessageKeys.SCAN_PREV_BTN), ctx -> new VaultScanMenu(ctx.player(), getParentMenu(), uiContext, regionId, entries, eCurrentPage - 1, FilterMode.ENTITY).open());
             }
             if (eCurrentPage < eTotalPages - 1) {
-                builder.button(MiniMessageUtil.parseOrPlain(config.nextBtn), ctx -> new VaultScanMenu(ctx.player(), getParentMenu(), uiContext, regionId, entries, eCurrentPage + 1, FilterMode.ENTITY).open());
+                builder.button(Text.of(MessageKeys.SCAN_NEXT_BTN), ctx -> new VaultScanMenu(ctx.player(), getParentMenu(), uiContext, regionId, entries, eCurrentPage + 1, FilterMode.ENTITY).open());
             }
-            addFilterButton(builder, config, eCurrentPage);
+            addFilterButton(builder, eCurrentPage);
             return builder.build();
         }
 
         if (visibleEntries.isEmpty()) {
-            builder.addBody(DialogBody.plainMessage(MiniMessageUtil.parseOrPlain(config.noneFound)));
-            addFilterButton(builder, config, currentPage);
+            builder.addBody(DialogBody.plainMessage(Text.of(MessageKeys.SCAN_NONE_FOUND)));
+            addFilterButton(builder, currentPage);
             return builder.build();
         }
 
         // Page indicator
         Map<String,String> phPage = Map.of("%page%", String.valueOf(currentPage + 1), "%total%", String.valueOf(totalPages));
-        builder.addBody(DialogBody.plainMessage(MiniMessageUtil.parseOrPlain(config.pageLabel, phPage)));
+        builder.addBody(DialogBody.plainMessage(Text.of(MessageKeys.SCAN_PAGE_LABEL, phPage)));
 
         Set<UUID> toResolve = new HashSet<>();
         for (int i = startIndex; i < endIndex; i++) {
@@ -385,7 +323,7 @@ public class VaultScanMenu extends ChildMenuImp {
                 }
             }
             String kind = isContainerMaterial(entry.type()) ? "container" : "block";
-            String vaultable = cfg().vaultableYes;
+            String vaultable = Text.plain(MessageKeys.SCAN_VAULTABLE_YES);
             Map<String,String> placeholdersEntry = Map.of(
                     "%x%", String.valueOf(entryBlock.getX()), "%y%", String.valueOf(entryBlock.getY()), "%z%", String.valueOf(entryBlock.getZ()),
                     "%owner%", ownerName,
@@ -393,15 +331,15 @@ public class VaultScanMenu extends ChildMenuImp {
                     "%index%", String.valueOf(i + 1),
                     "%vaultable%", vaultable
             );
-            builder.addBody(DialogBody.plainMessage(MiniMessageUtil.parseOrPlain(config.entryLine, placeholdersEntry)));
+            builder.addBody(DialogBody.plainMessage(Text.of(MessageKeys.SCAN_ENTRY_LINE, placeholdersEntry)));
             // Vault button for this entry
-            builder.button(MiniMessageUtil.parseOrPlain(config.entryVaultButton, placeholdersEntry), ctx -> {
+            builder.button(Text.of(MessageKeys.SCAN_ENTRY_VAULT_BUTTON, placeholdersEntry), ctx -> {
                 // Show a loading menu while we process DB work
                 new LoadingMenu(ctx.player(), getParentMenu(), Map.of("%player%", ctx.player().getName())).open();
                 Block targetBlock = ctx.player().getWorld().getBlockAt(entryBlock.getX(), entryBlock.getY(), entryBlock.getZ());
                 VaultCaptureService capSvc = VaultStoragePlugin.getInstance().getCaptureService();
-                VaultCaptureService.SessionTexts texts = capSvc.sessionTexts();
-                capSvc.captureDirectAsync(ctx.player(), targetBlock, texts, success -> {
+                
+                capSvc.captureDirectAsync(ctx.player(), targetBlock, success -> {
                     // The block stops being a result once it has no Bolt owner: it was vaulted, or
                     // its protection was removed. The cached list is corrected, not rebuilt.
                     BoltService bolt = VaultStoragePlugin.getInstance().getBoltService();
@@ -412,13 +350,13 @@ public class VaultScanMenu extends ChildMenuImp {
                                 && result.block().getY() == targetBlock.getY()
                                 && result.block().getZ() == targetBlock.getZ())).toList();
                     }
-                    int newTotal = Math.max(1, (int) Math.ceil(remaining.size() / (double) Math.max(1, config.pageSize)));
+                    int newTotal = Math.max(1, (int) Math.ceil(remaining.size() / (double) Math.max(1, RESULTS_PER_PAGE)));
                     int safePage = Math.min(currentPage, newTotal - 1);
                     new VaultScanMenu(ctx.player(), getParentMenu(), uiContext, regionId, remaining, safePage).open();
                 });
             });
             // Teleport button for this entry (literal coordinates with safe centering)
-            builder.button(MiniMessageUtil.parseOrPlain(config.entryTeleportButton, placeholdersEntry), ctx -> {
+            builder.button(Text.of(MessageKeys.SCAN_ENTRY_TELEPORT_BUTTON, placeholdersEntry), ctx -> {
                 boolean passable = entryBlock.isPassable();
                 double destY = passable ? entryBlock.getY() : (entryBlock.getY() + 1);
                 Location destination = new Location(ctx.player().getWorld(), entryBlock.getX() + 0.5, destY, entryBlock.getZ() + 0.5, ctx.player().getLocation().getYaw(), ctx.player().getLocation().getPitch());
@@ -428,26 +366,26 @@ public class VaultScanMenu extends ChildMenuImp {
 
         // Navigation buttons
         if (currentPage > 0) {
-            builder.button(MiniMessageUtil.parseOrPlain(config.prevBtn), ctx -> new VaultScanMenu(ctx.player(), getParentMenu(), uiContext, regionId, entries, currentPage - 1, filterMode).open());
+            builder.button(Text.of(MessageKeys.SCAN_PREV_BTN), ctx -> new VaultScanMenu(ctx.player(), getParentMenu(), uiContext, regionId, entries, currentPage - 1, filterMode).open());
         }
         if (currentPage < totalPages - 1) {
-            builder.button(MiniMessageUtil.parseOrPlain(config.nextBtn), ctx -> new VaultScanMenu(ctx.player(), getParentMenu(), uiContext, regionId, entries, currentPage + 1, filterMode).open());
+            builder.button(Text.of(MessageKeys.SCAN_NEXT_BTN), ctx -> new VaultScanMenu(ctx.player(), getParentMenu(), uiContext, regionId, entries, currentPage + 1, filterMode).open());
         }
 
-        addFilterButton(builder, config, currentPage);
+        addFilterButton(builder, currentPage);
 
         return builder.build();
     }
 
-    private void addFilterButton(AutoDialog.Builder builder, Config config, int currentPage) {
+    private void addFilterButton(AutoDialog.Builder builder, int currentPage) {
         String modeLabel = switch (filterMode) {
-            case BLOCK -> "Block";
-            case NON_CONTAINER -> "Non-Container";
-            case CONTAINER -> "Container";
-            case ENTITY -> "Entity";
+            case BLOCK -> Text.plain(MessageKeys.SCAN_FILTER_BLOCK);
+            case NON_CONTAINER -> Text.plain(MessageKeys.SCAN_FILTER_NON_CONTAINER);
+            case CONTAINER -> Text.plain(MessageKeys.SCAN_FILTER_CONTAINER);
+            case ENTITY -> Text.plain(MessageKeys.SCAN_FILTER_ENTITY);
         };
         Map<String,String> phFilter = Map.of("%mode%", modeLabel);
-        builder.sizableButton(MiniMessageUtil.parseOrPlain(config.filterBtn, phFilter), ctx -> {
+        builder.sizableButton(Text.of(MessageKeys.SCAN_FILTER_BTN, phFilter), ctx -> {
             FilterMode next = filterMode.next();
             new VaultScanMenu(ctx.player(), getParentMenu(), uiContext, regionId, entries, currentPage, next).open();
         }, 100);

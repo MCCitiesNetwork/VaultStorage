@@ -2,7 +2,7 @@
 
 scan:
   # How many locked blocks a region scan checks in one tick.
-  batch-size: 20
+  batch-size: 50
   # How long a region's scan results are reused before the region is scanned again.
   cache-ttl-seconds: 60
   # How long a player must wait between scans. Admins do not wait.

@@ -1,7 +1,9 @@
 package com.minecraftcitiesnetwork.vaultstorage.capture;
 
+import com.minecraftcitiesnetwork.pluginInfrastructure.configurate.MessageContainer;
+import com.minecraftcitiesnetwork.vaultstorage.config.MessageKeys;
+import com.minecraftcitiesnetwork.vaultstorage.config.Text;
 import com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin;
-import com.minecraftcitiesnetwork.vaultstorage.vault.Dto;
 import com.minecraftcitiesnetwork.vaultstorage.capture.PlayerVaultEvent;
 import com.minecraftcitiesnetwork.vaultstorage.bolt.BoltService;
 import com.minecraftcitiesnetwork.vaultstorage.chestshop.ChestShopService;
@@ -10,7 +12,6 @@ import com.minecraftcitiesnetwork.vaultstorage.vault.VaultImp;
 import com.minecraftcitiesnetwork.vaultstorage.vault.ItemSerialization;
 import com.minecraftcitiesnetwork.vaultstorage.names.UniqueIdentifierResolver;
 import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
@@ -61,9 +62,6 @@ import com.minecraftcitiesnetwork.vaultstorage.permission.VaultPermission;
 import com.minecraftcitiesnetwork.vaultstorage.session.VaultSessionManager;
 import com.minecraftcitiesnetwork.vaultstorage.session.VaultSessionManager.Mode;
 import com.minecraftcitiesnetwork.vaultstorage.capture.HangingVaultSupport;
-import com.minecraftcitiesnetwork.vaultstorage.config.MiniMessageUtil;
-import com.minecraftcitiesnetwork.vaultstorage.config.AutoYML;
-import com.minecraftcitiesnetwork.vaultstorage.config.DataFolder;
 import org.jspecify.annotations.NonNull;
 
 /**
@@ -232,7 +230,7 @@ public class VaultCaptureService {
             // to prevent accidental unprotection of the full chest. The user is guided to vault the non-empty side.
             if (targetIsEmpty && !otherHalfIsEmpty) {
                 if (warn != null) {
-                    warn.accept(Component.text("[Vault Capture Service] You should vault the non-empty side first.").color(NamedTextColor.YELLOW));
+                    warn.accept(Text.of(MessageKeys.CAPTURE_DOUBLE_CHEST_ORDER));
                 }
                 // Return empty=true so no vault is made, but protectionRemoved=false so we don't spam "Protection Removed".
                 return new CaptureOutcome(true, false, null, originalOwner, finalOwner, List.of());
@@ -290,9 +288,9 @@ public class VaultCaptureService {
     }
 
     private static final String CHANGED_MEANWHILE =
-            "<yellow>That container changed while it was being saved. Nothing was taken; try again.</yellow>";
+            MessageKeys.CAPTURE_CHANGED_MEANWHILE;
     private static final String SAVE_FAILED =
-            "<red>The vault could not be saved. Nothing was removed.</red>";
+            MessageKeys.CAPTURE_SAVE_FAILED;
 
     private static @NotNull List<Block> getHalves(Block block, Container container) {
         List<Block> otherHalves = new ArrayList<>();
@@ -317,70 +315,16 @@ public class VaultCaptureService {
         return otherHalves;
     }
 
-    /**
-     * YAML-backed, configurable texts for interactive capture session and action bar.
-     * Provide values already formatted with MiniMessage or plain text; placeholders are resolved by the caller.
-     */
-    public static class SessionTexts implements Dto {
-        public String captureCancelled = "Capture cancelled.";
-        public String notAllowed = "<red>Not allowed: region/block rules.</red>";
-        public String signNotAllowed = "<red>Sign not allowed: region/block rules.</red>";
-        public String containerNotAllowed = "<red>Container not allowed: region/block rules.</red>";
-        public String signUnlocked = "Sign protection removed.";
-        public String chestShopSignRemoved = "ChestShop sign removed.";
-        public String emptyCaptureSkipped = "Protection removed.";
-        public String capturedOk = "Vault captured.";
-        public String noBoltOwner = "<yellow>No Bolt owner found; you will be set as the vault owner.</yellow>";
-        public String actionBarIdle = "<yellow>Capture mode</yellow> - Right-click a block, item frame, or painting. <gray>Left-click to cancel.</gray>";
-        public String actionBarContainer = "<gray>Owner:</gray> <white>%owner%</white> <gray>| Vaultable:</gray> <white>%vaultable%</white><gray>%reasonSegment%</gray>%admin%";
-        public String actionBarReasonSegmentTemplate = " | Reason: %reason%";
-        public String actionBarReasonAllowedBlank = "";
-        public String reasonOwnerSelfInRegion = "you own this block but are a member of '%regions%'";
-        public String reasonContainerOwnerInOverlap = "%owner% owns this block and is a member of '%regions%'";
-        public String reasonNotInvolvedNotOwner = "you don't own this block and aren't a member of its region";
-        public String reasonUnprotectedNoOverride = "this block has no owner";
-        public String reasonNotInRegion = "block is not inside any protected region";
-        public String reasonHangableRequiresAdmin = "vaulting this entity requires an administrator";
-        public String reasonFallback = "vault not permitted";
-        public String actionBarUnprotectedOwner = "unprotected";
-        public String actionBarVaultableYes = "yes";
-        public String actionBarVaultableNo = "no";
-        /**
-         * One-time notification shown when starting a capture session and the actor has admin override permission.
-         * Use MiniMessage formatting if desired; leave empty to disable.
-         */
-        public String adminModeEnabled = "<gold>Admin mode enabled.</gold>";
-        /**
-         * Optional tag appended to the action bar while admin override is active.
-         * Injected via the %admin% placeholder in actionBarContainer. Leave empty to hide.
-         */
-        public String actionBarAdminModeTag = "<gray> |</gray> <gold> ADMIN</gold>";
-    }
 
-    private static final String HEADER = String.join("\n",
-            "VaultCaptureService session texts configuration.",
-            "All strings accept MiniMessage or plain text.",
-            "Placeholders:",
-            "- %owner% -> Bolt owner name or UUID when unavailable",
-            "- %vaultable% -> yes/no from actionBarVaultableYes/No",
-            "- %reason% -> human-readable reason (in actionBarReasonSegmentTemplate)",
-            "- %reasonCode% -> policy code",
-            "- %regions% -> comma-separated region ids",
-            "- %admin% -> admin override tag (actionBarAdminModeTag) when override is active" );
 
-    private static final AutoYML<SessionTexts> YML = AutoYML.create(SessionTexts.class, "VaultCaptureSession", DataFolder.MENUS, HEADER);
-    private static SessionTexts cfg() { return YML.loadOrCreate(SessionTexts::new); }
     /** Ensures the YAML for session texts exists. */
-    public static void ensureSessionConfig() { YML.loadOrCreate(SessionTexts::new); }
 
     /** Exposes current configured texts. */
-    public SessionTexts sessionTexts() { return cfg(); }
 
     /**
      * Starts an interactive capture session for the given player, with default texts.
      * The session remains active until the player cancels with a left-click.
      */
-    public void startCaptureSession(@NotNull Player actor) { startCaptureSession(actor, cfg()); }
 
     /**
      * Starts an interactive capture session for the given player using provided texts.
@@ -389,9 +333,9 @@ public class VaultCaptureService {
      * - Applies VaultCapturePolicy on right-click; performs capture & DB persistence.
      * - Session stays active for multiple captures until canceled with left-click.
      */
-    public void startCaptureSession(@NotNull Player actor, @NotNull SessionTexts texts) {
+    public void startCaptureSession(@NotNull Player actor) {
         if (!VaultPermission.ACTION_CAPTURE.has(actor)) {
-            actor.sendMessage("You don't have permission to capture blocks.");
+            actor.sendMessage(Text.of(MessageKeys.CAPTURE_NO_PERMISSION));
             return;
         }
         VaultSessionManager.Session session = VaultStoragePlugin.getInstance().getSessionManager().getOrCreate(actor.getUniqueId());
@@ -399,10 +343,7 @@ public class VaultCaptureService {
 
         // Notify admin mode if override is active
         if (VaultPermission.ADMIN.has(actor)) {
-            String msg = texts.adminModeEnabled;
-            if (msg != null && !msg.isBlank()) {
-                actor.sendMessage(MiniMessageUtil.parseOrPlain(msg));
-            }
+            actor.sendMessage(Text.of(MessageKeys.CAPTURE_ADMIN_MODE_ENABLED));
         }
 
         final BukkitTask[] actionbarTask = new BukkitTask[1];
@@ -435,7 +376,7 @@ public class VaultCaptureService {
                     if (actionbarTask[0] != null) actionbarTask[0].cancel();
                     session.clearActionBarTask();
                     session.switchTo(Mode.NONE);
-                    actor.sendMessage(MiniMessageUtil.parseOrPlain(texts.captureCancelled));
+                    actor.sendMessage(Text.of(MessageKeys.CAPTURE_CAPTURE_CANCELLED));
                     return;
                 }
 
@@ -471,10 +412,10 @@ public class VaultCaptureService {
                     if (signDecision.allowed()) {
                         CaptureOutcome signOutcome = captureWithDoubleChestSupport(actor, block, signOwner);
                         if (signOutcome.protectionRemoved()) {
-                            actor.sendMessage(MiniMessageUtil.parseOrPlain(texts.signUnlocked));
+                            actor.sendMessage(Text.of(MessageKeys.CAPTURE_SIGN_UNLOCKED));
                         }
                     } else {
-                        actor.sendMessage(MiniMessageUtil.parseOrPlain(texts.signNotAllowed));
+                        actor.sendMessage(Text.of(MessageKeys.CAPTURE_SIGN_NOT_ALLOWED));
                     }
 
                     Block attachedContainer = resolveAttachedContainerBlock(block);
@@ -495,12 +436,12 @@ public class VaultCaptureService {
                         if (!shopSigns.isEmpty()
                                 && VaultCapturePolicy.evaluateChestShopSignRemoval(actor, captureBlock).allowed()) {
                             removeAttachedChestShopSigns(actor, shopSigns);
-                            actor.sendMessage(MiniMessageUtil.parseOrPlain(texts.chestShopSignRemoved));
+                            actor.sendMessage(Text.of(MessageKeys.CAPTURE_CHEST_SHOP_SIGN_REMOVED));
                             busy[0] = false;
                             return;
                         }
                     }
-                    actor.sendMessage(MiniMessageUtil.parseOrPlain(clickedSign ? texts.containerNotAllowed : texts.notAllowed));
+                    actor.sendMessage(Text.of(clickedSign ? MessageKeys.CAPTURE_CONTAINER_NOT_ALLOWED : MessageKeys.CAPTURE_NOT_ALLOWED));
                     busy[0] = false;
                     return;
                 }
@@ -515,17 +456,17 @@ public class VaultCaptureService {
                             List<Block> shopSigns = chestShop.findShopSigns(captureBlock);
                             if (!shopSigns.isEmpty()) {
                                 removeAttachedChestShopSigns(actor, shopSigns);
-                                actor.sendMessage(MiniMessageUtil.parseOrPlain(texts.chestShopSignRemoved));
+                                actor.sendMessage(Text.of(MessageKeys.CAPTURE_CHEST_SHOP_SIGN_REMOVED));
                             }
                         }
-                        actor.sendMessage(MiniMessageUtil.parseOrPlain(texts.emptyCaptureSkipped));
+                        actor.sendMessage(Text.of(MessageKeys.CAPTURE_EMPTY_CAPTURE_SKIPPED));
                     }
                     busy[0] = false;
                     return;
                 }
 
                 if (originalOwner == null && decision.hasOverride()) {
-                    actor.sendMessage(MiniMessageUtil.parseOrPlain(texts.noBoltOwner));
+                    actor.sendMessage(Text.of(MessageKeys.CAPTURE_NO_BOLT_OWNER));
                 }
 
                 final Block finalCaptureBlock = captureBlock;
@@ -540,9 +481,7 @@ public class VaultCaptureService {
 
                             @Override
                             public void run() {
-                                actor.sendMessage(MiniMessageUtil.parseOrPlain(
-                                        "<red>Error: Could not determine vault owner. Capture aborted.</red>"
-                                ));
+                                actor.sendMessage(Text.of(MessageKeys.CAPTURE_OWNER_UNKNOWN));
                                 plugin.getLogger().warning(
                                         "[VaultCaptureService] Vault capture aborted for " + actor.getName() +
                                                 " at " + finalCaptureBlock.getWorld().getName() + ":" + finalCaptureBlock.getX() + "," + finalCaptureBlock.getY() + "," + finalCaptureBlock.getZ() +
@@ -562,14 +501,14 @@ public class VaultCaptureService {
                                         vault.blockMaterial() == null ? null : vault.blockMaterial().name(),
                                         null, System.currentTimeMillis());
                                 plugin.getSessionManager().getOrCreate(actor.getUniqueId()).setLastVaultDto(dto);
-                                actor.sendMessage(MiniMessageUtil.parseOrPlain(texts.capturedOk));
+                                actor.sendMessage(Text.of(MessageKeys.CAPTURE_CAPTURED_OK));
                                 mailOwner(finalCaptureBlock, actor.getUniqueId(), validatedOwner);
                                 new PlayerVaultEvent(actor, vault).callEvent();
                             }
                             case CaptureResult.ChangedMeanwhile changed ->
-                                    actor.sendMessage(MiniMessageUtil.parseOrPlain(CHANGED_MEANWHILE));
+                                    actor.sendMessage(Text.of(CHANGED_MEANWHILE));
                             case CaptureResult.Failed failed ->
-                                    actor.sendMessage(MiniMessageUtil.parseOrPlain(SAVE_FAILED));
+                                    actor.sendMessage(Text.of(SAVE_FAILED));
                         }
                     });
                 }, plugin.getServer().getScheduler().getMainThreadExecutor(plugin));
@@ -592,7 +531,7 @@ public class VaultCaptureService {
 
                 VaultCapturePolicy.Decision decision = VaultCapturePolicy.evaluateHangingCapture(actor, hang, supporting);
                 if (!decision.allowed()) {
-                    actor.sendMessage(MiniMessageUtil.parseOrPlain(texts.notAllowed));
+                    actor.sendMessage(Text.of(MessageKeys.CAPTURE_NOT_ALLOWED));
                     return;
                 }
 
@@ -604,7 +543,7 @@ public class VaultCaptureService {
                             bolt.removeProtection(supporting);
                         } catch (Throwable ignored) {}
                     }
-                    actor.sendMessage(MiniMessageUtil.parseOrPlain(texts.emptyCaptureSkipped));
+                    actor.sendMessage(Text.of(MessageKeys.CAPTURE_EMPTY_CAPTURE_SKIPPED));
                     return;
                 }
 
@@ -619,9 +558,7 @@ public class VaultCaptureService {
                     if (validatedOwner == null) {
                         new BukkitRunnable() {
                             @Override public void run() {
-                                actor.sendMessage(MiniMessageUtil.parseOrPlain(
-                                        "<red>Error: Could not determine vault owner. Capture aborted.</red>"
-                                ));
+                                actor.sendMessage(Text.of(MessageKeys.CAPTURE_OWNER_UNKNOWN));
                                 busy[0] = false;
                             }
                         }.runTask(VaultStoragePlugin.getInstance());
@@ -643,13 +580,13 @@ public class VaultCaptureService {
                                 plugin.getSessionManager().getOrCreate(actor.getUniqueId())
                                         .setLastVaultDto(new VaultDtoImp(vaultUuid, validatedOwner, List.of(),
                                                 vm.name(), null, System.currentTimeMillis()));
-                                actor.sendMessage(MiniMessageUtil.parseOrPlain(texts.capturedOk));
+                                actor.sendMessage(Text.of(MessageKeys.CAPTURE_CAPTURED_OK));
                                 new PlayerVaultEvent(actor, vaultEvt).callEvent();
                             }, plugin.getServer().getScheduler().getMainThreadExecutor(plugin))
                             .exceptionally(failure -> {
                                 plugin.getLogger().log(Level.SEVERE, "Hanging capture failed for " + actor.getName()
                                         + "; the entity was left in place.", failure);
-                                actor.sendMessage(MiniMessageUtil.parseOrPlain(SAVE_FAILED));
+                                actor.sendMessage(Text.of(SAVE_FAILED));
                                 return null;
                             })
                             .whenComplete((done, failure) -> busy[0] = false);
@@ -665,7 +602,7 @@ public class VaultCaptureService {
                 }
                 Block target = actor.getTargetBlockExact(6);
                 if (target == null) {
-                    actor.sendActionBar(MiniMessageUtil.parseOrPlain(texts.actionBarIdle));
+                    actor.sendActionBar(Text.of(MessageKeys.CAPTURE_ACTION_BAR_IDLE));
                     return;
                 }
                 ChestShopService chestShop = VaultStoragePlugin.getInstance().getChestShopService();
@@ -678,17 +615,19 @@ public class VaultCaptureService {
                 String ownerName = ownerDisplayNameAsync(owner);
 
                 VaultCapturePolicy.Decision decision = VaultCapturePolicy.evaluate(actor, target);
-                String vaultable = decision.allowed() ? texts.actionBarVaultableYes : texts.actionBarVaultableNo;
+                String vaultable = Text.plain(decision.allowed()
+                        ? MessageKeys.CAPTURE_ACTION_BAR_VAULTABLE_YES : MessageKeys.CAPTURE_ACTION_BAR_VAULTABLE_NO);
                 String regionsList = decision.regionStatuses().stream().map(VaultCapturePolicy.RegionStatus::regionId).sorted().reduce((a,b)->a+", "+b).orElse("");
-                String reasonSegment = getReasonSegment(decision, ownerName, regionsList, texts);
-                String adminTag = decision.hasOverride() ? texts.actionBarAdminModeTag : "";
-                Map<String,String> ph = Map.of(
-                        "%owner%", ownerName,
-                        "%vaultable%", vaultable,
-                        "%reasonSegment%", reasonSegment,
-                        "%admin%", adminTag
-                );
-                actor.sendActionBar(MiniMessageUtil.parseOrPlain(texts.actionBarContainer, ph));
+                Component reasonSegment = reasonSegment(decision, ownerName, regionsList);
+                Component adminTag = decision.hasOverride()
+                        ? Text.of(MessageKeys.CAPTURE_ACTION_BAR_ADMIN_MODE_TAG) : Component.empty();
+                // The owner's name goes in as text; the two segments are components built here.
+                actor.sendActionBar(VaultStoragePlugin.getInstance().messages().messageFor(
+                        MessageKeys.CAPTURE_ACTION_BAR_CONTAINER,
+                        MessageContainer.value("owner", ownerName),
+                        MessageContainer.value("vaultable", vaultable),
+                        MessageContainer.markup("reason-segment", reasonSegment),
+                        MessageContainer.markup("admin", adminTag)));
             }
         }.runTaskTimer(VaultStoragePlugin.getInstance(), 0L, 5L);
         session.setActionBarTask(actionbarTask[0]);
@@ -704,7 +643,7 @@ public class VaultCaptureService {
      * Uses cache if present; otherwise returns a short UUID and schedules an async resolve.
      */
     private static String ownerDisplayNameAsync(UUID uuid) {
-        if (uuid == null) return cfg().actionBarUnprotectedOwner;
+        if (uuid == null) return Text.plain(MessageKeys.CAPTURE_ACTION_BAR_UNPROTECTED_OWNER);
         String cached = NAME_CACHE.get(uuid);
         if (cached != null) return cached;
         String fallback = uuid.toString().substring(0, 8);
@@ -714,30 +653,25 @@ public class VaultCaptureService {
         return fallback;
     }
 
-    private static String getReasonSegment(VaultCapturePolicy.@NonNull Decision decision, String ownerName, String regionsList, SessionTexts cfg) {
-        String reasonText;
+    /** The " | Reason: ..." part of the action bar; empty when the capture is allowed. */
+    private static Component reasonSegment(VaultCapturePolicy.@NonNull Decision decision, String ownerName,
+                                           String regionsList) {
         if (decision.allowed()) {
-            reasonText = cfg.actionBarReasonAllowedBlank;
-        } else {
-            switch (decision.reason()) {
-                case OWNER_SELF_IN_REGION -> reasonText = cfg.reasonOwnerSelfInRegion;
-                case CONTAINER_OWNER_IN_OVERLAP -> reasonText = cfg.reasonContainerOwnerInOverlap;
-                case NOT_INVOLVED_NOT_OWNER -> reasonText = cfg.reasonNotInvolvedNotOwner;
-                case UNPROTECTED_NO_OVERRIDE -> reasonText = cfg.reasonUnprotectedNoOverride;
-                case NOT_IN_REGION -> reasonText = cfg.reasonNotInRegion;
-                case ENTITIES_REQUIRE_ADMIN -> reasonText = cfg.reasonHangableRequiresAdmin;
-                default -> reasonText = cfg.reasonFallback;
-            }
-            Map<String,String> reasonPh = Map.of(
-                    "%owner%", ownerName,
-                    "%regions%", regionsList,
-                    "%reasonCode%", decision.reason().name()
-            );
-            String resolved = reasonText;
-            for (var e : reasonPh.entrySet()) resolved = resolved.replace(e.getKey(), e.getValue());
-            reasonText = resolved;
+            return Component.empty();
         }
-        return decision.allowed() ? cfg.actionBarReasonAllowedBlank : cfg.actionBarReasonSegmentTemplate.replace("%reason%", reasonText);
+        String key = switch (decision.reason()) {
+            case OWNER_SELF_IN_REGION -> MessageKeys.CAPTURE_REASON_OWNER_SELF_IN_REGION;
+            case CONTAINER_OWNER_IN_OVERLAP -> MessageKeys.CAPTURE_REASON_CONTAINER_OWNER_IN_OVERLAP;
+            case NOT_INVOLVED_NOT_OWNER -> MessageKeys.CAPTURE_REASON_NOT_INVOLVED_NOT_OWNER;
+            case UNPROTECTED_NO_OVERRIDE -> MessageKeys.CAPTURE_REASON_UNPROTECTED_NO_OVERRIDE;
+            case NOT_IN_REGION -> MessageKeys.CAPTURE_REASON_NOT_IN_REGION;
+            case ENTITIES_REQUIRE_ADMIN -> MessageKeys.CAPTURE_REASON_HANGABLE_REQUIRES_ADMIN;
+            default -> MessageKeys.CAPTURE_REASON_FALLBACK;
+        };
+        Component reason = Text.of(key, Map.of("owner", ownerName, "regions", regionsList,
+                "reason-code", decision.reason().name()));
+        return VaultStoragePlugin.getInstance().messages().messageFor(
+                MessageKeys.CAPTURE_ACTION_BAR_REASON_SEGMENT_TEMPLATE, MessageContainer.markup("reason", reason));
     }
 
     private static final BlockFace[] ADJACENT_FACES = new BlockFace[]{
@@ -785,11 +719,11 @@ public class VaultCaptureService {
      * Applies policy, captures/removes the block, persists items when applicable, and sends user feedback.
      * The callback is invoked on the main thread with true when a vault was persisted (non-empty container), false otherwise.
      */
-    public void captureDirectAsync(@NotNull Player actor, @NotNull Block block, @NotNull SessionTexts texts, @NotNull Consumer<Boolean> onDoneMain) {
+    public void captureDirectAsync(@NotNull Player actor, @NotNull Block block, @NotNull Consumer<Boolean> onDoneMain) {
         VaultCapturePolicy.Decision decision = VaultCapturePolicy.evaluate(actor, block);
         UUID originalOwner = decision.containerOwner();
         if (!decision.allowed()) {
-            actor.sendMessage(MiniMessageUtil.parseOrPlain(texts.notAllowed));
+            actor.sendMessage(Text.of(MessageKeys.CAPTURE_NOT_ALLOWED));
             onDoneMain.accept(false);
             return;
         }
@@ -797,13 +731,13 @@ public class VaultCaptureService {
         if (outcome.empty()) {
             // Update to respect the protectionRemoved flag
             if (outcome.protectionRemoved()) {
-                actor.sendMessage(MiniMessageUtil.parseOrPlain(texts.emptyCaptureSkipped));
+                actor.sendMessage(Text.of(MessageKeys.CAPTURE_EMPTY_CAPTURE_SKIPPED));
             }
             onDoneMain.accept(false);
             return;
         }
         if (originalOwner == null && decision.hasOverride()) {
-            actor.sendMessage(MiniMessageUtil.parseOrPlain(texts.noBoltOwner));
+            actor.sendMessage(Text.of(MessageKeys.CAPTURE_NO_BOLT_OWNER));
         }
         VaultImp vault = outcome.vault();
         UUID finalOwner = outcome.finalOwner();
@@ -812,9 +746,7 @@ public class VaultCaptureService {
         // The owner is validated first; the rest runs on the main thread, where the pipeline starts.
         ensureValidOwnerUUID(finalOwner, actor).thenAcceptAsync(validatedOwner -> {
             if (validatedOwner == null) {
-                actor.sendMessage(MiniMessageUtil.parseOrPlain(
-                    "<red>Error: Could not determine vault owner. Capture aborted.</red>"
-                ));
+                actor.sendMessage(Text.of(MessageKeys.CAPTURE_OWNER_UNKNOWN));
                 plugin.getLogger().warning(
                     "[VaultCaptureService] Direct vault capture aborted for " + actor.getName() +
                     " at " + block.getWorld().getName() + ":" + block.getX() + "," + block.getY() + "," + block.getZ() +
@@ -831,17 +763,17 @@ public class VaultCaptureService {
                                 .setLastVaultDto(new VaultDtoImp(vaulted.vault(), validatedOwner, List.of(),
                                         vault.blockMaterial() == null ? null : vault.blockMaterial().name(),
                                         null, System.currentTimeMillis()));
-                        actor.sendMessage(MiniMessageUtil.parseOrPlain(texts.capturedOk));
+                        actor.sendMessage(Text.of(MessageKeys.CAPTURE_CAPTURED_OK));
                         mailOwner(block, actor.getUniqueId(), validatedOwner);
                         new PlayerVaultEvent(actor, vault).callEvent();
                         onDoneMain.accept(true);
                     }
                     case CaptureResult.ChangedMeanwhile changed -> {
-                        actor.sendMessage(MiniMessageUtil.parseOrPlain(CHANGED_MEANWHILE));
+                        actor.sendMessage(Text.of(CHANGED_MEANWHILE));
                         onDoneMain.accept(false);
                     }
                     case CaptureResult.Failed failed -> {
-                        actor.sendMessage(MiniMessageUtil.parseOrPlain(SAVE_FAILED));
+                        actor.sendMessage(Text.of(SAVE_FAILED));
                         onDoneMain.accept(false);
                     }
                 }

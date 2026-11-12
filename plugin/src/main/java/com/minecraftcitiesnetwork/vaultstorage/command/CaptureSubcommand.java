@@ -1,5 +1,7 @@
 package com.minecraftcitiesnetwork.vaultstorage.command;
 
+import com.minecraftcitiesnetwork.vaultstorage.config.MessageKeys;
+import com.minecraftcitiesnetwork.vaultstorage.config.Text;
 import com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin;
 import com.minecraftcitiesnetwork.vaultstorage.command.CommandContext;
 import com.minecraftcitiesnetwork.vaultstorage.command.Subcommand;
@@ -28,16 +30,16 @@ public class CaptureSubcommand implements Subcommand {
     @Override
     public void execute(CommandContext ctx) {
         if (!ctx.isPlayer()) {
-            ctx.sender().sendMessage("Only players can use this.");
+            ctx.sender().sendMessage(Text.of(MessageKeys.COMMAND_PLAYERS_ONLY));
             return;
         }
         Player player = ctx.asPlayer();
         if (!VaultPermission.ACTION_CAPTURE.has(player)) {
-            player.sendMessage("You don't have permission to capture blocks.");
+            player.sendMessage(Text.of(MessageKeys.CAPTURE_NO_PERMISSION));
             return;
         }
         VaultCaptureService captureService = VaultStoragePlugin.getInstance().getCaptureService();
         captureService.startCaptureSession(player); // opens session directly
-        player.sendMessage("Capture session started. Left-click to cancel.");
+        player.sendMessage(Text.of(MessageKeys.COMMAND_CAPTURE_STARTED));
     }
 }

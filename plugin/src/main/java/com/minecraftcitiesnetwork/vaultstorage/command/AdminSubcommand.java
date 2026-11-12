@@ -1,5 +1,7 @@
 package com.minecraftcitiesnetwork.vaultstorage.command;
 
+import com.minecraftcitiesnetwork.vaultstorage.config.MessageKeys;
+import com.minecraftcitiesnetwork.vaultstorage.config.Text;
 import com.minecraftcitiesnetwork.vaultstorage.command.CommandContext;
 import com.minecraftcitiesnetwork.vaultstorage.command.Subcommand;
 import com.minecraftcitiesnetwork.vaultstorage.permission.VaultPermission;
@@ -33,7 +35,7 @@ public class AdminSubcommand implements Subcommand {
     public void execute(CommandContext ctx) {
         CommandSender sender = ctx.sender();
         if (!(sender instanceof Player player)) {
-            sender.sendMessage("Only players can use this.");
+            sender.sendMessage(Text.of(MessageKeys.COMMAND_PLAYERS_ONLY));
             return;
         }
         new VaultCaptureMenu(player, VaultUIContext.admin(player.getUniqueId())).open();

@@ -1,5 +1,7 @@
 package com.minecraftcitiesnetwork.vaultstorage.vault;
 
+import com.minecraftcitiesnetwork.pluginInfrastructure.configurate.MessageContainer;
+import com.minecraftcitiesnetwork.vaultstorage.config.MessageKeys;
 import com.minecraftcitiesnetwork.vaultstorage.names.NameSource;
 import java.util.ArrayList;
 import java.util.List;
@@ -19,7 +21,7 @@ class OwnerNotificationsTest {
     private static final UUID OWNER = UUID.fromString("cccccccc-0000-0000-0000-000000000001");
     private static final UUID ACTOR = UUID.fromString("dddddddd-0000-0000-0000-000000000002");
     private static final String TEMPLATE =
-            "<gold>%sender%</gold> created a new vault for you: <yellow>%recipient%</yellow> in region <yellow>%region%</yellow>";
+            "<gold><sender></gold> created a new vault for you: <yellow><recipient></yellow> in region <yellow><region></yellow>";
 
     private record Delivered(UUID recipient, String title, String message) {
     }
@@ -41,9 +43,12 @@ class OwnerNotificationsTest {
                 return CompletableFuture.completedFuture(Optional.empty());
             }
         };
-        return new OwnerNotifications(names, () -> this.notifier, () -> "<gold>Vault storage</gold>", () -> TEMPLATE,
-                () -> "<gold>%count%</gold> of your containers in <yellow>%region%</yellow> were vaulted for <gold>%sender%</gold>",
-                Logger.getLogger("test"));
+        MessageContainer messages = new MessageContainer();
+        messages.setMessage(MessageKeys.NOTIFICATION_TITLE, "<gold>Vault storage</gold>");
+        messages.setMessage(MessageKeys.NOTIFICATION_VAULT_CREATED, TEMPLATE);
+        messages.setMessage(MessageKeys.NOTIFICATION_SWEEP_VAULTED,
+                "<gold><count></gold> of your containers in <yellow><region></yellow> were vaulted for <gold><sender></gold>");
+        return new OwnerNotifications(names, () -> this.notifier, messages, Logger.getLogger("test"));
     }
 
     @Test

@@ -4,8 +4,6 @@ import io.papermc.paper.dialog.Dialog;
 import com.minecraftcitiesnetwork.vaultstorage.menu.AutoDialog;
 import com.minecraftcitiesnetwork.vaultstorage.menu.ChildMenu;
 import com.minecraftcitiesnetwork.vaultstorage.menu.ParentMenu;
-import com.minecraftcitiesnetwork.vaultstorage.config.MiniMessageUtil;
-import net.kyori.adventure.text.Component;
 import org.bukkit.entity.Player;
 
 import java.util.ArrayList;
@@ -54,11 +52,4 @@ public abstract class ParentMenuImp implements ParentMenu {
 
     @Override
     public void addChildMenus(List<ChildMenu> childMenus) { children.addAll(childMenus); }
-
-    /**
-     * Parse MiniMessage-formatted text into a Component, falling back to plain text.
-     */
-    protected Component miniMessage(String mm) {
-        return MiniMessageUtil.parseOrPlain(mm == null ? "" : mm);
-    }
 }

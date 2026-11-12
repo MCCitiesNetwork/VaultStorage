@@ -1,5 +1,7 @@
 package com.minecraftcitiesnetwork.vaultstorage.vault;
 
+import com.minecraftcitiesnetwork.pluginInfrastructure.configurate.MessageContainer;
+import com.minecraftcitiesnetwork.vaultstorage.config.MessageKeys;
 import com.minecraftcitiesnetwork.vaultstorage.names.NameSource;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -7,8 +9,6 @@ import java.util.function.Supplier;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.minimessage.MiniMessage;
-import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -18,38 +18,30 @@ import org.jetbrains.annotations.Nullable;
  */
 public final class OwnerNotifications {
 
-    private static final MiniMessage MINI_MESSAGE = MiniMessage.miniMessage();
     private static final String NO_REGION = "N/A";
 
     private final @NotNull NameSource names;
     private final @NotNull Supplier<@Nullable OwnerNotifier> notifier;
-    private final @NotNull Supplier<String> title;
-    private final @NotNull Supplier<String> template;
-    private final @NotNull Supplier<String> sweepTemplate;
+    private final @NotNull MessageContainer messages;
     private final @NotNull Logger logger;
 
     /**
      * @param notifier read on every notification, because the module that supplies it starts
      *                 after the host and may stop while it runs
-     * @param title    the notification's title, as MiniMessage
-     * @param template the message, as MiniMessage with %sender%, %recipient% and %region%
-     * @param sweepTemplate the message after a sweep, with %count%, %sender%, %recipient% and %region%
+     * @param messages holds the title and the two sentences
      */
     public OwnerNotifications(@NotNull NameSource names, @NotNull Supplier<@Nullable OwnerNotifier> notifier,
-                              @NotNull Supplier<String> title, @NotNull Supplier<String> template,
-                              @NotNull Supplier<String> sweepTemplate, @NotNull Logger logger) {
+                              @NotNull MessageContainer messages, @NotNull Logger logger) {
         this.names = names;
         this.notifier = notifier;
-        this.title = title;
-        this.template = template;
-        this.sweepTemplate = sweepTemplate;
+        this.messages = messages;
         this.logger = logger;
     }
 
     /** Never completes exceptionally: a notification that fails is logged and nothing more. */
     public @NotNull CompletableFuture<Void> vaultCreated(@NotNull UUID owner, @NotNull UUID actor,
                                                         @Nullable String regionId) {
-        return notify(owner, actor, regionId, this.template, null);
+        return notify(owner, actor, regionId, MessageKeys.NOTIFICATION_VAULT_CREATED, null);
     }
 
     /**
@@ -61,21 +53,21 @@ public final class OwnerNotifications {
         if (containers <= 0) {
             return CompletableFuture.completedFuture(null);
         }
-        return notify(owner, newOccupant, regionId, this.sweepTemplate, containers);
+        return notify(owner, newOccupant, regionId, MessageKeys.NOTIFICATION_SWEEP_VAULTED, containers);
     }
 
     private @NotNull CompletableFuture<Void> notify(@NotNull UUID owner, @NotNull UUID actor, @Nullable String regionId,
-                                                   @NotNull Supplier<String> text, @Nullable Integer count) {
+                                                   @NotNull String key, @Nullable Integer count) {
         return this.names.nameOf(actor)
                 .thenCombine(this.names.nameOf(owner), (actorName, ownerName) -> {
                     // Names and the region id go in as text. Parsed as markup, a name could carry
                     // a click action that runs as whoever reads the message.
-                    Component message = MINI_MESSAGE.deserialize(tags(text.get()),
-                            Placeholder.unparsed("count", count == null ? "" : String.valueOf(count)),
-                            Placeholder.unparsed("sender", actorName.orElse(shortId(actor))),
-                            Placeholder.unparsed("recipient", ownerName.orElse(shortId(owner))),
-                            Placeholder.unparsed("region", regionId == null ? NO_REGION : regionId));
-                    deliver(owner, MINI_MESSAGE.deserialize(this.title.get()), message);
+                    Component message = this.messages.messageFor(key,
+                            MessageContainer.value("count", count == null ? "" : String.valueOf(count)),
+                            MessageContainer.value("sender", actorName.orElse(shortId(actor))),
+                            MessageContainer.value("recipient", ownerName.orElse(shortId(owner))),
+                            MessageContainer.value("region", regionId == null ? NO_REGION : regionId));
+                    deliver(owner, this.messages.messageFor(MessageKeys.NOTIFICATION_TITLE), message);
                     return (Void) null;
                 })
                 .exceptionally(failure -> {
@@ -92,12 +84,6 @@ public final class OwnerNotifications {
             return;
         }
         current.deliver(owner, title, message);
-    }
-
-    /** The templates use %name% placeholders; MiniMessage's own are tags. */
-    private static @NotNull String tags(@NotNull String template) {
-        return template.replace("%sender%", "<sender>").replace("%recipient%", "<recipient>")
-                .replace("%region%", "<region>").replace("%count%", "<count>");
     }
 
     private static @NotNull String shortId(@NotNull UUID player) {

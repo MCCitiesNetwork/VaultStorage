@@ -72,6 +72,19 @@ public final class ConfigFiles {
         return operator;
     }
 
+    /**
+     * As {@link #load}, with every key the operator's file lacks filled in memory from the
+     * bundled default. For messages, where a missing key would show its own name to a player.
+     */
+    public @NotNull ConfigurationNode loadFilled(@NotNull String fileName, @NotNull String bundledText)
+            throws IOException {
+        ConfigurationNode operator = load(fileName, bundledText, UnaryOperator.identity());
+        ConfigurationNode defaults = loader().path(this.folder.resolve("defaults").resolve(fileName)).build().load();
+        // The operator's node is the receiver: mergeFrom fills only what it lacks.
+        operator.mergeFrom(defaults);
+        return operator;
+    }
+
     /** The 1.x {@code config.yml}, or an empty node when there is none or it does not parse. */
     public @NotNull ConfigurationNode legacy() {
         Path old = this.folder.resolve("config.yml");

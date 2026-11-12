@@ -18,7 +18,7 @@ public record PluginSettings(
             @Setting("cache-ttl-seconds") long cacheTtlSeconds,
             @Setting("cooldown-seconds") long cooldownSeconds
     ) {
-        private static final int DEFAULT_BATCH_SIZE = 20;
+        private static final int DEFAULT_BATCH_SIZE = 50;
 
         public Scan {
             // An absent primitive key deserialises to 0, so 0 means "use the default".

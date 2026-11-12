@@ -5,7 +5,6 @@ import org.jetbrains.annotations.NotNull;
 import com.minecraftcitiesnetwork.vaultstorage.Service;
 
 import com.minecraftcitiesnetwork.vaultstorage.scan.ScanResult;
-import com.minecraftcitiesnetwork.vaultstorage.menu.VaultScanMenu;
 import com.minecraftcitiesnetwork.vaultstorage.menu.VaultUIContext;
 import org.bukkit.entity.Player;
 
@@ -28,7 +27,7 @@ public interface VaultScanService extends Service {
      * @param config   The scan menu configuration.
      * @param callback The consumer to accept the list of found blocks.
      */
-    void scan(Player player, String regionId, VaultUIContext context, VaultScanMenu.Config config, Consumer<List<ScanResult>> callback);
+    void scan(Player player, String regionId, VaultUIContext context, Consumer<List<ScanResult>> callback);
 
     /**
      * Drops a block from every cached result. Called when a block stops being a result, because

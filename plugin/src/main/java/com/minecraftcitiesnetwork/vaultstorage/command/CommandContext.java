@@ -1,5 +1,8 @@
 package com.minecraftcitiesnetwork.vaultstorage.command;
 
+import java.util.Map;
+import com.minecraftcitiesnetwork.vaultstorage.config.MessageKeys;
+import com.minecraftcitiesnetwork.vaultstorage.config.Text;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 
@@ -50,6 +53,6 @@ public record CommandContext(
     }
 
     public void usage(String usage) {
-        sender.sendMessage("Usage: /" + label + " " + usage);
+        sender.sendMessage(Text.of(MessageKeys.COMMAND_USAGE, Map.of("label", label, "usage", usage)));
     }
 }

@@ -1,5 +1,9 @@
 package com.minecraftcitiesnetwork.vaultstorage.command;
 
+import net.kyori.adventure.text.Component;
+import java.util.Map;
+import com.minecraftcitiesnetwork.vaultstorage.config.MessageKeys;
+import com.minecraftcitiesnetwork.vaultstorage.config.Text;
 import com.minecraftcitiesnetwork.vaultstorage.database.OwnerResult;
 import java.util.concurrent.CompletableFuture;
 import java.util.logging.Level;
@@ -45,7 +49,7 @@ public class TransferSubcommand implements Subcommand {
         try {
             vaultId = UUID.fromString(vaultIdStr);
         } catch (IllegalArgumentException ex) {
-            ctx.sender().sendMessage("Invalid vault ID format.");
+            ctx.sender().sendMessage(Text.of(MessageKeys.COMMAND_TRANSFER_INVALID_ID));
             ctx.usage(usage());
             return;
         }
@@ -55,28 +59,31 @@ public class TransferSubcommand implements Subcommand {
 
         var plugin = VaultStoragePlugin.getInstance();
         var sender = ctx.sender();
-        sender.sendMessage("Resolving owner...");
+        sender.sendMessage(Text.of(MessageKeys.COMMAND_TRANSFER_RESOLVING));
 
         new UniqueIdentifierResolver(plugin.names()).resolveUuid(ownerIdentifier)
                 .thenCompose(newOwner -> {
                     if (!UniqueIdentifierResolver.isValidUUID(newOwner)) {
-                        return CompletableFuture.completedFuture("Could not resolve player: " + ownerIdentifier);
+                        return CompletableFuture.completedFuture(
+                                Text.of(MessageKeys.COMMAND_TRANSFER_UNKNOWN_PLAYER, Map.of("player", ownerIdentifier)));
                     }
-                    return CompletableFuture.supplyAsync(() -> switch (plugin.repository().setOwner(vaultId, newOwner)) {
-                        case OwnerResult.NoSuchVault missing -> "Vault not found with ID: " + vaultId;
+                    return CompletableFuture.<Component>supplyAsync(() -> switch (plugin.repository().setOwner(vaultId, newOwner)) {
+                        case OwnerResult.NoSuchVault missing ->
+                                Text.of(MessageKeys.COMMAND_TRANSFER_NOT_FOUND, Map.of("vault", vaultId.toString()));
                         case OwnerResult.Changed changed -> {
                             plugin.getLogger().info("[TransferSubcommand] " + sender.getName() + " transferred vault "
                                     + vaultId + " from " + changed.previous() + " to " + newOwner);
-                            yield "Vault " + vaultId + " transferred from " + changed.previous() + " to " + newOwner + ".";
+                            yield Text.of(MessageKeys.COMMAND_TRANSFER_DONE, Map.of("vault", vaultId.toString(),
+                                    "from", changed.previous().toString(), "to", newOwner.toString()));
                         }
                     }, plugin.databaseExecutor());
                 })
                 .exceptionally(failure -> {
                     // The cause goes to the log; the sender is told only that it failed.
                     plugin.getLogger().log(Level.SEVERE, "Could not transfer vault " + vaultId + ".", failure);
-                    return "The transfer failed. See the server log.";
+                    return Text.of(MessageKeys.COMMAND_TRANSFER_FAILED);
                 })
-                .thenAcceptAsync(sender::sendMessage, plugin.getServer().getScheduler().getMainThreadExecutor(plugin));
+                .thenAcceptAsync((Component reply) -> sender.sendMessage(reply), plugin.getServer().getScheduler().getMainThreadExecutor(plugin));
     }
 
     @Override

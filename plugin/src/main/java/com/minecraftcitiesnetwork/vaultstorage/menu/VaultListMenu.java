@@ -1,21 +1,18 @@
 package com.minecraftcitiesnetwork.vaultstorage.menu;
 
+import com.minecraftcitiesnetwork.vaultstorage.config.MessageKeys;
+import com.minecraftcitiesnetwork.vaultstorage.config.Text;
 import com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin;
-import com.minecraftcitiesnetwork.vaultstorage.config.AutoYML;
-import com.minecraftcitiesnetwork.vaultstorage.config.DataFolder;
-import com.minecraftcitiesnetwork.vaultstorage.config.MiniMessageUtil;
 import com.minecraftcitiesnetwork.vaultstorage.database.FindResult;
 import com.minecraftcitiesnetwork.vaultstorage.database.VaultFilter;
 import com.minecraftcitiesnetwork.vaultstorage.database.VaultPage;
 import com.minecraftcitiesnetwork.vaultstorage.database.VaultRepository;
 import com.minecraftcitiesnetwork.vaultstorage.database.VaultSummary;
 import com.minecraftcitiesnetwork.vaultstorage.names.UniqueIdentifierResolver;
-import com.minecraftcitiesnetwork.vaultstorage.vault.Dto;
 import io.papermc.paper.dialog.Dialog;
 import io.papermc.paper.registry.data.dialog.DialogBase;
 import io.papermc.paper.registry.data.dialog.body.DialogBody;
 import io.papermc.paper.registry.data.dialog.input.DialogInput;
-import java.io.Serializable;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -57,51 +54,13 @@ public class VaultListMenu extends ChildMenuImp {
 
     private record Loaded(List<Entry> entries, Paging paging) {}
 
-    /** Configuration DTO for menu texts. */
-    public static class Config implements Dto, Serializable {
-        /** Dialog title. Supports %query% placeholder. */
-        public String title = "<gold><bold>Browse Vaults</bold></gold>";
-        /** Label above the search text box. Supports %query% placeholder. */
-        public String searchLabel = "<gray>Search by owner name or UUID</gray>";
-        /** Button to refresh with the typed query. Supports %query%. */
-        public String searchBtn = "<aqua>Search</aqua>";
-        /** Button to go back to parent menu. */
-        public String backBtn = "<red><bold>Back</bold></red>";
-        /** Message when no results match the query. Supports %query%. */
-        public String noneFound = "<gray>No vaults found.</gray>";
-        /**
-         * Format for each listed vault button.
-         * Placeholders:
-         * - %owner%: resolved owner name or UUID
-         * - %index%: 1-based index among this owner's vaults within the result set
-         */
-        public String itemFormat = "<white>%owner%</white><gray>'s Vault #</gray><white>%index%</white>";
-        /** Button to the previous page. */
-        public String prevBtn = "<yellow>< Prev</yellow>";
-        /** Button to the next page. */
-        public String nextBtn = "<yellow>Next ></yellow>";
-        /** Line showing where the page is in the list. Placeholders: %page% %pages% %count% */
-        public String pageLabel = "<gray>Page %page% / %pages% (%count% vaults)</gray>";
-    }
 
-    private static final String HEADER = String.join("\n",
-            "VaultListMenu configuration.",
-            "Fields accept MiniMessage or plain strings.",
-            "Placeholders for global context:",
-            "- %query% -> current search query",
-            "Placeholders for itemFormat:",
-            "- %owner% -> owner name or UUID",
-            "- %index% -> 1-based index among the owner's vaults"
-    );
 
     /** AutoYML handler to persist this menu's configuration. */
-    private static final AutoYML<Config> YML = AutoYML.create(Config.class, "VaultListMenu", DataFolder.MENUS, HEADER);
 
     /** Ensures the YAML file for this menu exists by creating defaults if missing. */
-    public static void ensureConfig() { YML.loadOrCreate(Config::new); }
 
     /** Lazily loaded configuration snapshot. */
-    private static Config cfg() { return YML.loadOrCreate(Config::new); }
 
     /** Opens the first page. */
     public VaultListMenu(Player player, ParentMenuImp parent, VaultUIContext ctx, String query) {
@@ -129,21 +88,20 @@ public class VaultListMenu extends ChildMenuImp {
     public Dialog getDialog() { return super.getDialog(); }
 
     private Dialog build(@NotNull Loaded page) {
-        Config cfg = cfg();
         AutoDialog.Builder builder = getAutoDialogBuilder();
         Map<String, String> phQuery = Map.of("%query%", this.query);
-        builder.title(MiniMessageUtil.parseOrPlain(cfg.title, phQuery));
+        builder.title(Text.of(MessageKeys.LIST_TITLE, phQuery));
         builder.canCloseWithEscape(true);
         builder.afterAction(DialogBase.DialogAfterAction.CLOSE);
         ParentMenuImp parent = (ParentMenuImp) getParentMenu();
 
         // Only someone who may see everyone's vaults has anything to search for.
         if (this.uiContext.filterOwner() == null) {
-            builder.addInput(DialogInput.text("QUERY", MiniMessageUtil.parseOrPlain(cfg.searchLabel, phQuery))
+            builder.addInput(DialogInput.text("QUERY", Text.of(MessageKeys.LIST_SEARCH_LABEL, phQuery))
                     .maxLength(255)
                     .labelVisible(true)
                     .build());
-            builder.buttonWithPlayer(MiniMessageUtil.parseOrPlain(cfg.searchBtn, phQuery), null, Duration.ofMinutes(5), 1,
+            builder.buttonWithPlayer(Text.of(MessageKeys.LIST_SEARCH_BTN, phQuery), null, Duration.ofMinutes(5), 1,
                     (player, response) -> {
                         String typed = Optional.ofNullable(response.getText("QUERY")).orElse("").trim();
                         new VaultListMenu(player, parent, this.uiContext, typed).open();
@@ -152,27 +110,27 @@ public class VaultListMenu extends ChildMenuImp {
 
         Paging paging = page.paging();
         if (page.entries().isEmpty()) {
-            builder.addBody(DialogBody.plainMessage(MiniMessageUtil.parseOrPlain(cfg.noneFound, phQuery)));
+            builder.addBody(DialogBody.plainMessage(Text.of(MessageKeys.LIST_NONE_FOUND, phQuery)));
         } else {
-            builder.addBody(DialogBody.plainMessage(MiniMessageUtil.parseOrPlain(cfg.pageLabel, Map.of(
+            builder.addBody(DialogBody.plainMessage(Text.of(MessageKeys.LIST_PAGE_LABEL, Map.of(
                     "%page%", String.valueOf(paging.page() + 1),
                     "%pages%", String.valueOf(paging.pages()),
                     "%count%", String.valueOf(paging.total())))));
             for (Entry entry : page.entries()) {
-                Component label = MiniMessageUtil.parseOrPlain(cfg.itemFormat,
+                Component label = Text.of(MessageKeys.LIST_ITEM_FORMAT,
                         Map.of("%owner%", entry.ownerName(), "%index%", String.valueOf(entry.index())));
                 builder.button(label, ctx -> new VaultActionMenu(ctx.player(), parent, this.uiContext, entry.id()).open());
             }
         }
         if (paging.hasPrevious()) {
-            builder.button(MiniMessageUtil.parseOrPlain(cfg.prevBtn),
+            builder.button(Text.of(MessageKeys.LIST_PREV_BTN),
                     ctx -> new VaultListMenu(ctx.player(), parent, this.uiContext, this.query, paging.page() - 1).open());
         }
         if (paging.hasNext()) {
-            builder.button(MiniMessageUtil.parseOrPlain(cfg.nextBtn),
+            builder.button(Text.of(MessageKeys.LIST_NEXT_BTN),
                     ctx -> new VaultListMenu(ctx.player(), parent, this.uiContext, this.query, paging.page() + 1).open());
         }
-        builder.button(MiniMessageUtil.parseOrPlain(cfg.backBtn), ctx -> getParentMenu().open());
+        builder.button(Text.of(MessageKeys.LIST_BACK_BTN), ctx -> getParentMenu().open());
         return builder.build();
     }
 
@@ -262,7 +220,7 @@ public class VaultListMenu extends ChildMenuImp {
                 .exceptionally(failure -> {
                     plugin.getLogger().log(Level.SEVERE, "Could not load the vault list for " + player.getName() + ".", failure);
                     mainThread.execute(() -> {
-                        player.sendMessage("The vault list could not be loaded.");
+                        player.sendMessage(Text.of(MessageKeys.LIST_LOAD_FAILED));
                         getParentMenu().open();
                     });
                     return null;
