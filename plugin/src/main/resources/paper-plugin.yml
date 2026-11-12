@@ -34,9 +34,10 @@ permissions:
   vaultstorage.action.copy:
     description: Allows copying items from a vault to the player inventory
     default: op
+  # Checked since 2.0. Before that nothing read it, so everyone could place; the default keeps that.
   vaultstorage.action.place:
-    description: Allows placing back the original block and restoring its contents
-    default: op
+    description: Allows placing a vault back into the world as a block
+    default: true
   vaultstorage.admin.override:
     description: Allows capturing/placing vault blocks even if not a region member or outside regions
     default: false

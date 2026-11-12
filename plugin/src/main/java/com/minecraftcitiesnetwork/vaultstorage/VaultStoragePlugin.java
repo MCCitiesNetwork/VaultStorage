@@ -37,7 +37,9 @@ import com.minecraftcitiesnetwork.vaultstorage.database.VaultDatabase;
 import com.minecraftcitiesnetwork.vaultstorage.database.VaultRepository;
 import com.minecraftcitiesnetwork.vaultstorage.database.VaultStorageSchemaMigrator;
 import com.minecraftcitiesnetwork.vaultstorage.session.SessionQuitListener;
+import com.minecraftcitiesnetwork.vaultstorage.placement.WorldGuardPlacementGrant;
 import java.io.IOException;
+import java.util.concurrent.CompletableFuture;
 import java.sql.SQLException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
@@ -128,10 +130,20 @@ public final class VaultStoragePlugin extends JavaPlugin {
             return;
         }
         this.vaultService = new VaultServiceImpl(this.repository);
+        // A claim can only be left behind by a crash; nobody holds one now.
+        CompletableFuture.supplyAsync(this.repository::releaseAllClaims, this.databaseExecutor)
+                .thenAccept(released -> released.forEach(vault -> getLogger().warning("Vault " + vault
+                        + " was still claimed from before the last shutdown and has been released."
+                        + " If its block was placed just before a crash, its items may exist twice.")))
+                .exceptionally(failure -> {
+                    getLogger().log(Level.SEVERE, "Could not release vault claims left by the last shutdown.", failure);
+                    return null;
+                });
         // Register VaultService in Bukkit services
 
         // Integration services
         this.worldGuardService = new WorldGuardServiceImp();
+        this.integrations.addPlacementGrant(new WorldGuardPlacementGrant(this.worldGuardService));
         this.boltService = new BoltServiceImp(this);
 
         RegisteredServiceProvider<MailService> mailService = getServer().getServicesManager().getRegistration(MailService.class);

@@ -3,7 +3,11 @@ package com.minecraftcitiesnetwork.vaultstorage;
 import com.minecraftcitiesnetwork.vaultstorage.chestshop.ChestShopService;
 import com.minecraftcitiesnetwork.vaultstorage.chestshop.NoOpChestShopService;
 import com.minecraftcitiesnetwork.vaultstorage.names.NameSource;
+import com.minecraftcitiesnetwork.vaultstorage.placement.PlacementGrant;
+import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CopyOnWriteArrayList;
+import org.bukkit.Location;
 import java.util.function.Predicate;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -23,6 +27,7 @@ public final class Integrations {
     private volatile @Nullable NameSource bedrockNames;
     private volatile @Nullable Predicate<UUID> bedrockClient;
     private volatile @Nullable ChestShopService chestShop;
+    private final List<PlacementGrant> placementGrants = new CopyOnWriteArrayList<>();
 
     public void primaryNames(@Nullable NameSource source) {
         this.primaryNames = source;
@@ -48,6 +53,31 @@ public final class Integrations {
     public boolean isBedrockClient(@NotNull UUID player) {
         Predicate<UUID> check = this.bedrockClient;
         return check != null && check.test(player);
+    }
+
+    public void addPlacementGrant(@NotNull PlacementGrant grant) {
+        this.placementGrants.add(grant);
+    }
+
+    public void removePlacementGrant(@NotNull PlacementGrant grant) {
+        this.placementGrants.remove(grant);
+    }
+
+    /**
+     * Whether any grant lets the player place a vault at the target. A grant that fails is a
+     * no: a broken integration must not open placement to everyone.
+     */
+    public boolean mayPlace(@NotNull UUID player, @NotNull Location target) {
+        for (PlacementGrant grant : this.placementGrants) {
+            try {
+                if (grant.mayPlace(player, target)) {
+                    return true;
+                }
+            } catch (RuntimeException ignored) {
+                // Treated as "this grant does not apply".
+            }
+        }
+        return false;
     }
 
     public void chestShop(@Nullable ChestShopService service) {

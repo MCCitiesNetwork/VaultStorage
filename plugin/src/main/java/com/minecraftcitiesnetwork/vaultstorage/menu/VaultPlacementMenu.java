@@ -6,7 +6,6 @@ import io.papermc.paper.registry.data.dialog.body.DialogBody;
 import com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin;
 import com.minecraftcitiesnetwork.vaultstorage.vault.Dto;
 import com.minecraftcitiesnetwork.vaultstorage.placement.PlayerPlaceVaultEvent;
-import com.minecraftcitiesnetwork.vaultstorage.region.WorldGuardService;
 import com.minecraftcitiesnetwork.vaultstorage.menu.AutoDialog;
 import com.minecraftcitiesnetwork.vaultstorage.permission.VaultPermission;
 import com.minecraftcitiesnetwork.vaultstorage.placement.VaultPlacementService;
@@ -155,16 +154,13 @@ public class VaultPlacementMenu extends ChildMenuImp {
                 Block target = clicked.getRelative(face);
                 Location targetLoc = target.getLocation();
 
-                // Membership/override check
-                WorldGuardService wgs = VaultStoragePlugin.getInstance().getWorldGuardService();
-                boolean allowed = true;
-                if (wgs != null) {
-                    var regs = wgs.getRegionsAt(target);
-                    UUID viewer = actor.getUniqueId();
-                    boolean isParticipant = regs.stream().anyMatch(r -> r.isPartOfRegion(viewer));
-                    boolean hasOverride = VaultPermission.ACTION_PLACE_OVERRIDE.has(actor);
-                    allowed = isParticipant || hasOverride;
+                // The place permission, and somewhere the player may place: any grant, or the override.
+                if (!VaultPermission.ACTION_PLACE.has(actor)) {
+                    actor.sendMessage(MiniMessageUtil.parseOrPlain("<red>You don't have permission to place vaults.</red>"));
+                    return;
                 }
+                boolean allowed = VaultPermission.ACTION_PLACE_OVERRIDE.has(actor)
+                        || VaultStoragePlugin.getInstance().integrations().mayPlace(actor.getUniqueId(), targetLoc);
                 if (!allowed) {
                     actor.sendMessage(MiniMessageUtil.parseOrPlain(config.notAllowed));
                     return; // Stay in placement mode
@@ -246,15 +242,9 @@ public class VaultPlacementMenu extends ChildMenuImp {
                     actor.sendActionBar(MiniMessageUtil.parseOrPlain(config.actionBarIdle));
                     return;
                 }
-                WorldGuardService wgs = VaultStoragePlugin.getInstance().getWorldGuardService();
-                boolean isParticipant = false;
-                if (wgs != null) {
-                    var regs = wgs.getRegionsAt(target);
-                    UUID viewer = actor.getUniqueId();
-                    isParticipant = regs.stream().anyMatch(r -> r.isPartOfRegion(viewer));
-                }
-                boolean hasOverride = VaultPermission.ACTION_PLACE_OVERRIDE.has(actor);
-                boolean allowed = isParticipant || hasOverride;
+                boolean allowed = VaultPermission.ACTION_PLACE.has(actor)
+                        && (VaultPermission.ACTION_PLACE_OVERRIDE.has(actor)
+                        || VaultStoragePlugin.getInstance().integrations().mayPlace(actor.getUniqueId(), target.getLocation()));
                 var ph = Map.of("%placeable%", allowed ? config.placeYes : config.placeNo);
                 actor.sendActionBar(MiniMessageUtil.parseOrPlain(config.actionBarTarget, ph));
             }
