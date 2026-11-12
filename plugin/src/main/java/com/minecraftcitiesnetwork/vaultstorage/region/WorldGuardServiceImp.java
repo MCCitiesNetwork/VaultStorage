@@ -9,8 +9,6 @@ import com.sk89q.worldguard.protection.regions.RegionContainer;
 import com.minecraftcitiesnetwork.vaultstorage.region.VaultRegion;
 import com.minecraftcitiesnetwork.vaultstorage.region.WorldGuardService;
 import com.minecraftcitiesnetwork.vaultstorage.region.VaultRegionImp;
-import com.minecraftcitiesnetwork.vaultstorage.region.RegionGeometry;
-import org.bukkit.util.Vector;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.util.BoundingBox;
@@ -40,22 +38,24 @@ public class WorldGuardServiceImp implements WorldGuardService {
     }
 
     /**
-     * Returns regions in the given world that overlap the provided bounding box.
-     * Data is fetched live from WorldGuard on each call.
-     *
-     * @param block       the block to check (not null)
-     * @return a list of regions overlapping the box (never null)
+     * The regions that contain the block, by their real shape. WorldGuard answers from its
+     * spatial index, so this neither builds every region in the world nor treats a polygon as
+     * its bounding box.
      */
     @Override
     public @NotNull List<VaultRegion> getRegionsAt(@NotNull Block block) {
         Objects.requireNonNull(block, "block");
-        Vector pos = block.getLocation().toVector();
-
-        return getRegionsIn(block.getWorld()).stream()
-                .filter(region -> RegionGeometry.containsInclusive(region.boundingBox(), pos.getX(), pos.getY(), pos.getZ()))
-                .toList();
+        RegionManager manager = regionContainer.get(BukkitAdapter.adapt(block.getWorld()));
+        if (manager == null) {
+            return List.of();
+        }
+        List<VaultRegion> regions = new ArrayList<>();
+        for (ProtectedRegion region : manager.getApplicableRegions(
+                BlockVector3.at(block.getX(), block.getY(), block.getZ()))) {
+            regions.add(buildVaultRegion(region.getId(), region));
+        }
+        return regions;
     }
-
 
     /**
      * Returns all regions in the given world. This method queries WorldGuard's RegionManager
@@ -90,7 +90,7 @@ public class WorldGuardServiceImp implements WorldGuardService {
 
         List<VaultRegion> regions = getRegionsIn(world);
 
-        return regions.stream().filter(region -> region.id().equals(id)).toList().getFirst();
+        return regions.stream().filter(region -> region.id().equals(id)).findFirst().orElse(null);
     }
 
     private VaultRegion buildVaultRegion(String id, @NotNull ProtectedRegion protectedRegion) {
