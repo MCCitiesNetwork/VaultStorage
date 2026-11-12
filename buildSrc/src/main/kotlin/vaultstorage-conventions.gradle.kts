@@ -24,15 +24,11 @@ repositories {
     maven("https://repo.minebench.de/") { name = "minebench" }
     maven("https://maven.democracycraft.net/releases") { name = "democracycraft" }
     maven("https://maven.minecraftcitiesnetwork.com/snapshots") { name = "mccities-snapshots" }
-    // Removed together with DemocracyLib.
-    maven("https://jitpack.io") {
-        name = "jitpack"
-        content { includeGroupByRegex("com\\.github\\.MCCitiesNetwork.*") }
-    }
 }
 
 dependencies {
     compileOnly(libs.findLibrary("annotations").get())
+    testCompileOnly(libs.findLibrary("annotations").get())
     testImplementation(platform(libs.findLibrary("junit-bom").get()))
     testImplementation(libs.findLibrary("junit-jupiter").get())
     testRuntimeOnly(libs.findLibrary("junit-platform-launcher").get())

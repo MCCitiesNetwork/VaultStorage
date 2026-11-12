@@ -343,27 +343,21 @@ public class VaultScanMenu extends ChildMenuImp {
             // Resolve names asynchronously if needed and refresh
             if (!toResolve.isEmpty()) {
                 var plugin = VaultStoragePlugin.getInstance();
-                var mojangService = plugin.getMojangService();
-                if (mojangService != null) {
-                    List<CompletableFuture<Void>> futures = new ArrayList<>();
-                    for (UUID u : toResolve) {
-                        var future = mojangService.getName(u).thenAccept(name -> {
-                            if (name != null && !name.isBlank()) {
-                                NAME_CACHE.put(u, name);
+                List<CompletableFuture<Void>> futures = new ArrayList<>();
+                for (UUID u : toResolve) {
+                    var future = plugin.names().nameOf(u).thenAccept(name ->
+                            name.filter(resolved -> !resolved.isBlank()).ifPresent(resolved -> NAME_CACHE.put(u, resolved)));
+                    futures.add(future);
+                }
+               CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
+                        .thenRun(() -> {
+                            // Check if any names were resolved
+                            boolean anyResolved = toResolve.stream().anyMatch(NAME_CACHE::containsKey);
+                            if (anyResolved) {
+                                Bukkit.getScheduler().runTask(plugin, () ->
+                                        new VaultScanMenu(getPlayer(), getParentMenu(), uiContext, regionId, entries, eCurrentPage, FilterMode.ENTITY).open());
                             }
                         });
-                        futures.add(future);
-                    }
-                   CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
-                            .thenRun(() -> {
-                                // Check if any names were resolved
-                                boolean anyResolved = toResolve.stream().anyMatch(NAME_CACHE::containsKey);
-                                if (anyResolved) {
-                                    Bukkit.getScheduler().runTask(plugin, () ->
-                                            new VaultScanMenu(getPlayer(), getParentMenu(), uiContext, regionId, entries, eCurrentPage, FilterMode.ENTITY).open());
-                                }
-                            });
-                }
             }
 
             // Navigation for entity pages
@@ -445,26 +439,20 @@ public class VaultScanMenu extends ChildMenuImp {
         // Async resolve missing owner names and refresh the page if any were resolved
         if (!toResolve.isEmpty()) {
             var plugin = VaultStoragePlugin.getInstance();
-            var mojangService = plugin.getMojangService();
-            if (mojangService != null) {
-                List<CompletableFuture<Void>> futures = new ArrayList<>();
-                for (UUID uuid : toResolve) {
-                    var future = mojangService.getName(uuid).thenAccept(name -> {
-                        if (name != null && !name.isBlank()) {
-                            NAME_CACHE.put(uuid, name);
+            List<CompletableFuture<Void>> futures = new ArrayList<>();
+            for (UUID uuid : toResolve) {
+                var future = plugin.names().nameOf(uuid).thenAccept(name ->
+                        name.filter(resolved -> !resolved.isBlank()).ifPresent(resolved -> NAME_CACHE.put(uuid, resolved)));
+                futures.add(future);
+            }
+            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
+                    .thenRun(() -> {
+                        boolean anyResolved = toResolve.stream().anyMatch(NAME_CACHE::containsKey);
+                        if (anyResolved) {
+                            Bukkit.getScheduler().runTask(plugin, () ->
+                                    new VaultScanMenu(getPlayer(), getParentMenu(), uiContext, regionId, entries, currentPage).open());
                         }
                     });
-                    futures.add(future);
-                }
-                CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
-                        .thenRun(() -> {
-                            boolean anyResolved = toResolve.stream().anyMatch(NAME_CACHE::containsKey);
-                            if (anyResolved) {
-                                Bukkit.getScheduler().runTask(plugin, () ->
-                                        new VaultScanMenu(getPlayer(), getParentMenu(), uiContext, regionId, entries, currentPage).open());
-                            }
-                        });
-            }
         }
 
         // Navigation buttons

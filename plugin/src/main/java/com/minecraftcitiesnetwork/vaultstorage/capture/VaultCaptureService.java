@@ -99,7 +99,7 @@ public class VaultCaptureService {
 
         // UUID is invalid (null or all-zeros), attempt to resolve by player name
         var plugin = VaultStoragePlugin.getInstance();
-        var resolver = new UniqueIdentifierResolver(plugin.getMojangService(), plugin.getBedrockUniqueIdentifierRetriever());
+        var resolver = new UniqueIdentifierResolver(plugin.names());
 
         VaultStoragePlugin.getInstance().getLogger().warning(
             "[VaultCaptureService] INVALID owner UUID detected for actor " + actor.getName() +
@@ -714,7 +714,7 @@ public class VaultCaptureService {
 
     /**
      * Returns a display name for the UUID without blocking the main thread.
-     * Uses cache if present; otherwise returns a short UUID and schedules an async resolve via MojangService.
+     * Uses cache if present; otherwise returns a short UUID and schedules an async resolve.
      */
     private static String ownerDisplayNameAsync(UUID uuid) {
         if (uuid == null) return cfg().actionBarUnprotectedOwner;
@@ -722,12 +722,8 @@ public class VaultCaptureService {
         if (cached != null) return cached;
         String fallback = uuid.toString().substring(0, 8);
         // Async resolve and cache using CompletableFuture API
-        var mojangService = VaultStoragePlugin.getInstance().getMojangService();
-        if (mojangService != null) {
-            mojangService.getName(uuid).thenAccept(name -> {
-                if (name != null && !name.isBlank()) NAME_CACHE.put(uuid, name);
-            });
-        }
+        VaultStoragePlugin.getInstance().names().nameOf(uuid).thenAccept(name ->
+                name.filter(resolved -> !resolved.isBlank()).ifPresent(resolved -> NAME_CACHE.put(uuid, resolved)));
         return fallback;
     }
 

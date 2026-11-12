@@ -9,7 +9,6 @@ shadow = "9.4.1"
 run-paper = "3.1.0"
 plugin-infrastructure = "1.0.0-SNAPSHOT"
 namebook-api = "1.0.0-SNAPSHOT"
-democracylib = "e5ddf4ac24"
 bolt = "1.1.33"
 worldguard = "7.0.20"
 essentialsx = "2.21.2"
@@ -26,7 +25,6 @@ junit-jupiter = { module = "org.junit.jupiter:junit-jupiter" }
 junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher" }
 plugin-infrastructure = { module = "com.minecraftcitiesnetwork:plugin-infrastructure", version.ref = "plugin-infrastructure" }
 namebook-api = { module = "com.minecraftcitiesnetwork:namebook-api", version.ref = "namebook-api" }
-democracylib = { module = "com.github.MCCitiesNetwork:DemocracyLib", version.ref = "democracylib" }
 bolt-bukkit = { module = "org.popcraft:bolt-bukkit", version.ref = "bolt" }
 bolt-common = { module = "org.popcraft:bolt-common", version.ref = "bolt" }
 worldguard = { module = "com.sk89q.worldguard:worldguard-bukkit", version.ref = "worldguard" }

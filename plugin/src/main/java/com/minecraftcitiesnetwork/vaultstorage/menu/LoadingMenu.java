@@ -1,5 +1,6 @@
 package com.minecraftcitiesnetwork.vaultstorage.menu;
 
+import com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin;
 import io.papermc.paper.dialog.Dialog;
 import io.papermc.paper.registry.data.dialog.DialogBase;
 import io.papermc.paper.registry.data.dialog.body.DialogBody;
@@ -12,7 +13,6 @@ import com.minecraftcitiesnetwork.vaultstorage.config.AutoYML;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.entity.Player;
-import org.geysermc.floodgate.api.FloodgateApi;
 
 import java.util.Map;
 
@@ -68,7 +68,7 @@ public class LoadingMenu extends ChildMenuImp {
 
     @Override
     public void open() {
-        if(FloodgateApi.getInstance().isFloodgatePlayer(player.getUniqueId())){
+        if(VaultStoragePlugin.getInstance().integrations().isBedrockClient(player.getUniqueId())){
             player.sendMessage(Component.text("Loading Menu...", NamedTextColor.GREEN));
         }else{
             setDialog(build());

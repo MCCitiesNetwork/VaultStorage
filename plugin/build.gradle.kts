@@ -8,8 +8,6 @@ plugins {
 
 dependencies {
     compileOnly(libs.paper.api)
-    // compileOnly, not implementation: the 1.2.0 jar does not contain DemocracyLib either.
-    compileOnly(libs.democracylib)
     compileOnly(libs.bolt.bukkit)
     compileOnly(libs.bolt.common)
     compileOnly(libs.worldguard)
@@ -19,8 +17,8 @@ dependencies {
     compileOnly(libs.floodgate.api)
     compileOnly(libs.chestshop)
     compileOnly(libs.realty.paper.api) { isTransitive = false }
-    // compileOnly is not on the test runtime classpath.
-    testRuntimeOnly(libs.paper.api)
+    // compileOnly is on neither test classpath; tests name Paper's profile type.
+    testImplementation(libs.paper.api)
 }
 
 tasks {

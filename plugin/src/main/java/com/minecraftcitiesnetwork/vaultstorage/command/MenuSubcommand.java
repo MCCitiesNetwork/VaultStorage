@@ -39,7 +39,7 @@ public class MenuSubcommand implements Subcommand {
             player.sendMessage("Resolving player...");
 
             // Use centralized UUID resolver
-            UniqueIdentifierResolver resolver = new UniqueIdentifierResolver(plugin.getMojangService(), plugin.getBedrockUniqueIdentifierRetriever());
+            UniqueIdentifierResolver resolver = new UniqueIdentifierResolver(plugin.names());
             resolver.resolveUuid(username).thenAccept(resolved -> Bukkit.getScheduler().runTask(plugin, () -> {
                 Player current = Bukkit.getPlayer(player.getUniqueId());
                 if (current == null || !current.isOnline()) return;

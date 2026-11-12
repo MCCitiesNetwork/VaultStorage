@@ -1,91 +1,51 @@
 package com.minecraftcitiesnetwork.vaultstorage.names;
 
-import net.democracycraft.democracyLib.api.service.mojang.MojangService;
-import com.minecraftcitiesnetwork.vaultstorage.floodgate.BedrockUniqueIdentifierRetriever;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
-
-/**
- * Utility for resolving player identifiers to UUIDs.
- * Supports both Java Edition (via MojangService) and Bedrock (via FloodgateApi).
- * Always tries Java first, then falls back to Bedrock.
- */
+/** Resolves what a player typed, a UUID or a name, to a UUID. */
 public class UniqueIdentifierResolver {
 
-    private final MojangService<?> mojangService;
-    private final BedrockUniqueIdentifierRetriever bedrockRetriever;
+    private final @NotNull NameSource names;
 
-    public UniqueIdentifierResolver(@NotNull MojangService<?> mojangService, @NotNull BedrockUniqueIdentifierRetriever bedrockRetriever) {
-        this.mojangService = mojangService;
-        this.bedrockRetriever = bedrockRetriever;
+    public UniqueIdentifierResolver(@NotNull NameSource names) {
+        this.names = names;
     }
 
-    public @NotNull CompletableFuture<String> getName(@NotNull UUID uniqueIdentifier){
-        return mojangService.getName(uniqueIdentifier).thenCompose(name -> {
-            if (name != null){
-                return CompletableFuture.completedFuture(name);
-            }
-
-            return bedrockRetriever.getPlayerName(uniqueIdentifier).
-                    exceptionally(ex -> null);
-        });
+    /** The player's name, or null when no source knows the UUID. */
+    public @NotNull CompletableFuture<String> getName(@NotNull UUID uniqueIdentifier) {
+        return this.names.nameOf(uniqueIdentifier).thenApply(found -> found.orElse(null));
     }
 
     /**
-     * Attempts to resolve a player identifier (UUID string or player name) to a UUID.
-     * If the input is already a valid UUID, returns it immediately.
-     * Otherwise, tries to resolve as a player name (Java first, then Bedrock).
+     * Resolves a UUID string or a player name to a UUID. A valid UUID string is returned as it
+     * is, without a lookup.
      *
-     * @param identifier UUID string or player name
-     * @return CompletableFuture with the resolved UUID, or null if resolution fails
+     * @return the UUID, or null when the name is unknown
      */
-    public CompletableFuture<UUID> resolveUuid(@NotNull String identifier) {
-        // Try parsing as UUID first
+    public @NotNull CompletableFuture<UUID> resolveUuid(@NotNull String identifier) {
         UUID parsed = tryParseUUID(identifier);
         if (parsed != null) {
             return CompletableFuture.completedFuture(parsed);
         }
-
-        // Try resolving as player name
-        return resolvePlayerName(identifier);
+        return this.names.uuidOf(identifier).thenApply(found -> found.orElse(null));
     }
 
-    /**
-     * Resolves a player name to UUID using MojangService (Java) then BedrockRetriever (Bedrock) as fallback.
-     */
-    private CompletableFuture<UUID> resolvePlayerName(@NotNull String playerName) {
-        return mojangService.getUUID(playerName).thenCompose(resolved -> {
-            if (resolved != null) {
-                return CompletableFuture.completedFuture(resolved);
-            }
-            // Fallback to Bedrock
-            return bedrockRetriever.getUniqueIdentifier(playerName)
-                .exceptionally(ex -> null);
-        });
-    }
-
-    /**
-     * Tries to parse a string as UUID, returning null if it fails.
-     */
-    @Nullable
-    private UUID tryParseUUID(@NotNull String s) {
+    private static @Nullable UUID tryParseUUID(@NotNull String text) {
         try {
-            return UUID.fromString(s);
-        } catch (IllegalArgumentException ex) {
+            return UUID.fromString(text);
+        } catch (IllegalArgumentException notAUuid) {
             return null;
         }
     }
 
-    /**
-     * Checks if a UUID is valid (not null and not all zeros).
-     * All-zero UUIDs (00000000-0000-0000-0000-000000000000) indicate failed conversions.
-     */
+    /** Whether a UUID is usable: not null and not all zeros, which marks a failed conversion. */
     public static boolean isValidUUID(@Nullable UUID uuid) {
-        if (uuid == null) return false;
-        // Check if all zeros
+        if (uuid == null) {
+            return false;
+        }
         return !(uuid.getMostSignificantBits() == 0L && uuid.getLeastSignificantBits() == 0L);
     }
 }

@@ -156,15 +156,7 @@ public class VaultListMenu extends ChildMenuImp {
 
             if (sq.type() == SearchStrategy.SearchType.INVALID) {
                 // Try to resolve as username
-                if (plugin.getMojangService() != null) {
-                    UniqueIdentifierResolver resolver = new UniqueIdentifierResolver(
-                            plugin.getMojangService(),
-                            plugin.getBedrockUniqueIdentifierRetriever()
-                    );
-                    resolveUsernameAsync(plugin, resolver, q);
-                } else {
-                    loadVaultsAsync(plugin, List.of());
-                }
+                resolveUsernameAsync(plugin, new UniqueIdentifierResolver(plugin.names()), q);
             } else {
                 // UUID_STRING case: search async
                 Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
@@ -223,14 +215,9 @@ public class VaultListMenu extends ChildMenuImp {
         }
 
         for (UUID ownerUuid : uniqueOwners) {
-            if (plugin.getMojangService() != null) {
-                var future = plugin.getMojangService().getName(ownerUuid).thenAccept(name -> {
-                    if (name != null && !name.isBlank()) {
-                        resolvedNames.put(ownerUuid, name);
-                    }
-                });
-                nameFutures.add(future);
-            }
+            nameFutures.add(plugin.names().nameOf(ownerUuid).thenAccept(name ->
+                    name.filter(resolved -> !resolved.isBlank())
+                            .ifPresent(resolved -> resolvedNames.put(ownerUuid, resolved))));
         }
 
         // Wait for all name resolutions, then build entries

@@ -1,8 +1,6 @@
 package com.minecraftcitiesnetwork.vaultstorage;
 
 import com.earth2me.essentials.Essentials;
-import net.democracycraft.democracyLib.api.DemocracyLibApi;
-import net.democracycraft.democracyLib.api.service.mojang.MojangService;
 import com.minecraftcitiesnetwork.vaultstorage.database.VaultDAO;
 import com.minecraftcitiesnetwork.vaultstorage.bolt.BoltService;
 import com.minecraftcitiesnetwork.vaultstorage.chestshop.ChestShopService;
@@ -20,7 +18,6 @@ import com.minecraftcitiesnetwork.vaultstorage.autovault.RealtyOccupantChangeLis
 import com.minecraftcitiesnetwork.vaultstorage.autovault.AutoVaultService;
 import com.minecraftcitiesnetwork.vaultstorage.bolt.BoltServiceImp;
 import com.minecraftcitiesnetwork.vaultstorage.chestshop.adapter.ChestShopServiceImp;
-import com.minecraftcitiesnetwork.vaultstorage.chestshop.NoOpChestShopService;
 import com.minecraftcitiesnetwork.vaultstorage.capture.VaultCaptureService;
 import com.minecraftcitiesnetwork.vaultstorage.vault.VaultInventoryService;
 import com.minecraftcitiesnetwork.vaultstorage.placement.VaultPlacementService;
@@ -40,11 +37,16 @@ import com.minecraftcitiesnetwork.vaultstorage.menu.VaultPlacementMenu;
 import com.minecraftcitiesnetwork.vaultstorage.menu.LoadingMenu;
 import com.minecraftcitiesnetwork.vaultstorage.permission.VaultPermission;
 import net.essentialsx.api.v2.services.mail.MailService;
+import com.minecraftcitiesnetwork.vaultstorage.names.NameSource;
+import com.minecraftcitiesnetwork.vaultstorage.names.Names;
+import com.minecraftcitiesnetwork.vaultstorage.names.PaperProfileNameSource;
+import java.util.Optional;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import org.bukkit.Bukkit;
 import org.bukkit.World;
 import org.bukkit.permissions.Permission;
 import org.bukkit.plugin.RegisteredServiceProvider;
-import org.bukkit.plugin.ServicePriority;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.geysermc.floodgate.api.FloodgateApi;
 
@@ -65,14 +67,13 @@ public final class VaultStoragePlugin extends JavaPlugin {
 
 
     // Integration services
-    private MojangService<VaultStoragePlugin> mojangService;
+    private final Integrations integrations = new Integrations();
+    private Names names;
     private VaultService vaultService;
     private WorldGuardService worldGuardService;
     private BoltService boltService;
     private MailService mailService;
     private Essentials essentials;
-    private ChestShopService chestShopService;
-    private DemocracyLibApi democracyLibApi;
     private BedrockUniqueIdentifierRetriever bedrockUniqueIdentifierRetriever;
 
     // Database wiring
@@ -104,16 +105,15 @@ public final class VaultStoragePlugin extends JavaPlugin {
     /** Reusable scan domain service. */
     public VaultScanService getScanService() { return scanService; }
 
-    public MojangService<VaultStoragePlugin> getMojangService() { return mojangService; }
+    /** What feature modules supply; read at use time. */
+    public Integrations integrations() { return integrations; }
 
-    public BedrockUniqueIdentifierRetriever getBedrockUniqueIdentifierRetriever() {
-        return bedrockUniqueIdentifierRetriever;
-    }
+    /** Player name and UUID lookups. */
+    public Names names() { return names; }
 
     @Override
     public void onEnable() {
         instance = this;
-        democracyLibApi = DemocracyLibApi.instance(this, true);
         // Ensure config exists and has defaults
         ConfigInitializer.ensureMysqlDefaults(this);
 
@@ -130,14 +130,27 @@ public final class VaultStoragePlugin extends JavaPlugin {
         this.vaultDAO = new VaultDAOImpl(schema);
         this.vaultService = new VaultServiceImpl(vaultDAO);
         // Register VaultService in Bukkit services
-        getServer().getServicesManager().register(VaultService.class, this.vaultService, this, ServicePriority.Normal);
 
         // Integration services
         this.bedrockUniqueIdentifierRetriever = new BedrockUniqueIdentifierRetriever(FloodgateApi.getInstance());
+        // Until Floodgate moves into its module, the host fills the Bedrock slots itself.
+        BedrockUniqueIdentifierRetriever bedrock = this.bedrockUniqueIdentifierRetriever;
+        this.integrations.bedrockNames(new NameSource() {
+            @Override
+            public CompletableFuture<Optional<String>> nameOf(UUID player) {
+                return bedrock.getPlayerName(player).thenApply(Optional::ofNullable)
+                        .exceptionally(failure -> Optional.empty());
+            }
+
+            @Override
+            public CompletableFuture<Optional<UUID>> uuidOf(String name) {
+                return bedrock.getUniqueIdentifier(name).thenApply(Optional::ofNullable)
+                        .exceptionally(failure -> Optional.empty());
+            }
+        });
+        this.integrations.bedrockClient(FloodgateApi.getInstance()::isFloodgatePlayer);
         this.worldGuardService = new WorldGuardServiceImp();
-        getServer().getServicesManager().register(WorldGuardService.class, this.worldGuardService, this, ServicePriority.Normal);
         this.boltService = new BoltServiceImp(this);
-        getServer().getServicesManager().register(BoltService.class, this.boltService, this, ServicePriority.Normal);
 
         RegisteredServiceProvider<MailService> mailService = getServer().getServicesManager().getRegistration(MailService.class);
         if(mailService != null) {
@@ -151,7 +164,9 @@ public final class VaultStoragePlugin extends JavaPlugin {
 
         // ChestShop soft dependency: real impl when present, no-op otherwise.
         var chestShop = getServer().getPluginManager().getPlugin("ChestShop");
-        this.chestShopService = chestShop != null ? new ChestShopServiceImp() : new NoOpChestShopService();
+        if (chestShop != null) {
+            this.integrations.chestShop(new ChestShopServiceImp());
+        }
 
         // Domain services
         this.captureService = new VaultCaptureService();
@@ -160,7 +175,7 @@ public final class VaultStoragePlugin extends JavaPlugin {
         this.scanService = new VaultScanServiceImpl();
 
         // External lookup services
-        this.mojangService = democracyLibApi.getMojangService(this);
+        this.names = new Names(new PaperProfileNameSource(), this.integrations);
 
         // Ensure menu YAMLs exist at startup
         VaultCaptureMenu.ensureConfig();
@@ -241,7 +256,7 @@ public final class VaultStoragePlugin extends JavaPlugin {
 
     /** ChestShop integration; returns a no-op implementation when ChestShop is not installed. */
     public ChestShopService getChestShopService() {
-        return chestShopService;
+        return this.integrations.chestShop();
     }
 
 }

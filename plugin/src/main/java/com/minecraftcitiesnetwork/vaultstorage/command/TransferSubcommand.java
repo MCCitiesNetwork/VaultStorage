@@ -77,7 +77,7 @@ public class TransferSubcommand implements Subcommand {
                 plugin.getLogger().info("[TransferSubcommand] Vault found: " + vaultId + " at world " + vault.worldUuid + " coords(" + vault.x + "," + vault.y + "," + vault.z + ")");
 
                 // Resolve owner UUID using the centralized resolver
-                UniqueIdentifierResolver resolver = new UniqueIdentifierResolver(plugin.getMojangService(), plugin.getBedrockUniqueIdentifierRetriever());
+                UniqueIdentifierResolver resolver = new UniqueIdentifierResolver(plugin.names());
                 resolver.resolveUuid(ownerIdentifier).thenAccept(resolvedUUID -> {
                     if (resolvedUUID == null) {
                         plugin.getLogger().warning("[TransferSubcommand] Failed to resolve owner identifier: " + ownerIdentifier);

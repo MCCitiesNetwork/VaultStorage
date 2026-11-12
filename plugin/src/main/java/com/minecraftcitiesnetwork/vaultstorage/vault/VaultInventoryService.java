@@ -45,7 +45,7 @@ public class VaultInventoryService {
 
     /**
      * Opens a virtual inventory for the given vault id and action.
-     * Performs asynchronous owner username resolution via MojangService to avoid blocking the main thread.
+     * Performs asynchronous owner username resolution to avoid blocking the main thread.
      * If a parent menu is provided, a LoadingMenu child will be shown while resolving.
      */
     public void openVirtualInventory(Player player, UUID vaultId, VaultAction action, ParentMenu parentMenu, Runnable reopenCallback) {
@@ -60,7 +60,6 @@ public class VaultInventoryService {
         new BukkitRunnable() {
             @Override public void run() {
                 VaultService vaultService = plugin.getVaultService();
-                var mojangService = plugin.getMojangService();
                 var entityOpt = vaultService.get(vaultId);
                 if (entityOpt.isEmpty()) {
                     new BukkitRunnable() {
@@ -81,16 +80,15 @@ public class VaultInventoryService {
                 }
 
                 // Resolve owner name asynchronously using CompletableFuture, then open inventory on main thread
-                if (ownerUuid != null && mojangService != null) {
-                    mojangService.getName(ownerUuid).thenAccept(resolvedName -> {
-                        String ownerDisplay = (resolvedName != null && !resolvedName.isBlank())
-                                ? resolvedName
-                                : ownerUuid.toString();
+                if (ownerUuid != null) {
+                    plugin.names().nameOf(ownerUuid).thenAccept(resolvedName -> {
+                        String ownerDisplay = resolvedName.filter(name -> !name.isBlank())
+                                .orElse(ownerUuid.toString());
                         Bukkit.getScheduler().runTask(plugin, () ->
                                 openOnMain(player, vaultId, ownerDisplay, action, contents, invSize, reopenCallback));
                     });
                 } else {
-                    String ownerDisplay = ownerUuid != null ? ownerUuid.toString() : "Unknown";
+                    String ownerDisplay = "Unknown";
                     Bukkit.getScheduler().runTask(plugin, () ->
                             openOnMain(player, vaultId, ownerDisplay, action, contents, invSize, reopenCallback));
                 }
