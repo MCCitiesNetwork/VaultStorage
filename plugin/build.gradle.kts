@@ -1,5 +1,6 @@
 import java.net.URI
 import java.security.MessageDigest
+import java.util.zip.ZipFile
 import me.drownek.plugwright.local.LocalMode
 
 plugins {
@@ -164,6 +165,53 @@ val installE2eModules by tasks.registering(Sync::class) {
     preserve { exclude("*.jar") }
 }
 
+// ChestShop and Treasury are not published anywhere: they come from a checkout of hibernia-economy
+// beside this repository (or wherever -PhiberniaEconomyDir points), built with its
+// `./gradlew release`. Without them the ChestShop specs skip themselves.
+val hiberniaEconomyDir = providers.gradleProperty("hiberniaEconomyDir").orElse("../hibernia-economy")
+    .map { rootProject.file(it) }
+
+val installE2eEconomy by tasks.registering {
+    description = "Installs the economy plugins from a hibernia-economy checkout into the test server."
+    val releaseDir = hiberniaEconomyDir.map { File(it, "release") }
+    val pluginsDir = e2eRunDir.dir("plugins").asFile
+    doLast {
+        // Treasury refuses to start unless all four economy plugins are there, at one version.
+        val dataFolders = mapOf("treasury" to "Treasury", "business" to "Business",
+            "chestshop" to "ChestShop", "treasury-api-plugin" to "TreasuryAPI")
+        val installed = Regex("(treasury|business|chestshop|treasury-api-plugin)-\\d.*\\.jar")
+        pluginsDir.listFiles { file -> installed.matches(file.name) }?.forEach { it.delete() }
+        val jars = releaseDir.get().listFiles { file -> installed.matches(file.name) }?.toList().orEmpty()
+        if (jars.size < dataFolders.size) {
+            logger.lifecycle("No full economy release in ${releaseDir.get()}; the ChestShop specs will skip.")
+            return@doLast
+        }
+        for (jar in jars) {
+            jar.copyTo(File(pluginsDir, jar.name), overwrite = true)
+            // Each plugin's own default config, pointed at the dev database. They refuse to
+            // start on their placeholder passwords, and Treasury creates the schema itself.
+            val shipped = ZipFile(jar).use { zip ->
+                zip.getInputStream(zip.getEntry("config.yml")).readBytes().toString(Charsets.UTF_8)
+            }
+            if (!shipped.contains(Regex("(?m)^database:"))) {
+                continue
+            }
+            val config = shipped
+                .replaceFirst(Regex("(?m)^(  host:).*$"), "$1 127.0.0.1")
+                .replaceFirst(Regex("(?m)^(  port:).*$"), "$1 3309")
+                .replaceFirst(Regex("(?m)^(  username:).*$"), "$1 root")
+                .replaceFirst(Regex("(?m)^(  password:).*$"), "$1 root")
+                .replaceFirst(Regex("(?m)^(  jwt-secret:).*$"), "$1 live-test-secret-of-more-than-thirty-two-bytes")
+            val folder = dataFolders.getValue(installed.matchEntire(jar.name)!!.groupValues[1])
+            File(pluginsDir, "$folder/config.yml").apply { parentFile.mkdirs() }.writeText(config)
+        }
+
+        val created = ProcessBuilder("docker", "exec", "vaultstorage-dev-mariadb", "mariadb", "-uroot", "-proot",
+            "-e", "CREATE DATABASE IF NOT EXISTS treasury").inheritIO().start().waitFor()
+        check(created == 0) { "Could not create the treasury database in the dev MariaDB" }
+    }
+}
+
 // plugwright 3.0.0 installs Paper 26.3 build 3, an alpha whose spawn finder crashes the server
 // when several bots join at once. Swap in a stable build after plugwright provisions the server
 // and before any test runs. Remove this once plugwright installs the latest stable build.
@@ -194,11 +242,11 @@ val usePaperStableBuild by tasks.registering {
 // Plugwright registers its tasks late, so they are matched by name instead of tasks.named(...).
 tasks.matching { it.name == "plugwrightProvisionLocal" }.configureEach {
     dependsOn(startE2eDatabase)
-    finalizedBy(usePaperStableBuild, installE2eModules)
+    finalizedBy(usePaperStableBuild, installE2eModules, installE2eEconomy)
 }
 tasks.matching { it.name == "plugwrightTestLocal" || it.name == "plugwrightRunServerLocal" }.configureEach {
-    dependsOn(usePaperStableBuild, installE2eModules)
+    dependsOn(usePaperStableBuild, installE2eModules, installE2eEconomy)
 }
-listOf(usePaperStableBuild, installE2eModules).forEach { task ->
+listOf(usePaperStableBuild, installE2eModules, installE2eEconomy).forEach { task ->
     task.configure { mustRunAfter(tasks.matching { it.name == "plugwrightProvisionLocal" }) }
 }

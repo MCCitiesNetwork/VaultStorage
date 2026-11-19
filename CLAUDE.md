@@ -187,6 +187,12 @@ part of `build`. It needs Docker and Node.
 - Menus are Paper dialogs: `tests/dialogs.ts` reads and clicks them. A loading dialog comes
   between most screens.
 - The test server's log is `plugin/src/test/e2e/generated/local/run/logs/latest.log`.
+- ChestShop, Treasury, Business and TreasuryAPI are installed by `installE2eEconomy` from
+  `../hibernia-economy/release` (built there with `./gradlew release`; another place with
+  `-PhiberniaEconomyDir=`). Treasury will not start without all four. Their database is
+  `treasury` on the dev MariaDB. Without the checkout, `chestshop.spec.ts` passes without running.
+- A bot cannot sneak, so it cannot put a sign on a chest. `lockedShop` in `chestshop.spec.ts`
+  places the sign on stone, turns the stone into the chest, then sends the sign text.
 
 Covered live: `/vault` opening and being refused; capturing a locked chest, finding it in the
 menus and placing it back with items in their slots; a capture during a database outage leaving
@@ -214,7 +220,11 @@ player with only the menu permission being refused `/vault reload`.
 Also covered live: `/vault reload` picking up a reworded message and refusing a file that does not
 parse.
 
-Not covered live: sweeps (they need Realty to trigger one) and ChestShop. Shared steps are in `tests/vaults.ts`.
+Also covered live, when a `hibernia-economy` checkout is beside this repository: capturing a
+locked shop by its sign vaults the container, and an empty locked shop loses its lock and its
+sign; in both, ChestShop's registry marks the shop inactive.
+
+Not covered live: sweeps (they need Realty to trigger one). Shared steps are in `tests/vaults.ts`.
 
 ## Rules for the capture and placement code
 

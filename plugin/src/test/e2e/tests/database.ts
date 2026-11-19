@@ -49,3 +49,13 @@ export function seedVaults(ownerUuid: string, count: number): void {
     sql('INSERT INTO Vault (uuid, ownerUuid, worldUuid, x, y, z, material, blockData, status, createdTime, updatedTime) VALUES '
         + rows.join(', '));
 }
+
+/**
+ * Runs a query against another database on the dev server, as root: the economy plugins keep
+ * theirs in `treasury`, which the plugin's own account cannot read.
+ */
+export function queryDatabase(database: string, statement: string): string[] {
+    const output = execFileSync('docker',
+        ['exec', CONTAINER, 'mariadb', '-uroot', '-proot', database, '-N', '-B', '-e', statement]).toString();
+    return output.split('\n').filter((line) => line.length > 0);
+}
