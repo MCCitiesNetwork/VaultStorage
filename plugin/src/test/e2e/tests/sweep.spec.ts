@@ -1,5 +1,6 @@
 import { expect, sleep, test, waitUntil, type PlayerWrapper, type ServerWrapper } from '@plugwright/runner';
 import { query } from './database.js';
+import { chestShopInstalled, shop, shopIsActive } from './shops.js';
 import { lockedChest } from './vaults.js';
 import { expectBlock, FLOOR, freshSpot, standAt } from './world.js';
 
@@ -63,4 +64,66 @@ test('a sweep leaves the new occupant\'s own locked chest where it is',
         await sleep(4000);
         await expectBlock(server, x + 2, FLOOR, z, 'chest', 'buyers-chest-stays');
         await vaultsOf(buyer, 0);
+    });
+
+test('a sweep vaults the previous occupant\'s stocked shop that nobody locked',
+    { requires: { consoleOutput: 'full' } }, async ({ player, createPlayer, server }) => {
+        if (!chestShopInstalled()) {
+            console.log('ChestShop is not installed on the test server; skipped.');
+            return;
+        }
+        const [owner, buyer] = await Promise.all([createPlayer(), createPlayer()]);
+        const { x, z, region } = await soldRegion(server, player, owner, buyer);
+        await shop(server, owner, x + 2, z, true, false);
+        expect(await shopIsActive(x + 2, z)).toBe(true);
+
+        await server.execute(`realtystub bought world ${region} ${buyer.username}`);
+
+        await expect(buyer).toHaveReceivedMessage('cleared into their vault storage');
+        await expectBlock(server, x + 2, FLOOR, z, 'air', 'swept-shop-chest-gone');
+        await expectBlock(server, x + 2, FLOOR + 1, z, 'air', 'swept-shop-sign-gone');
+        await vaultsOf(owner, 1);
+        await vaultsOf(buyer, 0);
+        expect(await shopIsActive(x + 2, z)).toBe(false);
+    });
+
+test('a sweep removes the sign of the previous occupant\'s empty shop and leaves the chest',
+    { requires: { consoleOutput: 'full' } }, async ({ player, createPlayer, server }) => {
+        if (!chestShopInstalled()) {
+            console.log('ChestShop is not installed on the test server; skipped.');
+            return;
+        }
+        const [owner, buyer] = await Promise.all([createPlayer(), createPlayer()]);
+        const { x, z, region } = await soldRegion(server, player, owner, buyer);
+        await shop(server, owner, x + 2, z, false, false);
+        expect(await shopIsActive(x + 2, z)).toBe(true);
+
+        await server.execute(`realtystub bought world ${region} ${buyer.username}`);
+
+        // Nothing is vaulted, so nobody is told; wait out the one-second delay and the sweep.
+        await sleep(4000);
+        await expectBlock(server, x + 2, FLOOR + 1, z, 'air', 'swept-empty-shop-sign-gone');
+        await expectBlock(server, x + 2, FLOOR, z, 'chest', 'swept-empty-shop-chest-stays');
+        await vaultsOf(owner, 0);
+        expect(await shopIsActive(x + 2, z)).toBe(false);
+    });
+
+test('a sweep leaves the new occupant\'s own unlocked shop alone',
+    { requires: { consoleOutput: 'full' } }, async ({ player, createPlayer, server }) => {
+        if (!chestShopInstalled()) {
+            console.log('ChestShop is not installed on the test server; skipped.');
+            return;
+        }
+        const [owner, buyer] = await Promise.all([createPlayer(), createPlayer()]);
+        const { x, z, region } = await soldRegion(server, player, owner, buyer);
+        await server.execute(`op ${buyer.username}`);
+        await shop(server, buyer, x + 2, z, true, false);
+        expect(await shopIsActive(x + 2, z)).toBe(true);
+
+        await server.execute(`realtystub bought world ${region} ${buyer.username}`);
+
+        await sleep(4000);
+        await expectBlock(server, x + 2, FLOOR, z, 'chest', 'buyers-shop-chest-stays');
+        await vaultsOf(buyer, 0);
+        expect(await shopIsActive(x + 2, z)).toBe(true);
     });

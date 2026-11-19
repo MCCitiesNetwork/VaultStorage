@@ -147,7 +147,7 @@ Specs and plans are in `docs/superpowers/`. One spec and one plan per step.
 | --- | --- | --- |
 | 1. Scaffold, package move, modules | done | this layout |
 | 2. Persistence | done | MyBatis on MariaDB, the playbook schema, transactions |
-| 3. Capture, placement, auto-vault | done, except the sweep finding unlocked shops | save before destroy, futures, two more modules |
+| 3. Capture, placement, auto-vault | done | save before destroy, futures, two more modules, shop owners |
 | 4. Config and messages | done | Configurate records, `messages.yml`, reload |
 | 5. Commands and permissions | done | Brigadier, `vaultstorage.command.*` |
 | 6. Menus | done | vault labels, delete confirmation, loading dialogs that end, whole-sentence keys |
@@ -169,8 +169,9 @@ Step 3 so far, on `refactor/capture-placement` (plan: `docs/superpowers/plans/20
   restart; a sweep is tracked to its end and tells each previous owner once.
 - Also done: a shop container nobody locked belongs to the shop's player, read from Treasury's
   shop registry, when a player captures it.
-- Not done: the sweep does not yet look for unlocked shops (see the step 3 spec's known
-  limitations). Everything else in the step 3 plan is done.
+- Also done: the sweep has a third pass, over the shop registry, for shop containers nobody
+  locked: a displaced player's stocked shop is vaulted to them, and an empty one loses its signs.
+  Everything in the step 3 plan is done.
 
 ## Live-server tests
 
@@ -203,7 +204,7 @@ part of `build`. It needs Docker and Node.
   a random four-character name, and a name seen before would bring its old vaults.
 - A vault's row exists a tick before its block is removed. Wait for the message that follows
   the removal, not for the row, before asserting on the block.
-- A bot cannot sneak, so it cannot put a sign on a chest. `shop` in `chestshop.spec.ts`
+- A bot cannot sneak, so it cannot put a sign on a chest. `shop` in `tests/shops.ts`
   places the sign on stone, turns the stone into the chest, then sends the sign text.
 
 Covered live: `/vault` opening and being refused; capturing a locked chest, finding it in the
@@ -238,7 +239,9 @@ sign; in both, ChestShop's registry marks the shop inactive. A stocked shop nobo
 vaulted to the shop's owner, not to the player who clicked.
 
 Also covered live: a region being bought vaults the previous occupant's locked chest for them
-and tells the buyer once; the buyer's own locked chest stays.
+and tells the buyer once; the buyer's own locked chest stays. With the economy plugins: the
+sweep vaults the previous occupant's stocked unlocked shop, removes the sign of their empty one
+and leaves the chest, and leaves the buyer's own shop alone.
 
 Shared steps are in `tests/vaults.ts`.
 
@@ -248,6 +251,9 @@ Shared steps are in `tests/vaults.ts`.
   (`ShopOwners.playerOwner`: every sign in the registry, all one player's). A firm's, an admin
   shop's or an unlisted shop's container has no owner. The registry is a database, so
   `ShopOwnerLookup.ownerOf` is asked first and `VaultCapturePolicy` uses what it remembered.
+- **The sweep has three passes:** Bolt-locked blocks, locked hanging entities, and shops whose
+  container nobody locked (`AutoVaultService.vaultShops`). A container with a Bolt owner belongs
+  to the first pass only. All three ask the same `SweepFilter`.
 - **What a capture does with a block is `DoubleChestRule.decide`**: unprotect it, refuse because
   the other half must go first, or capture. It names no Bukkit type and has its own test.
 - **Nothing removes a container except `CapturePipeline`**, through `BukkitContainerAccess.remove`.

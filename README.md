@@ -118,7 +118,7 @@ Every other integration is a module: a separate jar in `plugins/VaultStorage/mod
 | --- | --- | --- |
 | `namebook-adapter` | Namebook | Player names from Namebook, Java and Bedrock |
 | `floodgate-adapter` | Floodgate | Bedrock names when Namebook is absent; a chat line instead of the loading dialog for Bedrock players |
-| `chestshop-adapter` | ChestShop; Treasury for shop owners | Shop sign handling during capture. With Treasury, a player's shop chest that nobody locked is vaulted to that player |
+| `chestshop-adapter` | ChestShop; Treasury for shop owners | Shop sign handling during capture. With Treasury, a player's shop chest that nobody locked is vaulted to that player, by hand or by the sweep |
 | `realty-autovault` | Realty | Automatic vaulting when a region changes occupant |
 | `griefprevention-adapter` | GriefPrevention | Placing a vault on a claim where the player may build |
 | `player-notifications-adapter` | PlayerNotifications | Telling a vault's owner that a container of theirs was vaulted |

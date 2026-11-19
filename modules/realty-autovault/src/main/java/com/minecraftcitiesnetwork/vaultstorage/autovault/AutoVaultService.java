@@ -1,5 +1,17 @@
 package com.minecraftcitiesnetwork.vaultstorage.autovault;
 
+import org.bukkit.block.Block;
+import java.util.concurrent.Executor;
+import java.util.Optional;
+import java.util.Set;
+import java.util.HashSet;
+import com.minecraftcitiesnetwork.vaultstorage.capture.ContainerBlocks;
+import com.minecraftcitiesnetwork.vaultstorage.chestshop.ChestShopService;
+import com.minecraftcitiesnetwork.vaultstorage.chestshop.ShopPosition;
+import com.minecraftcitiesnetwork.vaultstorage.chestshop.ShopOwners;
+import com.minecraftcitiesnetwork.vaultstorage.chestshop.ShopOwner;
+import com.minecraftcitiesnetwork.vaultstorage.chestshop.ShopDirectory;
+import com.minecraftcitiesnetwork.vaultstorage.chestshop.Shop;
 import java.time.Instant;
 import java.util.concurrent.CompletableFuture;
 import java.util.logging.Level;
@@ -179,9 +191,12 @@ public final class AutoVaultService {
                         ? vaultHangings(key.worldId(), region.boundingBox(), filter, initiator, onVaulted, sweep)
                         : CompletableFuture.completedFuture(null);
 
-        // Every capture has been started once both passes have visited their chunks; the sweep is
+        CompletableFuture<Void> shopsDispatched =
+                vaultShops(world, region.boundingBox(), filter, initiator, onVaulted, sweep);
+
+        // Every capture has been started once the passes have visited their chunks; the sweep is
         // over when the last of them has finished.
-        CompletableFuture.allOf(blocksDispatched, hangingsDispatched)
+        CompletableFuture.allOf(blocksDispatched, hangingsDispatched, shopsDispatched)
                 .thenCompose(dispatched -> sweep.allCaptures())
                 .whenCompleteAsync((done, failure) -> {
                     if (failure != null) {
@@ -250,16 +265,7 @@ public final class AutoVaultService {
         VaultCaptureService captureService = plugin.captureService();
         BoltService bolt = plugin.bolt();
 
-        List<int[]> chunks = new ArrayList<>();
-        int minChunkX = (int) Math.floor(box.getMinX()) >> 4;
-        int minChunkZ = (int) Math.floor(box.getMinZ()) >> 4;
-        int maxChunkX = (int) Math.floor(box.getMaxX()) >> 4;
-        int maxChunkZ = (int) Math.floor(box.getMaxZ()) >> 4;
-        for (int cx = minChunkX; cx <= maxChunkX; cx++) {
-            for (int cz = minChunkZ; cz <= maxChunkZ; cz++) {
-                chunks.add(new int[]{cx, cz});
-            }
-        }
+        List<int[]> chunks = chunksOf(box);
 
         return forEachChunkPaced(worldId, chunks,
                 coords -> coords,
@@ -272,6 +278,94 @@ public final class AutoVaultService {
                                 (Hanging) entity, owner, initiator, onVaulted));
                     }
                 });
+    }
+
+    /** Every chunk a region's bounds touch, as {x, z}. */
+    private static @NotNull List<int[]> chunksOf(@NotNull BoundingBox box) {
+        List<int[]> chunks = new ArrayList<>();
+        int minChunkX = (int) Math.floor(box.getMinX()) >> 4;
+        int minChunkZ = (int) Math.floor(box.getMinZ()) >> 4;
+        int maxChunkX = (int) Math.floor(box.getMaxX()) >> 4;
+        int maxChunkZ = (int) Math.floor(box.getMaxZ()) >> 4;
+        for (int cx = minChunkX; cx <= maxChunkX; cx++) {
+            for (int cz = minChunkZ; cz <= maxChunkZ; cz++) {
+                chunks.add(new int[]{cx, cz});
+            }
+        }
+        return chunks;
+    }
+
+    /**
+     * Deals with the shops of displaced players whose containers nobody locked: the pass over
+     * Bolt protections cannot see those. A stocked container is vaulted to the shop's player; an
+     * empty one stays and only its shop signs go. Does nothing without a shop registry.
+     *
+     * <p>A container with a Bolt owner is left to the Bolt pass, which has already decided about
+     * it. A firm's, an admin shop's and an unlisted shop's container has no player to own a
+     * vault and is left where it is.
+     */
+    private @NotNull CompletableFuture<Void> vaultShops(@NotNull World world, @NotNull BoundingBox box,
+                                                       @NotNull SweepFilter filter, @NotNull UUID initiator,
+                                                       @NotNull Runnable onVaulted, @NotNull Sweep sweep) {
+        ShopDirectory directory = plugin.integrations().shopDirectory();
+        if (directory == null || !plugin.chestShop().isAvailable()) {
+            return CompletableFuture.completedFuture(null);
+        }
+        UUID worldId = world.getUID();
+        List<CompletableFuture<List<Shop>>> reads = new ArrayList<>();
+        for (int[] chunk : chunksOf(box)) {
+            reads.add(directory.shopsInChunk(world.getName(), chunk[0], chunk[1]));
+        }
+        Executor mainThread = plugin.getServer().getScheduler().getMainThreadExecutor(plugin);
+        return CompletableFuture.allOf(reads.toArray(CompletableFuture[]::new))
+                .thenComposeAsync(read -> {
+                    List<Shop> registry = new ArrayList<>();
+                    reads.forEach(result -> registry.addAll(result.join()));
+                    // Only a player's shop inside the swept region whose player is displaced.
+                    List<Shop> candidates = registry.stream()
+                            .filter(shop -> shop.owner() instanceof ShopOwner.Player player
+                                    && filter.shouldVault(player.uuid(), shop.sign().x(), shop.sign().y(), shop.sign().z()))
+                            .toList();
+                    // Two signs on one container must not start two captures of it.
+                    Set<ShopPosition> handled = new HashSet<>();
+                    return forEachChunkPaced(worldId, candidates,
+                            shop -> new int[]{shop.sign().chunkX(), shop.sign().chunkZ()},
+                            (loaded, chunk, shop) -> sweepShop(loaded, shop, registry, handled, filter, initiator,
+                                    onVaulted, sweep));
+                }, mainThread);
+    }
+
+    /** Main thread, with the sign's chunk loaded. */
+    private void sweepShop(@NotNull World world, @NotNull Shop shop, @NotNull List<Shop> registry,
+                           @NotNull Set<ShopPosition> handled, @NotNull SweepFilter filter, @NotNull UUID initiator,
+                           @NotNull Runnable onVaulted, @NotNull Sweep sweep) {
+        ChestShopService chestShop = plugin.chestShop();
+        Block sign = world.getBlockAt(shop.sign().x(), shop.sign().y(), shop.sign().z());
+        if (!chestShop.isShopSign(sign)) {
+            // The registry is behind the world: the sign has gone since.
+            return;
+        }
+        Block container = ContainerBlocks.attachedContainer(sign);
+        if (container == null || !handled.add(new ShopPosition(container.getX(), container.getY(), container.getZ()))) {
+            return;
+        }
+        BoltService bolt = plugin.bolt();
+        if (bolt != null && bolt.getOwner(container) != null) {
+            return;
+        }
+        List<Block> signs = chestShop.findShopSigns(container);
+        Optional<UUID> owner = ShopOwners.playerOwner(registry, signs.stream()
+                .map(block -> new ShopPosition(block.getX(), block.getY(), block.getZ())).toList());
+        if (owner.isEmpty() || !filter.shouldVault(owner.get(), container.getX(), container.getY(), container.getZ())) {
+            return;
+        }
+        if (ContainerBlocks.isEmpty(container)) {
+            // Nothing to store. The shop is still the displaced player's, so its signs go.
+            signs.forEach(block -> chestShop.removeShopSign(null, block));
+            return;
+        }
+        // The shop plugin sees the container go and closes the shop itself.
+        sweep.track(owner.get(), plugin.captureService().captureOfflineAsync(container, initiator, owner.get(), onVaulted));
     }
 
     /**

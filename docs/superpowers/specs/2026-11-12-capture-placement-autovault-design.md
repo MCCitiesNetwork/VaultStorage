@@ -337,10 +337,10 @@ Manual, on a live server:
 
 ## Known limitations
 
-- **The sweep does not look for unlocked shops.** When a player captures a shop container that
-  nobody locked, its owner is read from Treasury's registry (`ShopOwnerLookup`), and the policy
-  and the shop-sign rule apply with that owner. The sweep still starts from Bolt protections
-  only, so an unlocked shop left by a previous occupant stays until someone captures it.
+- **Shop owners are read from Treasury, as designed above, with two differences.** The host
+  asks through `ShopOwnerLookup`, which remembers an answer for thirty seconds so that the
+  synchronous policy and the action bar can use it. And the sweep's shop pass removes the signs
+  of a displaced player's empty shop, as a capture by hand does.
 - **The action bar says "unprotected" for an unlocked shop for a moment**, until the registry
   has answered; the click itself waits for the answer.
 
