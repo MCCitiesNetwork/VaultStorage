@@ -158,11 +158,34 @@ val startE2eDatabase by tasks.registering(Exec::class) {
     commandLine("docker", "compose", "-f", rootProject.file("compose.dev.yml").absolutePath, "up", "-d", "--wait")
 }
 
+// Bots get a random four-character name each run, and a name seen before brings its old vaults
+// with it. So every run starts with no vaults. The tables do not exist before the first run.
+val resetE2eData by tasks.registering {
+    description = "Empties the dev database's vault tables before a live-test run."
+    dependsOn(startE2eDatabase)
+    doLast {
+        for (table in listOf("VaultItem", "Vault", "PendingSweep")) {
+            ProcessBuilder("docker", "exec", "vaultstorage-dev-mariadb", "mariadb", "-uroot", "-proot", "vault_storage",
+                "-e", "DELETE FROM $table").redirectErrorStream(true).start().apply { inputStream.readAllBytes() }.waitFor()
+        }
+    }
+}
+
 // Plugwright installs the host jar only; the modules go where the host looks for them.
 val installE2eModules by tasks.registering(Sync::class) {
     from(moduleJars)
     into(e2eRunDir.dir("plugins/VaultStorage/modules"))
     preserve { exclude("*.jar") }
+}
+
+// A stand-in for Realty, so that a test can make a region change hands and start a sweep.
+val e2ePlugins: Configuration by configurations.creating
+dependencies {
+    e2ePlugins(project(path = ":e2e-plugins:realty-stub", configuration = "archives")) { isTransitive = false }
+}
+val installE2ePlugins by tasks.registering(Copy::class) {
+    from(e2ePlugins)
+    into(e2eRunDir.dir("plugins"))
 }
 
 // ChestShop and Treasury are not published anywhere: they come from a checkout of hibernia-economy
@@ -242,11 +265,16 @@ val usePaperStableBuild by tasks.registering {
 // Plugwright registers its tasks late, so they are matched by name instead of tasks.named(...).
 tasks.matching { it.name == "plugwrightProvisionLocal" }.configureEach {
     dependsOn(startE2eDatabase)
-    finalizedBy(usePaperStableBuild, installE2eModules, installE2eEconomy)
+    finalizedBy(usePaperStableBuild, installE2eModules, installE2eEconomy, installE2ePlugins)
 }
 tasks.matching { it.name == "plugwrightTestLocal" || it.name == "plugwrightRunServerLocal" }.configureEach {
-    dependsOn(usePaperStableBuild, installE2eModules, installE2eEconomy)
+    dependsOn(usePaperStableBuild, installE2eModules, installE2eEconomy, installE2ePlugins)
 }
-listOf(usePaperStableBuild, installE2eModules, installE2eEconomy).forEach { task ->
+// Only a test run starts from empty tables; a server run by hand keeps what is there.
+// `plugwrightTest` runs the environment itself, not through `plugwrightTestLocal`.
+tasks.matching { it.name == "plugwrightTest" || it.name == "plugwrightTestLocal" }.configureEach {
+    dependsOn(resetE2eData)
+}
+listOf(usePaperStableBuild, installE2eModules, installE2eEconomy, installE2ePlugins).forEach { task ->
     task.configure { mustRunAfter(tasks.matching { it.name == "plugwrightProvisionLocal" }) }
 }

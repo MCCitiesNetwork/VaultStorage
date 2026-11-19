@@ -7,3 +7,5 @@ include("modules:chestshop-adapter")
 include("modules:realty-autovault")
 include("modules:griefprevention-adapter")
 include("modules:player-notifications-adapter")
+// Test-only plugins for the live-test server. Never shipped.
+include("e2e-plugins:realty-stub")

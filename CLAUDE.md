@@ -30,6 +30,8 @@ project version lives in `gradle.properties`.
 
 The host goes in `plugins/`; module jars go in `plugins/VaultStorage/modules/`.
 
+`e2e-plugins/realty-stub` is a test-only plugin for the live-test server and is never shipped.
+
 `buildSrc` holds three conventions: `vaultstorage-conventions` (every project),
 `vaultstorage-shared-relocation` (every project; the one list of relocations) and
 `vaultstorage-module-conventions` (modules).
@@ -194,6 +196,13 @@ part of `build`. It needs Docker and Node.
   `../hibernia-economy/release` (built there with `./gradlew release`; another place with
   `-PhiberniaEconomyDir=`). Treasury will not start without all four. Their database is
   `treasury` on the dev MariaDB. Without the checkout, `chestshop.spec.ts` passes without running.
+- Realty is a stand-in, `e2e-plugins/realty-stub`: a plugin named `Realty` that bundles Realty's
+  API classes. The console command `realtystub bought <world> <region> <buyer>` fires
+  `RegionBoughtEvent`, which starts a sweep after the one-second delay the test config sets.
+- A test run starts by emptying `Vault`, `VaultItem` and `PendingSweep` (`resetE2eData`): bots get
+  a random four-character name, and a name seen before would bring its old vaults.
+- A vault's row exists a tick before its block is removed. Wait for the message that follows
+  the removal, not for the row, before asserting on the block.
 - A bot cannot sneak, so it cannot put a sign on a chest. `shop` in `chestshop.spec.ts`
   places the sign on stone, turns the stone into the chest, then sends the sign text.
 
@@ -228,7 +237,10 @@ locked shop by its sign vaults the container, and an empty locked shop loses its
 sign; in both, ChestShop's registry marks the shop inactive. A stocked shop nobody locked is
 vaulted to the shop's owner, not to the player who clicked.
 
-Not covered live: sweeps (they need Realty to trigger one). Shared steps are in `tests/vaults.ts`.
+Also covered live: a region being bought vaults the previous occupant's locked chest for them
+and tells the buyer once; the buyer's own locked chest stays.
+
+Shared steps are in `tests/vaults.ts`.
 
 ## Rules for the capture and placement code
 
