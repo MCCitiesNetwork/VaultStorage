@@ -1,6 +1,5 @@
 package com.minecraftcitiesnetwork.vaultstorage.chestshop;
 
-import com.minecraftcitiesnetwork.vaultstorage.Service;
 
 import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
@@ -13,7 +12,7 @@ import java.util.List;
  * Service for integrating with the optional ChestShop plugin.
  * Resolves to a no-op implementation when ChestShop is not installed.
  */
-public interface ChestShopService extends Service {
+public interface ChestShopService {
 
     /** @return true if ChestShop is installed and this integration is active. */
     boolean isAvailable();

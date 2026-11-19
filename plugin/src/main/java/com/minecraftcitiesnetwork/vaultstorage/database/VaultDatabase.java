@@ -27,7 +27,9 @@ public final class VaultDatabase implements AutoCloseable {
         // A connection the server dropped while idle is replaced instead of handed out.
         pooled.setPoolPingEnabled(true);
         pooled.setPoolPingQuery("SELECT 1");
-        pooled.setPoolPingConnectionsNotUsedFor(600000);
+        // Checked every time one is handed out. With a longer interval, each connection that
+        // was open across a database restart fails one operation before it is replaced.
+        pooled.setPoolPingConnectionsNotUsedFor(0);
         pooled.setPoolMaximumActiveConnections(POOL_SIZE);
         pooled.setPoolMaximumIdleConnections(POOL_SIZE);
         this.pool = pooled;

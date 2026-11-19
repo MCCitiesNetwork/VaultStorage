@@ -35,8 +35,8 @@ public final class HangingVaultSupport {
     }
 
     /**
-     * Whether the frame has no displayed item (same empty notion as
-     * {@link com.minecraftcitiesnetwork.vaultstorage.capture.VaultCaptureService#isContainerEmpty} for blocks).
+     * Whether the frame has no displayed item (the same notion of empty as
+     * {@link ContainerBlocks#isEmpty} for blocks).
      * Capture treats this as unlock-only on the supporting block.
      * @param frame item frame to inspect
      * @return true if there is nothing to treat as contents

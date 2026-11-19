@@ -1,5 +1,6 @@
 package com.minecraftcitiesnetwork.vaultstorage.menu;
 
+import java.util.function.Consumer;
 import org.jetbrains.annotations.NotNull;
 import com.minecraftcitiesnetwork.vaultstorage.config.MessageKeys;
 import com.minecraftcitiesnetwork.vaultstorage.database.VaultFilter;
@@ -39,12 +40,21 @@ public final class VaultPlacementMenu extends ChildMenuImp {
 
 
     private final VaultUIContext context;
-    /** Ensure YAML exists. */
+    private final Consumer<Player> toVault;
+    private final Consumer<Player> toList;
 
-    public VaultPlacementMenu(@NotNull Player player, @NotNull ParentMenuImp parent, @NotNull UUID vaultId, @NotNull VaultUIContext context) {
+    /**
+     * @param toVault where Back leads: the vault this placement is for
+     * @param toList  where a finished placement leads: the list the vault was picked from
+     */
+    public VaultPlacementMenu(@NotNull Player player, @NotNull ParentMenuImp parent, @NotNull UUID vaultId,
+                              @NotNull VaultUIContext context, @NotNull Consumer<Player> toVault,
+                              @NotNull Consumer<Player> toList) {
         super(player, parent, "vault_place_" + vaultId);
         this.vaultId = vaultId;
         this.context = context;
+        this.toVault = toVault;
+        this.toList = toList;
         setDialog(build());
     }
 
@@ -56,7 +66,7 @@ public final class VaultPlacementMenu extends ChildMenuImp {
 
         builder.addBody(DialogBody.plainMessage(plugin.text().of(MessageKeys.PLACEMENT_INSTRUCTION, Map.of("%player%", player().getName()))));
         builder.button(plugin.text().of(MessageKeys.PLACEMENT_START_BTN), ctx -> startPlacement(ctx.player()));
-        builder.button(plugin.text().of(MessageKeys.PLACEMENT_BACK_BTN), ctx -> parentMenu().open());
+        builder.button(plugin.text().of(MessageKeys.PLACEMENT_BACK_BTN), ctx -> this.toVault.accept(ctx.player()));
         return builder.build();
     }
 
@@ -145,7 +155,7 @@ public final class VaultPlacementMenu extends ChildMenuImp {
                                 CompletableFuture.supplyAsync(() -> plugin.repository().count(remaining), plugin.databaseExecutor())
                                         .thenAcceptAsync(left -> {
                                             if (left > 0) {
-                                                new VaultListMenu(actor, (ParentMenuImp) parentMenu(), context, "").open();
+                                                toList.accept(actor);
                                             } else {
                                                 actor.sendMessage(plugin.text().of(MessageKeys.PLACEMENT_NONE_LEFT));
                                                 actor.closeDialog();
@@ -153,11 +163,15 @@ public final class VaultPlacementMenu extends ChildMenuImp {
                                         }, plugin.getServer().getScheduler().getMainThreadExecutor(plugin))
                                         .exceptionally(failure -> {
                                             plugin.getLogger().log(Level.WARNING, "Could not count the remaining vaults.", failure);
+                                            // The vault is placed; only the way back is unknown. The
+                                            // loading dialog must not be left up.
+                                            plugin.getServer().getScheduler().getMainThreadExecutor(plugin)
+                                                    .execute(actor::closeDialog);
                                             return null;
                                         });
                             } else {
-                                // Failure: return to list for retry
-                                new VaultListMenu(actor, (ParentMenuImp) parentMenu(), context, "").open();
+                                // Nothing was placed and the vault is still there: back to it, to try again.
+                                toVault.accept(actor);
                             }
                         }
                     }.runTask(plugin);

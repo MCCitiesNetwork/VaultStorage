@@ -1,5 +1,6 @@
 package com.minecraftcitiesnetwork.vaultstorage.scan;
 
+import java.util.logging.Level;
 import org.jetbrains.annotations.Nullable;
 import java.util.concurrent.CompletableFuture;
 import org.bukkit.Bukkit;
@@ -67,18 +68,25 @@ public final class VaultScanServiceImpl implements VaultScanService {
         }
 
         // Cache miss or expired, perform scan
-        new VaultRegionScanner(this.plugin, player, regionId, context, results -> {
-            if (results != null) {
-                // A copy that can shrink: forget() removes blocks from it, from any thread.
-                cache.put(key, new CacheEntry(new CopyOnWriteArrayList<>(results), Instant.now()));
-            }
-            resolveOwnerNames(results).whenComplete((done, failure) -> Bukkit.getScheduler().runTask(
-                    plugin, () -> answer(key, results)));
-        }).start();
+        try {
+            new VaultRegionScanner(this.plugin, player, regionId, context, results -> {
+                if (results != null) {
+                    // A copy that can shrink: forget() removes blocks from it, from any thread.
+                    cache.put(key, new CacheEntry(new CopyOnWriteArrayList<>(results), Instant.now()));
+                }
+                resolveOwnerNames(results).whenComplete((done, failure) -> Bukkit.getScheduler().runTask(
+                        plugin, () -> answer(key, results)));
+            }).start();
+        } catch (RuntimeException ex) {
+            // Everyone waiting is answered and the scan stops counting as in progress; otherwise
+            // every later scan of this region would wait behind one that never ran.
+            plugin.getLogger().log(Level.SEVERE, "The scan of " + regionId + " could not start.", ex);
+            answer(key, null);
+        }
     }
 
     /** Answers everyone waiting on this scan, and stops recording it as in progress. */
-    private void answer(@NotNull CacheKey key, @NotNull List<ScanResult> results) {
+    private void answer(@NotNull CacheKey key, @Nullable List<ScanResult> results) {
         List<Consumer<List<ScanResult>>> waiting;
         synchronized (pendingScans) {
             waiting = pendingScans.remove(key);

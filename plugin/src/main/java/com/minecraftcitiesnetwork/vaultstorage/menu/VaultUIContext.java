@@ -1,5 +1,6 @@
 package com.minecraftcitiesnetwork.vaultstorage.menu;
 
+import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.NotNull;
 import java.util.UUID;
 
@@ -8,7 +9,7 @@ import java.util.UUID;
  *
  * @param filterOwner null -> no filter (admin-only)
  */
-public record VaultUIContext(UUID actorUuid, UUID filterOwner, boolean admin) {
+public record VaultUIContext(@NotNull UUID actorUuid, @Nullable UUID filterOwner, boolean admin) {
     /**
      * Creates a new UI context.
      *
@@ -31,7 +32,7 @@ public record VaultUIContext(UUID actorUuid, UUID filterOwner, boolean admin) {
      * Optional filter owner; null means no filter (only valid with admin=true).
      */
     @Override
-    public @NotNull UUID filterOwner() {
+    public @Nullable UUID filterOwner() {
         return filterOwner;
     }
 

@@ -173,4 +173,12 @@ public interface MariaVaultMapper extends VaultMapper {
     })
     @Nullable VaultRoom selectOldestWithRoom(@Param("ownerUuid") @NotNull UUID ownerUuid,
                                              @Param("needed") int needed, @Param("maxSlots") int maxSlots);
+
+    @Override
+    @Select("""
+            SELECT COUNT(*)
+            FROM Vault v
+            WHERE NOT EXISTS (SELECT 1 FROM VaultItem i WHERE i.vaultUuid = v.uuid)
+            """)
+    int countWithoutItems();
 }

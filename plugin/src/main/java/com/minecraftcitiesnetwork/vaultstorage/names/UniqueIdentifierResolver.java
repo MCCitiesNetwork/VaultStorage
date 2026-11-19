@@ -14,10 +14,6 @@ public final class UniqueIdentifierResolver {
         this.names = names;
     }
 
-    /** The player's name, or null when no source knows the UUID. */
-    public @NotNull CompletableFuture<String> getName(@NotNull UUID uniqueIdentifier) {
-        return this.names.nameOf(uniqueIdentifier).thenApply(found -> found.orElse(null));
-    }
 
     /**
      * Resolves a UUID string or a player name to a UUID. A valid UUID string is returned as it

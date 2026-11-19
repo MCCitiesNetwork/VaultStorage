@@ -155,6 +155,13 @@ public final class VaultRepository implements VaultStore {
         }
     }
 
+    /** How many vaults hold nothing. */
+    public int countWithoutItems() {
+        try (SqlSessionWrapper wrapper = this.database.openSession(true)) {
+            return wrapper.vaults().countWithoutItems();
+        }
+    }
+
     /**
      * Takes back an append: the slots it filled, or the vault it created. For a capture that
      * stored something and then found it changed or gone in the world.

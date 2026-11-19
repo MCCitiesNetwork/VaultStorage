@@ -100,7 +100,10 @@ public final class VaultActionMenu extends ChildMenuImp {
 
         // Place block button (relative placement UI)
         builder.buttonWithPlayer(plugin.text().of(MessageKeys.ACTION_PLACE_BTN), null, java.time.Duration.ofMinutes(5), 1, (actor, response) -> {
-            new VaultPlacementMenu(actor, (ParentMenuImp) parentMenu(), vaultId, uiContext).open();
+            new VaultPlacementMenu(actor, (ParentMenuImp) parentMenu(), vaultId, uiContext,
+                    again -> new VaultActionMenu(again, (ParentMenuImp) parentMenu(), uiContext, vaultId,
+                            this.description, this.back).open(),
+                    this.back).open();
         });
 
         // Admin-only delete button
@@ -174,7 +177,7 @@ public final class VaultActionMenu extends ChildMenuImp {
 
     @Override
     public void open() {
-        // Rebuild the dialog from YAML on each open to reflect live config changes
+        // Built on each open, so a reload of messages.yml shows at once.
         setDialog(build());
         super.open();
     }

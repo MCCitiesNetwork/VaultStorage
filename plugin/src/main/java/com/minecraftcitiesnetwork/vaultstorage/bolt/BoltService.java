@@ -1,7 +1,7 @@
 package com.minecraftcitiesnetwork.vaultstorage.bolt;
 
-import com.minecraftcitiesnetwork.vaultstorage.Service;
 
+import org.jetbrains.annotations.Nullable;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Entity;
@@ -14,13 +14,13 @@ import java.util.Collection;
 import java.util.Map;
 import java.util.UUID;
 
-public interface BoltService extends Service {
+public interface BoltService {
 
-    @NotNull UUID getOwner(@NotNull Block block);
-    @NotNull UUID getOwner(@NotNull Entity entity);
+    /** The lock's owner, or null when the block is not locked. */
+    @Nullable UUID getOwner(@NotNull Block block);
+    /** The lock's owner, or null when the entity is not locked. */
+    @Nullable UUID getOwner(@NotNull Entity entity);
 
-    boolean isOwner(@NotNull UUID playerUUID, @NotNull Block block);
-    boolean isOwner(@NotNull UUID playerUUID, @NotNull Entity entity);
 
 
 

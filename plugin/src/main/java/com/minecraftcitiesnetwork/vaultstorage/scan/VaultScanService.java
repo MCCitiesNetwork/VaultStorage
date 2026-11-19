@@ -2,7 +2,6 @@ package com.minecraftcitiesnetwork.vaultstorage.scan;
 
 import org.bukkit.block.Block;
 import org.jetbrains.annotations.NotNull;
-import com.minecraftcitiesnetwork.vaultstorage.Service;
 
 import com.minecraftcitiesnetwork.vaultstorage.scan.ScanResult;
 import com.minecraftcitiesnetwork.vaultstorage.menu.VaultUIContext;
@@ -14,7 +13,7 @@ import java.util.function.Consumer;
 /**
  * Service responsible for handling region scanning operations with caching support.
  */
-public interface VaultScanService extends Service {
+public interface VaultScanService {
 
     /**
      * Initiates a scan for vaultable blocks within a region.

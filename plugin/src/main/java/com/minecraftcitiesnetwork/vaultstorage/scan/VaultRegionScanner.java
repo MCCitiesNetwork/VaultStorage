@@ -120,7 +120,7 @@ public final class VaultRegionScanner {
         }
     }
 
-    private class ScanTask extends BukkitRunnable {
+    private final class ScanTask extends BukkitRunnable {
         private final List<BlockProtection> protections;
         private final World world;
         private final boolean actorOwnsRegion;

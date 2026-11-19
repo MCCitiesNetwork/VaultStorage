@@ -27,9 +27,6 @@ import java.util.Map;
 public final class VaultRegionListMenu extends ChildMenuImp {
 
 
-    /**
-     * YAML header describing configuration placeholders.
-     */
 
 
     private static final int PAGE_SIZE = 6;

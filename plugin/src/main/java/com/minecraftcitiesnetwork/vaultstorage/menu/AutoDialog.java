@@ -39,7 +39,7 @@ public final class AutoDialog {
         return new Builder(parentMenu);
     }
 
-    public static class Builder {
+    public static final class Builder {
         private ParentMenu parentMenu;
 
         private Builder(@NotNull ParentMenu parentMenu) {

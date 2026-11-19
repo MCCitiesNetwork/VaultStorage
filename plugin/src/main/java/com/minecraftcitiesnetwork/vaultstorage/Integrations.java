@@ -1,5 +1,7 @@
 package com.minecraftcitiesnetwork.vaultstorage;
 
+import java.util.logging.Logger;
+import java.util.logging.Level;
 import com.minecraftcitiesnetwork.vaultstorage.chestshop.ShopDirectory;
 import com.minecraftcitiesnetwork.vaultstorage.chestshop.ChestShopService;
 import com.minecraftcitiesnetwork.vaultstorage.chestshop.NoOpChestShopService;
@@ -32,6 +34,11 @@ public final class Integrations {
     private volatile @Nullable ShopDirectory shopDirectory;
     private volatile @Nullable OwnerNotifier ownerNotifier;
     private final List<PlacementGrant> placementGrants = new CopyOnWriteArrayList<>();
+    private final @NotNull Logger logger;
+
+    public Integrations(@NotNull Logger logger) {
+        this.logger = logger;
+    }
 
     public void primaryNames(@Nullable NameSource source) {
         this.primaryNames = source;
@@ -86,8 +93,10 @@ public final class Integrations {
                 if (grant.mayPlace(player, target)) {
                     return true;
                 }
-            } catch (RuntimeException ignored) {
-                // Treated as "this grant does not apply".
+            } catch (RuntimeException ex) {
+                // Counts as "this grant does not apply": a broken module must not open land up.
+                this.logger.log(Level.WARNING, "A placement grant failed and was counted as a refusal: "
+                        + grant.getClass().getName(), ex);
             }
         }
         return false;

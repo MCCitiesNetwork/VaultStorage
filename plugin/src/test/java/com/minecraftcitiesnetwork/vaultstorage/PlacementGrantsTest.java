@@ -1,5 +1,6 @@
 package com.minecraftcitiesnetwork.vaultstorage;
 
+import java.util.logging.Logger;
 import java.util.UUID;
 import org.bukkit.Location;
 import org.junit.jupiter.api.Assertions;
@@ -12,12 +13,12 @@ class PlacementGrantsTest {
 
     @Test
     void withNoGrantNobodyMayPlace() {
-        Assertions.assertFalse(new Integrations().mayPlace(PLAYER, TARGET));
+        Assertions.assertFalse(new Integrations(Logger.getLogger("test")).mayPlace(PLAYER, TARGET));
     }
 
     @Test
     void oneGrantSayingYesIsEnough() {
-        Integrations integrations = new Integrations();
+        Integrations integrations = new Integrations(Logger.getLogger("test"));
         integrations.addPlacementGrant((player, target) -> false);
         Assertions.assertFalse(integrations.mayPlace(PLAYER, TARGET));
         integrations.addPlacementGrant((player, target) -> player.equals(PLAYER));
@@ -27,7 +28,7 @@ class PlacementGrantsTest {
 
     @Test
     void aRemovedGrantNoLongerCounts() {
-        Integrations integrations = new Integrations();
+        Integrations integrations = new Integrations(Logger.getLogger("test"));
         com.minecraftcitiesnetwork.vaultstorage.placement.PlacementGrant grant = (player, target) -> true;
         integrations.addPlacementGrant(grant);
         integrations.removePlacementGrant(grant);
@@ -36,7 +37,7 @@ class PlacementGrantsTest {
 
     @Test
     void aGrantThatThrowsIsTreatedAsNo() {
-        Integrations integrations = new Integrations();
+        Integrations integrations = new Integrations(Logger.getLogger("test"));
         integrations.addPlacementGrant((player, target) -> {
             throw new IllegalStateException("claims unavailable");
         });

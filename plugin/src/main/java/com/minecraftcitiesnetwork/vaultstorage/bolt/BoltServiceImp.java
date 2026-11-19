@@ -70,46 +70,9 @@ public final class BoltServiceImp implements BoltService {
         return protection != null ? protection.getOwner() : null;
     }
 
-    /**
-     * Checks whether the given player is the owner of the block's protection.
-     *
-     * @param playerUUID the player's UUID (not null)
-     * @param block      the block to check (not null)
-     * @return true if the player owns the block's protection; false otherwise
-     */
-    @Override
-    public boolean isOwner(@NotNull UUID playerUUID, @NotNull Block block) {
-        Objects.requireNonNull(playerUUID, "playerUUID");
-        Objects.requireNonNull(block, "block");
-        Protection protection = api.findProtection(block);
-        UUID owner = protection != null ? protection.getOwner() : null;
-        return playerUUID.equals(owner);
-    }
-
-    /**
-     * Checks whether the given player is the owner of the entity's protection.
-     *
-     * @param playerUUID the player's UUID (not null)
-     * @param entity     the entity to check (not null)
-     * @return true if the player owns the entity's protection; false otherwise
-     */
-    @Override
-    public boolean isOwner(@NotNull UUID playerUUID, @NotNull Entity entity) {
-        Objects.requireNonNull(playerUUID, "playerUUID");
-        Objects.requireNonNull(entity, "entity");
-        Protection protection = api.findProtection(entity);
-        UUID owner = protection != null ? protection.getOwner() : null;
-        return playerUUID.equals(owner);
-    }
 
 
-    /**
-     * Checks if any entities within the given bounding box and world are protected.
-     *
-     * @param world       the world (not null)
-     * @param boundingBox the search area (not null)
-     * @return list of protected entities (never null)
-     */
+
 
 
     @Override

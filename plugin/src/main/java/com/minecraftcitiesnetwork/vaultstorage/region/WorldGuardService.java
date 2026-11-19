@@ -1,6 +1,5 @@
 package com.minecraftcitiesnetwork.vaultstorage.region;
 
-import com.minecraftcitiesnetwork.vaultstorage.Service;
 
 import com.minecraftcitiesnetwork.vaultstorage.region.VaultRegion;
 import org.bukkit.World;
@@ -16,7 +15,7 @@ import java.util.List;
  * This API performs live lookups against WorldGuard's RegionManager on every call
  * and does not maintain any internal cache.
  */
-public interface WorldGuardService extends Service {
+public interface WorldGuardService {
     /** The regions that contain the block, by their real shape. */
     @NotNull List<VaultRegion> getRegionsAt(@NotNull Block block);
 

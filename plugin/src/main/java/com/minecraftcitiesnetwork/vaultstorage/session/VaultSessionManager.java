@@ -1,5 +1,6 @@
 package com.minecraftcitiesnetwork.vaultstorage.session;
 
+import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.NotNull;
 import org.bukkit.event.Listener;
 import java.util.function.Consumer;
@@ -22,7 +23,7 @@ public final class VaultSessionManager {
     /** Current player session mode. */
     public enum Mode { NONE, CAPTURE, PLACEMENT }
 
-    public static class Session {
+    public static final class Session {
         private final DynamicListener dynamicListener;
 
         Session(@NotNull Consumer<Listener> register) {
@@ -80,7 +81,8 @@ public final class VaultSessionManager {
         return sessions.computeIfAbsent(playerId, id -> new Session(this.register));
     }
 
-    public @NotNull Session get(@NotNull UUID playerId) { return sessions.get(playerId); }
+    /** The player's session, or null when they have none. */
+    public @Nullable Session get(@NotNull UUID playerId) { return sessions.get(playerId); }
 
     public void end(@NotNull UUID playerId) {
         Session s = sessions.remove(playerId);

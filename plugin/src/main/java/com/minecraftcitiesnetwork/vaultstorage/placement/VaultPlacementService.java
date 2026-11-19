@@ -46,7 +46,6 @@ public final class VaultPlacementService {
         this.plugin = plugin;
     }
 
-    /** Immutable result for placement operations. */
     /** {@code messageKey} names the line in messages.yml that tells the player what happened. */
     public record Result(boolean success, @NotNull String messageKey) {}
 

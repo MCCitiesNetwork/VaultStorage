@@ -61,11 +61,8 @@ public final class VaultListMenu extends ChildMenuImp {
 
 
 
-    /** AutoYML handler to persist this menu's configuration. */
 
-    /** Ensures the YAML file for this menu exists by creating defaults if missing. */
 
-    /** Lazily loaded configuration snapshot. */
 
     /** Opens the first page. */
     public VaultListMenu(@NotNull Player player, @NotNull ParentMenuImp parent, @NotNull VaultUIContext ctx, @NotNull String query) {

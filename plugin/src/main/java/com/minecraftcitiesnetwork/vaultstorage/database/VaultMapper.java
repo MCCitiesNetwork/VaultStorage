@@ -42,4 +42,7 @@ public interface VaultMapper {
      * below {@code maxSlots}, locked until the transaction ends; null when none has room.
      */
     @Nullable VaultRoom selectOldestWithRoom(@NotNull UUID ownerUuid, int needed, int maxSlots);
+
+    /** How many vaults have no item rows at all. */
+    int countWithoutItems();
 }

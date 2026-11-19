@@ -29,7 +29,6 @@ public final class VaultCaptureMenu extends ParentMenuImp {
 
 
 
-    /** Ensures the YAML file for this menu exists by creating defaults if missing. */
 
     private final VaultUIContext uiContext;
 
@@ -83,7 +82,6 @@ public final class VaultCaptureMenu extends ParentMenuImp {
         return builder.build();
     }
 
-    /** Public accessor for empty capture message (used by command subcaptures). */
 
     @Override
     public void open() {

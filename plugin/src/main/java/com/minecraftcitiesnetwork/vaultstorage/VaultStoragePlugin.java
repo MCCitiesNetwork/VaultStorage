@@ -69,7 +69,7 @@ public final class VaultStoragePlugin extends JavaPlugin {
 
 
     // Integration services
-    private final Integrations integrations = new Integrations();
+    private final Integrations integrations = new Integrations(getLogger());
     private final AtomicReference<PluginSettings> settings = new AtomicReference<>();
     private final MessageContainer messages = new MessageContainer();
     private final Text text = new Text(this.messages);
@@ -163,6 +163,19 @@ public final class VaultStoragePlugin extends JavaPlugin {
                         + " If its block was placed just before a crash, its items may exist twice.")))
                 .exceptionally(failure -> {
                     getLogger().log(Level.SEVERE, "Could not release vault claims left by the last shutdown.", failure);
+                    return null;
+                });
+
+        // Not an error on its own: a vault emptied by its owner stays until it is placed. Many of
+        // them after an upgrade would mean the conversion lost items.
+        CompletableFuture.supplyAsync(this.repository::countWithoutItems, this.databaseExecutor)
+                .thenAccept(empty -> {
+                    if (empty > 0) {
+                        getLogger().warning(empty + " vault(s) hold no items.");
+                    }
+                })
+                .exceptionally(failure -> {
+                    getLogger().log(Level.WARNING, "Could not count the vaults that hold no items.", failure);
                     return null;
                 });
 
@@ -339,10 +352,12 @@ public final class VaultStoragePlugin extends JavaPlugin {
             this.inventoryService.saveOpenViews();
         }
         if (this.databaseExecutor != null) {
-            this.databaseExecutor.shutdownNow();
+            // Queued writes are finished, not dropped: a capture may be between store and remove.
+            this.databaseExecutor.shutdown();
             try {
                 if (!this.databaseExecutor.awaitTermination(10, TimeUnit.SECONDS)) {
-                    getLogger().severe("Database tasks were still running after 10 seconds.");
+                    getLogger().severe("Database tasks were still running after 10 seconds and were abandoned.");
+                    this.databaseExecutor.shutdownNow();
                 }
             } catch (InterruptedException interrupted) {
                 Thread.currentThread().interrupt();

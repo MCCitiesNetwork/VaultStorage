@@ -174,6 +174,16 @@ class VaultRepositoryTest extends DatabaseTestBase {
     }
 
     @Test
+    void vaultsThatHoldNothingAreCounted() {
+        repository.create(vaultFor(OWNER, WORLD, 1), List.of(item(0)));
+        Assertions.assertEquals(0, repository.countWithoutItems());
+
+        repository.create(vaultFor(OWNER, WORLD, 2), List.of());
+        repository.create(vaultFor(OTHER_OWNER, WORLD, 3), List.of());
+        Assertions.assertEquals(2, repository.countWithoutItems());
+    }
+
+    @Test
     void undoingAnAppendTakesBackOnlyWhatItAdded() {
         UUID vault = repository.create(vaultFor(OWNER, WORLD, 2), List.of(item(0), item(1)));
         AppendResult appended = repository.appendItems(OWNER, List.of(item(0), item(1)), MAX_SLOTS,

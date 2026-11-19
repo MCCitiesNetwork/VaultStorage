@@ -1,5 +1,6 @@
 package com.minecraftcitiesnetwork.vaultstorage.names;
 
+import java.util.logging.Logger;
 import com.minecraftcitiesnetwork.vaultstorage.Integrations;
 import java.util.Optional;
 import java.util.UUID;
@@ -38,7 +39,7 @@ class NamesTest {
     @Test
     void withNoModulesPaperAnswers() {
         FixedSource paper = new FixedSource(Optional.of("Steve"));
-        Names names = new Names(paper, new Integrations());
+        Names names = new Names(paper, new Integrations(Logger.getLogger("test")));
         Assertions.assertEquals(Optional.of("Steve"), names.nameOf(PLAYER).join());
     }
 
@@ -47,7 +48,7 @@ class NamesTest {
         FixedSource paper = new FixedSource(Optional.of("Steve"));
         FixedSource bedrock = new FixedSource(Optional.of(".Alex"));
         FixedSource namebook = new FixedSource(Optional.empty());
-        Integrations integrations = new Integrations();
+        Integrations integrations = new Integrations(Logger.getLogger("test"));
         integrations.primaryNames(namebook);
         integrations.bedrockNames(bedrock);
         Names names = new Names(paper, integrations);
@@ -59,7 +60,7 @@ class NamesTest {
     @Test
     void theBedrockSourceIsAskedOnlyWhenPaperHasNoAnswer() {
         FixedSource bedrock = new FixedSource(Optional.of(".Alex"));
-        Integrations integrations = new Integrations();
+        Integrations integrations = new Integrations(Logger.getLogger("test"));
         integrations.bedrockNames(bedrock);
 
         Names found = new Names(new FixedSource(Optional.of("Steve")), integrations);
@@ -73,7 +74,7 @@ class NamesTest {
 
     @Test
     void aModuleThatUnloadsHandsNamesBackToPaper() {
-        Integrations integrations = new Integrations();
+        Integrations integrations = new Integrations(Logger.getLogger("test"));
         integrations.primaryNames(new FixedSource(Optional.of("FromNamebook")));
         Names names = new Names(new FixedSource(Optional.of("Steve")), integrations);
         integrations.primaryNames(null);
