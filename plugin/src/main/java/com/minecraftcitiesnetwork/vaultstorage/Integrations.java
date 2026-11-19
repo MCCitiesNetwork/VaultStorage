@@ -1,5 +1,6 @@
 package com.minecraftcitiesnetwork.vaultstorage;
 
+import com.minecraftcitiesnetwork.vaultstorage.chestshop.ShopDirectory;
 import com.minecraftcitiesnetwork.vaultstorage.chestshop.ChestShopService;
 import com.minecraftcitiesnetwork.vaultstorage.chestshop.NoOpChestShopService;
 import com.minecraftcitiesnetwork.vaultstorage.names.NameSource;
@@ -28,6 +29,7 @@ public final class Integrations {
     private volatile @Nullable NameSource bedrockNames;
     private volatile @Nullable Predicate<UUID> bedrockClient;
     private volatile @Nullable ChestShopService chestShop;
+    private volatile @Nullable ShopDirectory shopDirectory;
     private volatile @Nullable OwnerNotifier ownerNotifier;
     private final List<PlacementGrant> placementGrants = new CopyOnWriteArrayList<>();
 
@@ -89,6 +91,15 @@ public final class Integrations {
             }
         }
         return false;
+    }
+
+    public void shopDirectory(@Nullable ShopDirectory directory) {
+        this.shopDirectory = directory;
+    }
+
+    /** The shop plugin's registry of shops and their owners; null when no module supplies one. */
+    public @Nullable ShopDirectory shopDirectory() {
+        return this.shopDirectory;
     }
 
     public void chestShop(@Nullable ChestShopService service) {

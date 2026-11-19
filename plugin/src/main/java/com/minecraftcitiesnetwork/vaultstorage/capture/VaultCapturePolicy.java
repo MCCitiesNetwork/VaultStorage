@@ -93,6 +93,11 @@ public final class VaultCapturePolicy {
                         + formatBlock(block) + ": " + t.getClass().getSimpleName() + " - " + t.getMessage());
             }
         }
+        if (originalOwner == null) {
+            // Nobody locked it. If it is a player's shop, it is that player's: the registry was
+            // asked when the container was looked at or clicked, and the answer is used here.
+            originalOwner = plugin.shopOwners().known(block);
+        }
 
         // Log actor UUID for debugging Bedrock player issues
         UUID actorUUID = actor.getUniqueId();

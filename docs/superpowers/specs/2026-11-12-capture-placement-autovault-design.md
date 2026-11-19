@@ -337,13 +337,12 @@ Manual, on a live server:
 
 ## Known limitations
 
-- **Shop owners from Treasury are not implemented.** The two rules that do not need Treasury
-  are: a shop sign on an uncapturable empty container is removed only with the override
-  permission, and a lock owner's unusable id aborts the capture. Reading the owner from
-  Treasury's registry is a database call, so the click that starts a capture would have to wait
-  for it; the capture click handler is still synchronous. It also cannot be tested here: it
-  needs Hibernia's ChestShop and Treasury running with their own database. Until it is built, an
-  unlocked shop container still cannot be vaulted, and the sweep still does not find one.
+- **The sweep does not look for unlocked shops.** When a player captures a shop container that
+  nobody locked, its owner is read from Treasury's registry (`ShopOwnerLookup`), and the policy
+  and the shop-sign rule apply with that owner. The sweep still starts from Bolt protections
+  only, so an unlocked shop left by a previous occupant stays until someone captures it.
+- **The action bar says "unprotected" for an unlocked shop for a moment**, until the registry
+  has answered; the click itself waits for the answer.
 
 - **A crash inside the ordering rule's windows can duplicate items.** Chosen, as explained above.
 - **A container emptied by a hopper between snapshot and removal makes that capture report

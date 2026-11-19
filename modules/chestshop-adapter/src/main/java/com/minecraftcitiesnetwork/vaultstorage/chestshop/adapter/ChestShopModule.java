@@ -22,6 +22,15 @@ public final class ChestShopModule extends SimplePluginModule<VaultStoragePlugin
         try {
             // Every ChestShop type lives in ChestShopServiceImp, so this class loads without them.
             plugin.integrations().chestShop(new ChestShopServiceImp());
+            if (plugin.getServer().getPluginManager().isPluginEnabled("Treasury")) {
+                // Every Treasury type lives in TreasuryShopDirectory, for the same reason.
+                plugin.integrations().shopDirectory(
+                        TreasuryShopDirectory.create(plugin.databaseExecutor(), plugin.getLogger()));
+            }
+            plugin.getLogger().info(plugin.integrations().shopDirectory() != null
+                    ? "ChestShop signs are handled, and shop owners are read from Treasury."
+                    : "ChestShop signs are handled. Treasury's shop registry is not available, so an"
+                    + " unlocked shop container has no owner and cannot be vaulted.");
         } catch (LinkageError error) {
             plugin.getLogger().log(Level.SEVERE,
                     "ChestShop is enabled but its classes are not reachable from this module.", error);
@@ -31,6 +40,7 @@ public final class ChestShopModule extends SimplePluginModule<VaultStoragePlugin
     @Override
     public void shutdown(@NotNull VaultStoragePlugin plugin) {
         plugin.integrations().chestShop(null);
+        plugin.integrations().shopDirectory(null);
         super.shutdown(plugin);
     }
 }

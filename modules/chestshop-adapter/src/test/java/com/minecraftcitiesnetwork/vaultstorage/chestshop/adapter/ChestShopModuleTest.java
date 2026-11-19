@@ -37,5 +37,6 @@ class ChestShopModuleTest {
         String classFile = resource(
                 "com/minecraftcitiesnetwork/vaultstorage/chestshop/adapter/ChestShopModule.class");
         Assertions.assertFalse(classFile.contains("com/Acrobot/"));
+        Assertions.assertFalse(classFile.contains("io/paradaux/"));
     }
 }

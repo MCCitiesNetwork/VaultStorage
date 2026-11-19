@@ -1,5 +1,6 @@
 package com.minecraftcitiesnetwork.vaultstorage;
 
+import com.minecraftcitiesnetwork.vaultstorage.chestshop.ShopOwnerLookup;
 import org.jetbrains.annotations.NotNull;
 import com.minecraftcitiesnetwork.vaultstorage.capture.VaultCapturePolicy;
 import com.minecraftcitiesnetwork.vaultstorage.config.Text;
@@ -73,6 +74,7 @@ public final class VaultStoragePlugin extends JavaPlugin {
     private final MessageContainer messages = new MessageContainer();
     private final Text text = new Text(this.messages);
     private final VaultCapturePolicy capturePolicy = new VaultCapturePolicy(this);
+    private ShopOwnerLookup shopOwners;
     private ModuleLifecycleManager<VaultStoragePlugin> modules;
     private Names names;
     private OwnerNotifications ownerNotifications;
@@ -118,6 +120,9 @@ public final class VaultStoragePlugin extends JavaPlugin {
 
     /** Messages with their placeholders given as a map. */
     public @NotNull Text text() { return text; }
+
+    /** Whose an unlocked shop container is. */
+    public ShopOwnerLookup shopOwners() { return shopOwners; }
 
     /** Who may vault what. */
     public @NotNull VaultCapturePolicy capturePolicy() { return capturePolicy; }
@@ -169,6 +174,7 @@ public final class VaultStoragePlugin extends JavaPlugin {
 
 
         // Domain services
+        this.shopOwners = new ShopOwnerLookup(this.integrations, getServer().getScheduler().getMainThreadExecutor(this));
         this.captureService = new VaultCaptureService(this);
         this.placementService = new VaultPlacementService(this);
         this.inventoryService = new VaultInventoryService(this);

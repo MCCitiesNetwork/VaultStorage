@@ -23,7 +23,7 @@ project version lives in `gradle.properties`.
 | `:plugin` | `VaultStorage-<version>.jar` | The host plugin |
 | `:modules:namebook-adapter` | `namebook-adapter-<version>.jar` | Names through Namebook |
 | `:modules:floodgate-adapter` | `floodgate-adapter-<version>.jar` | Bedrock names and the Bedrock client check |
-| `:modules:chestshop-adapter` | `chestshop-adapter-<version>.jar` | ChestShop sign handling |
+| `:modules:chestshop-adapter` | `chestshop-adapter-<version>.jar` | ChestShop sign handling; shop owners from Treasury |
 | `:modules:realty-autovault` | `realty-autovault-<version>.jar` | Auto-vault on a Realty occupant change |
 | `:modules:griefprevention-adapter` | `griefprevention-adapter-<version>.jar` | Placing vaults on GriefPrevention claims |
 | `:modules:player-notifications-adapter` | `player-notifications-adapter-<version>.jar` | Telling owners about new vaults |
@@ -47,7 +47,7 @@ Under `com.minecraftcitiesnetwork.vaultstorage`, grouped by feature:
 | `scan` | region scan service and scanner |
 | `region` | WorldGuard service and region types |
 | `bolt` | Bolt service |
-| `chestshop` | the `ChestShopService` interface and its no-op default |
+| `chestshop` | `ChestShopService` and its no-op default; `ShopDirectory`, `Shop`, `ShopOwner`; `ShopOwners` (the rule) and `ShopOwnerLookup` (asks and remembers) |
 | `names` | `NameSource`, the Paper source, `Names`, `UniqueIdentifierResolver` |
 | `menu` | dialog menus, `AutoDialog`, `ConfirmMenu`, `VaultLabel` |
 | `command` | `VaultCommand` (the Brigadier tree), its sealed outcomes, `VaultActionArgument` |
@@ -68,6 +68,7 @@ step of the programme below.
   after the host's services exist and can stop while it runs.
 - **A module's entry class names no type from its optional plugin.** Those types live in one
   separate class per module (`NamebookNameSource`, `FloodgateNames`, `ChestShopServiceImp`,
+  `TreasuryShopDirectory`,
   `RealtyOccupantChangeListener` behind `RealtyBinding`). Each module's `*ModuleTest` enforces
   it by scanning the entry class file. If the entry class named such a type, loading the module
   on a server without that plugin would throw out of the host's `onEnable`.
@@ -77,7 +78,7 @@ step of the programme below.
   references to plugin-infrastructure land on the host's relocated copy.
 - **Every class meets the playbook's `code-style`.** There is no static way to the plugin: a
   class takes what it needs in its constructor, and a child menu takes the plugin from its
-  parent. `CaptureSession.onInteract` is still one long method; see the step 7 spec.
+  parent. `CaptureSession.capture` is still long; see the step 7 spec.
 - **`VaultRepository` is the only way to the database.** One method is one unit of work and one
   transaction. It blocks: call it on `VaultStoragePlugin.databaseExecutor()`, never on the main
   thread. Outcomes are sealed result types; only a broken database is an exception.
@@ -144,7 +145,7 @@ Specs and plans are in `docs/superpowers/`. One spec and one plan per step.
 | --- | --- | --- |
 | 1. Scaffold, package move, modules | done | this layout |
 | 2. Persistence | done | MyBatis on MariaDB, the playbook schema, transactions |
-| 3. Capture, placement, auto-vault | done, except shop owners from Treasury | save before destroy, futures, two more modules |
+| 3. Capture, placement, auto-vault | done, except the sweep finding unlocked shops | save before destroy, futures, two more modules |
 | 4. Config and messages | done | Configurate records, `messages.yml`, reload |
 | 5. Commands and permissions | done | Brigadier, `vaultstorage.command.*` |
 | 6. Menus | done | vault labels, delete confirmation, loading dialogs that end, whole-sentence keys |
@@ -164,8 +165,10 @@ Step 3 so far, on `refactor/capture-placement` (plan: `docs/superpowers/plans/20
   lock owner's broken id aborts the capture instead of giving the vault to the capturer.
 - Also done: pending sweeps are stored in the auto-vault module's own table and resume after a
   restart; a sweep is tracked to its end and tells each previous owner once.
-- Not done: shop owners from Treasury's registry (see the step 3 spec's known limitations).
-  Everything else in the step 3 plan is done.
+- Also done: a shop container nobody locked belongs to the shop's player, read from Treasury's
+  shop registry, when a player captures it.
+- Not done: the sweep does not yet look for unlocked shops (see the step 3 spec's known
+  limitations). Everything else in the step 3 plan is done.
 
 ## Live-server tests
 
@@ -191,7 +194,7 @@ part of `build`. It needs Docker and Node.
   `../hibernia-economy/release` (built there with `./gradlew release`; another place with
   `-PhiberniaEconomyDir=`). Treasury will not start without all four. Their database is
   `treasury` on the dev MariaDB. Without the checkout, `chestshop.spec.ts` passes without running.
-- A bot cannot sneak, so it cannot put a sign on a chest. `lockedShop` in `chestshop.spec.ts`
+- A bot cannot sneak, so it cannot put a sign on a chest. `shop` in `chestshop.spec.ts`
   places the sign on stone, turns the stone into the chest, then sends the sign text.
 
 Covered live: `/vault` opening and being refused; capturing a locked chest, finding it in the
@@ -222,12 +225,17 @@ parse.
 
 Also covered live, when a `hibernia-economy` checkout is beside this repository: capturing a
 locked shop by its sign vaults the container, and an empty locked shop loses its lock and its
-sign; in both, ChestShop's registry marks the shop inactive.
+sign; in both, ChestShop's registry marks the shop inactive. A stocked shop nobody locked is
+vaulted to the shop's owner, not to the player who clicked.
 
 Not covered live: sweeps (they need Realty to trigger one). Shared steps are in `tests/vaults.ts`.
 
 ## Rules for the capture and placement code
 
+- **A container's owner is its Bolt owner; failing that, the player its shop signs belong to**
+  (`ShopOwners.playerOwner`: every sign in the registry, all one player's). A firm's, an admin
+  shop's or an unlisted shop's container has no owner. The registry is a database, so
+  `ShopOwnerLookup.ownerOf` is asked first and `VaultCapturePolicy` uses what it remembered.
 - **What a capture does with a block is `DoubleChestRule.decide`**: unprotect it, refuse because
   the other half must go first, or capture. It names no Bukkit type and has its own test.
 - **Nothing removes a container except `CapturePipeline`**, through `BukkitContainerAccess.remove`.

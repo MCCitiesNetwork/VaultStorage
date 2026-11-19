@@ -1,7 +1,7 @@
 import { expect, sleep, test, type PlayerWrapper, type ServerWrapper } from '@plugwright/runner';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { queryDatabase } from './database.js';
+import { query, queryDatabase } from './database.js';
 import { expectBlock, FLOOR, freshSpot, rightClick, standAt } from './world.js';
 
 // Capturing a container that is a ChestShop shop. ChestShop and Treasury come from a
@@ -26,13 +26,13 @@ function chestShopInstalled(): boolean {
 }
 
 /**
- * A chest with a shop sign standing on it, owned and locked by the owner.
+ * A chest with the owner's shop sign standing on it, locked by the owner with Bolt or not.
  *
  * The sign is placed on a stone block and the block is turned into the chest afterwards: a
  * click on a chest opens it unless the player sneaks, and these bots send no input packets.
  * The sign text is sent the way a client sends it, so ChestShop registers the shop.
  */
-async function lockedShop(server: ServerWrapper, owner: PlayerWrapper, x: number, z: number, withItems: boolean): Promise<void> {
+async function shop(server: ServerWrapper, owner: PlayerWrapper, x: number, z: number, withItems: boolean, locked: boolean): Promise<void> {
     await server.execute(`setblock ${x} ${FLOOR} ${z} minecraft:stone`);
     await server.execute(`minecraft:item replace entity ${owner.username} weapon.mainhand with minecraft:oak_sign`);
     await sleep(300);
@@ -47,6 +47,9 @@ async function lockedShop(server: ServerWrapper, owner: PlayerWrapper, x: number
         text1: owner.username, text2: '1', text3: 'B 5', text4: 'DIAMOND',
     });
     await expect(owner).toHaveReceivedMessage('Shop successfully created');
+    if (!locked) {
+        return;
+    }
     owner.chat('/lock');
     await sleep(500);
     await rightClick(owner, x, FLOOR, z);
@@ -82,7 +85,7 @@ test('capturing a shop by its sign vaults the container and removes the sign',
         }
         const owner = await createPlayer();
         const { z, shopX } = await scene(server, player, owner);
-        await lockedShop(server, owner, shopX, z, true);
+        await shop(server, owner, shopX, z, true, true);
         expect(await shopIsActive(shopX, z)).toBe(true);
 
         player.chat('/vault capture');
@@ -104,7 +107,7 @@ test('an empty shop container keeps its block and loses its lock and its sign',
         }
         const owner = await createPlayer();
         const { z, shopX } = await scene(server, player, owner);
-        await lockedShop(server, owner, shopX, z, false);
+        await shop(server, owner, shopX, z, false, true);
 
         player.chat('/vault capture');
         await expect(player).toHaveReceivedMessage('Capture session started');
@@ -113,5 +116,29 @@ test('an empty shop container keeps its block and loses its lock and its sign',
         await expect(player).toHaveReceivedMessage('Protection removed.');
         await expectBlock(server, shopX, FLOOR, z, 'chest', 'empty-shop-chest-stays');
         await expectBlock(server, shopX, FLOOR + 1, z, 'air', 'empty-shop-sign-gone');
+        expect(await shopIsActive(shopX, z)).toBe(false);
+    });
+
+test('a shop container nobody locked is vaulted to the player the shop belongs to',
+    { requires: { consoleOutput: 'full' } }, async ({ player, createPlayer, server }) => {
+        if (!chestShopInstalled()) {
+            console.log('ChestShop is not installed on the test server; skipped.');
+            return;
+        }
+        const owner = await createPlayer();
+        const { z, shopX } = await scene(server, player, owner);
+        await shop(server, owner, shopX, z, true, false);
+        // The registry row is written off the main thread.
+        expect(await shopIsActive(shopX, z)).toBe(true);
+
+        player.chat('/vault capture');
+        await expect(player).toHaveReceivedMessage('Capture session started');
+        await rightClick(player, shopX, FLOOR, z);
+        await expect(player).toHaveReceivedMessage('Vault captured.');
+        await expectBlock(server, shopX, FLOOR, z, 'air', 'unlocked-shop-chest-gone');
+        // The owner comes from Treasury's shop registry: no lock says whose the chest is, and
+        // the vault must not go to whoever clicked.
+        expect(query(`SELECT COUNT(*) FROM Vault WHERE ownerUuid = '${owner.bot.player.uuid}'`)).toEqual(['1']);
+        expect(query(`SELECT COUNT(*) FROM Vault WHERE ownerUuid = '${player.bot.player.uuid}'`)).toEqual(['0']);
         expect(await shopIsActive(shopX, z)).toBe(false);
     });

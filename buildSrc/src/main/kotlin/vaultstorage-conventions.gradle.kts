@@ -23,6 +23,11 @@ repositories {
     maven("https://maven.democracycraft.net/releases") { name = "democracycraft" }
     maven("https://maven.minecraftcitiesnetwork.com/releases") { name = "mccities-releases" }
     maven("https://maven.minecraftcitiesnetwork.com/snapshots") { name = "mccities-snapshots" }
+    // Treasury's API, for the shop registry. Filtered, so nothing else resolves from it.
+    maven("https://repo.paradaux.io/releases") {
+        name = "paradaux-releases"
+        content { includeGroup("io.paradaux") }
+    }
     // GriefPrevention is published only here. Filtered, so nothing else resolves from it.
     maven("https://jitpack.io") {
         name = "jitpack"

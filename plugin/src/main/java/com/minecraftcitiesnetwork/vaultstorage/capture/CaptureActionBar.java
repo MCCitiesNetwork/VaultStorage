@@ -59,6 +59,12 @@ public final class CaptureActionBar {
         }
         var boltSvc = plugin.bolt();
         UUID owner = boltSvc != null ? boltSvc.getOwner(target) : null;
+        if (owner == null) {
+            // Asks the shop registry in the background; the bar shows the answer once it is in,
+            // and the policy below then treats an unlocked shop as its player's.
+            plugin.shopOwners().ownerOf(target);
+            owner = plugin.shopOwners().known(target);
+        }
         String ownerName = ownerDisplayNameAsync(owner);
 
         VaultCapturePolicy.Decision decision = plugin.capturePolicy().evaluate(actor, target);

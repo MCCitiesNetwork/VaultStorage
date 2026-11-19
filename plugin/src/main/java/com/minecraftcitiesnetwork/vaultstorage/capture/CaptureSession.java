@@ -1,5 +1,8 @@
 package com.minecraftcitiesnetwork.vaultstorage.capture;
 
+import org.jetbrains.annotations.Nullable;
+import java.util.concurrent.CompletableFuture;
+import java.util.Optional;
 import com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin;
 import com.minecraftcitiesnetwork.vaultstorage.capture.PlayerVaultEvent;
 import com.minecraftcitiesnetwork.vaultstorage.capture.VaultCapturePolicy;
@@ -87,23 +90,36 @@ public final class CaptureSession implements Listener {
         // Set cooldown to prevent phantom left-click events from canceling capture (~2 ticks / 100ms)
         cancelCooldownUntil = System.currentTimeMillis() + CANCEL_COOLDOWN_MILLIS;
 
-        Block captureBlock = block;
+        Block captureBlock = containerFor(block);
+        if (captureBlock == null) {
+            busy = false;
+            return;
+        }
+        boolean clickedSign = ContainerBlocks.isSign(block);
+        // A shop container nobody locked belongs to the shop's player. The shop registry is a
+        // database, so the rest of the click waits for its answer; with nothing to ask, it runs now.
+        CompletableFuture<Optional<UUID>> shopOwner = plugin.shopOwners().ownerOf(captureBlock);
+        if (shopOwner.isDone()) {
+            capture(captureBlock, clickedSign);
+        } else {
+            shopOwner.thenRun(() -> capture(captureBlock, clickedSign));
+        }
+    }
+
+    /**
+     * The block a click is about: the container behind a sign, or the block itself. A sign that
+     * is not a shop's loses its own lock on the way. Null when a sign has no container.
+     */
+    private @Nullable Block containerFor(@NotNull Block block) {
         boolean clickedSign = ContainerBlocks.isSign(block);
         ChestShopService chestShop = plugin.chestShop();
         boolean clickedChestShopSign = clickedSign && chestShop.isShopSign(block);
 
-        // Sequential sign->container policy flow:
-        // 1) Evaluate sign (non-container) policy and optionally unlock sign.
-        // 2) Evaluate container policy on attached container (if present).
         if (clickedChestShopSign) {
-            // Shop sign is handled through its container; it is removed once the container unlocks.
-            Block attachedContainer = ContainerBlocks.attachedContainer(block);
-            if (attachedContainer == null) {
-                busy = false;
-                return;
-            }
-            captureBlock = attachedContainer;
-        } else if (clickedSign) {
+            // A shop sign stands for its container and goes when the container does.
+            return ContainerBlocks.attachedContainer(block);
+        }
+        if (clickedSign) {
             VaultCapturePolicy.Decision signDecision = plugin.capturePolicy().evaluate(actor, block);
             UUID signOwner = signDecision.containerOwner();
             if (signDecision.allowed()) {
@@ -115,14 +131,19 @@ public final class CaptureSession implements Listener {
                 actor.sendMessage(plugin.text().of(MessageKeys.CAPTURE_SIGN_NOT_ALLOWED));
             }
 
-            Block attachedContainer = ContainerBlocks.attachedContainer(block);
-            if (attachedContainer == null) {
-                busy = false;
-                return;
-            }
-            captureBlock = attachedContainer;
+            return ContainerBlocks.attachedContainer(block);
         }
+        return block;
+    }
 
+    /** Applies the policy to the container and vaults it, unlocks it, or says why not. Main thread. */
+    private void capture(@NotNull Block captureBlock, boolean clickedSign) {
+        if (!actor.isOnline() || session.mode() != Mode.CAPTURE) {
+            // They left, or left capture mode, while the shop registry was being read.
+            busy = false;
+            return;
+        }
+        ChestShopService chestShop = plugin.chestShop();
         VaultCapturePolicy.Decision decision = plugin.capturePolicy().evaluate(actor, captureBlock);
         UUID originalOwner = decision.containerOwner();
         if (!decision.allowed()) {

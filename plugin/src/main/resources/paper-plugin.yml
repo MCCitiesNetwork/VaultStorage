@@ -14,6 +14,7 @@ dependencies:
     floodgate:  { load: BEFORE, required: false, join-classpath: true }
     Namebook:   { load: BEFORE, required: false, join-classpath: true }
     ChestShop:  { load: BEFORE, required: false, join-classpath: true }
+    Treasury:   { load: BEFORE, required: false, join-classpath: true }
     Realty:     { load: BEFORE, required: false, join-classpath: true }
     GriefPrevention: { load: BEFORE, required: false, join-classpath: true }
     PlayerNotifications: { load: BEFORE, required: false, join-classpath: true }

@@ -15,6 +15,7 @@ worldguard = "7.0.20"
 player-notifications-api = "1.2.0"
 floodgate-api = "2.2.5-SNAPSHOT"
 chestshop = "3.12.2"
+treasury-api = "2026.11.38.1-gf6a41413b320"
 realty-paper-api = "1.4.0"
 griefprevention = "16.18.8"
 configurate = "4.2.0"
@@ -38,6 +39,7 @@ worldguard = { module = "com.sk89q.worldguard:worldguard-bukkit", version.ref = 
 player-notifications-api = { module = "io.github.md5sha256:player-notifications-api", version.ref = "player-notifications-api" }
 floodgate-api = { module = "org.geysermc.floodgate:api", version.ref = "floodgate-api" }
 chestshop = { module = "com.acrobot.chestshop:chestshop", version.ref = "chestshop" }
+treasury-api = { module = "io.paradaux:treasury-api", version.ref = "treasury-api" }
 realty-paper-api = { module = "io.github.md5sha256:realty-paper-api", version.ref = "realty-paper-api" }
 griefprevention = { module = "com.github.TechFortress:GriefPrevention", version.ref = "griefprevention" }
 configurate-yaml = { module = "org.spongepowered:configurate-yaml", version.ref = "configurate" }
