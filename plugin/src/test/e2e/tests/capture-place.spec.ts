@@ -1,4 +1,4 @@
-import { expect, test } from '@plugwright/runner';
+import { expect, sleep, test } from '@plugwright/runner';
 import { Dialogs } from './dialogs.js';
 import { dialogTitled, lockedChest } from './vaults.js';
 import { startDatabase, stopDatabase } from './database.js';
@@ -52,6 +52,50 @@ test('a locked chest is captured into a vault and placed back with its items in 
         (await dialogTitled(dialogs, 'Vault Capture')).click('Browse Vaults');
         const after = await dialogTitled(dialogs, 'Browse Vaults');
         expect(after.body).toContain('No vaults found.');
+    });
+
+test('a furnace comes back with its input, fuel and output where they were',
+    { requires: { consoleOutput: 'full' } }, async ({ player, createPlayer, server }) => {
+        const owner = await createPlayer();
+        const { x, z } = freshSpot();
+        await Promise.all([
+            server.execute(`op ${player.username}`),
+            server.execute(`op ${owner.username}`),
+        ]);
+        await standAt(server, player, x, z);
+        await standAt(server, owner, x, z + 1);
+        const furnaceX = x + 2;
+        await server.execute(`setblock ${furnaceX} ${FLOOR} ${z} minecraft:furnace`);
+        // A diamond does not smelt, so the furnace stays unlit and its contents do not change
+        // while it is being captured.
+        await server.execute(`minecraft:item replace block ${furnaceX} ${FLOOR} ${z} container.0 with minecraft:diamond 2`);
+        await server.execute(`minecraft:item replace block ${furnaceX} ${FLOOR} ${z} container.1 with minecraft:coal 4`);
+        await server.execute(`minecraft:item replace block ${furnaceX} ${FLOOR} ${z} container.2 with minecraft:iron_ingot 6`);
+        owner.chat('/lock');
+        await sleep(500);
+        await rightClick(owner, furnaceX, FLOOR, z);
+        await sleep(500);
+
+        player.chat('/vault capture');
+        await expect(player).toHaveReceivedMessage('Capture session started');
+        await rightClick(player, furnaceX, FLOOR, z);
+        await expect(player).toHaveReceivedMessage('Vault captured.');
+        await expectBlock(server, furnaceX, FLOOR, z, 'air', 'furnace-is-gone');
+
+        const dialogs = new Dialogs(owner);
+        owner.chat('/vault');
+        (await dialogTitled(dialogs, 'Vault Capture')).click('Browse Vaults');
+        const list = await dialogTitled(dialogs, 'Browse Vaults');
+        expect(list.button('Vault #').label).toContain('Furnace');
+        list.click(list.button('Vault #').label);
+        (await dialogTitled(dialogs, 'Vault Action')).click('Place Block');
+        (await dialogTitled(dialogs, 'Vault Placement')).click('Start Placement');
+        await rightClick(owner, furnaceX, GROUND, z + 2);
+        await expect(owner).toHaveReceivedMessage('Vault placed.');
+        await expectBlock(server, furnaceX, FLOOR, z + 2, 'furnace', 'furnace-is-back');
+        await expectItem(server, furnaceX, FLOOR, z + 2, 0, 'diamond', 'input-in-its-slot');
+        await expectItem(server, furnaceX, FLOOR, z + 2, 1, 'coal', 'fuel-in-its-slot');
+        await expectItem(server, furnaceX, FLOOR, z + 2, 2, 'iron_ingot', 'output-in-its-slot');
     });
 
 test('a capture while the database is down leaves the chest and its items in place',

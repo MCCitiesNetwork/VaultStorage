@@ -85,3 +85,12 @@ plugin statically. Step 7 removes that.
 - **Operators must re-grant** `vaultstorage.user` as `vaultstorage.command.vault` (and
   `vaultstorage.command.open` if players used `/vault open`) and `vaultstorage.admin.override`
   as `vaultstorage.bypass.region`. The README lists the changes.
+
+## As built
+
+- **Every subcommand also needs `vaultstorage.command.vault`**, because the root literal requires
+  it. The command table gives the node each branch adds.
+- **There is no `VaultCommandTreeTest`.** Paper's UUID argument type cannot be built without a
+  server. The live tests run each branch, and check that a player without a branch's node is
+  not offered it.
+- `VaultActionArgument` is tested in `VaultCommandRulesTest`.

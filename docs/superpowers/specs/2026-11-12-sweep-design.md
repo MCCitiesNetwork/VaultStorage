@@ -39,15 +39,16 @@ the removed `addItems`. The sweep adds no behaviour, so it adds no tests.
 
 ## What the sweep did not do
 
-- **`CaptureSession.onInteract` is still one method of about 170 lines.** The capture service was
-  split by moving code: `CaptureSession` (the per-player listener), `CaptureActionBar`,
-  `CaptureOwners`, `ContainerBlocks`, and `DoubleChestRule`, which is the one part that was
-  rewritten and has its own test. The click handler's ChestShop branches have no live test, so
-  they were moved as they were, not restructured.
+- **`CaptureSession.capture` is still about ninety lines** of branches. The capture service was
+  split by moving code; the parts that were rewritten, each with its own test, are
+  `DoubleChestRule` and `CaptureRules`.
 - **Menus and services hold the whole plugin**, not the two or three things each uses. That
   removed the singleton without rewriting every constructor chain; narrowing them is possible
   class by class.
 - **Queries with an argument keep their names** (`BoltService.getOwner(block)`,
   `WorldGuardService.getRegionsAt(block)`). The accessor rule is about getters.
 - **`Imp` and `Impl` suffixes stay.**
-- **Annotations are documentation, not checks.** Nothing verifies them at build time.
+- **Annotations are documentation, not checks.** Nothing verifies them at build time. An audit
+  after the sweep found several that were wrong, since corrected; others may remain.
+- **Null checks on `plugin.bolt()` and `plugin.worldGuard()` remain** although neither is null
+  once the plugin has enabled.

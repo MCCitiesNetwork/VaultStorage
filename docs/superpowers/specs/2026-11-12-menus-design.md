@@ -54,3 +54,9 @@ looking at a loading dialog after something failed.
 - **A world that is not loaded is shown by the first eight characters of its id.**
 - **Scan results still name the owner "unknown" and the kind "container" or "block" by
   insertion** (`scan.owner-unknown`, `scan.kind-*`): they are labels, not parts of a sentence.
+
+## As built
+
+- **Back keeps its place through a placement too.** The placement screen's Back returns to the
+  vault; a finished placement returns to the page the vault was picked from.
+- **A scan that cannot start answers "nothing"** and stops counting as in progress.

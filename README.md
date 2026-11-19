@@ -20,7 +20,7 @@ What you can do:
 - Scan regions: find protected containers in a WorldGuard region and vault them one by one with teleport helpers.
 
 Command (in‑game):
-- /vault — opens the main menu (all actions flow through the menu).
+- /vault — opens the main menu. Staff have more commands; see Commands and permissions below.
 
 ## For Server Managers (Installation, Database, Permissions, Menus, Operations)
 
@@ -128,20 +128,20 @@ Module jars must come from the same build as the plugin jar.
 Essentials is no longer used. Before 2.0 the plugin mailed vault owners through it; without the `player-notifications-adapter` module, owners are not told and the server log records each case. PlayerNotifications can itself deliver by Essentials mail.
 
 ### Operations and troubleshooting
-Health signals in console:
-- “Connected to MySQL” on successful DB connect
-- Automatic schema creation messages at first run
-- Standard enable/disable lifecycle lines from Paper
+What a healthy start logs:
+- the schema migrations that were applied, on a first start or an upgrade;
+- one line for each module that started, and what each integration found;
+- `N vault(s) hold no items`, as a warning. A few are normal: a vault its owner emptied stays until it is placed. Many after an upgrade are not.
 
 Common symptoms and checks:
-- “No MySQL connection available” — verify mysql.host/port/database/user/password and network reachability; confirm privileges and SSL settings.
-- “You don’t have permission.” — grant `vaultstorage.command.vault` or the specific `vaultstorage.action.*` permission; staff may be given `vaultstorage.admin`.
-- “Services not ready.” — ensure WorldEdit, WorldGuard, and Bolt are present and enabled.
-- “Vault not found.” — the provided ID may be invalid or already removed; re-list and try again.
+- **"Could not connect to or migrate the database"**, and the plugin disables itself: check `url`, `username` and `password` in `database.yml`, that the database exists, and that the account may create and alter tables.
+- **"You don't have permission."**: grant `vaultstorage.command.vault` or the specific `vaultstorage.action.*` permission; staff may be given `vaultstorage.admin`.
+- **"Vault not found."**: the id is wrong, or the vault has been placed or deleted. Open the list again.
+- **"The vault could not be saved. Nothing was removed."**: the database could not be reached. The container is untouched; the server log has the cause.
 
 Backups:
-- Schedule periodic MySQL backups (full + binlogs if available).
-- For quick rollbacks, snapshot the DB before major updates.
+- Back up the MariaDB database on a schedule.
+- Take a backup before upgrading: the 1.x to 2.0 conversion cannot be undone by the plugin.
 
 ## For Developers
 

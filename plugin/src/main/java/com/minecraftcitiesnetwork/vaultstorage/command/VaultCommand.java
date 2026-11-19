@@ -44,7 +44,7 @@ public final class VaultCommand {
     private VaultCommand() {
     }
 
-    /** Takes the plugin and not each service: the menus opened here still reach it statically. */
+    /** Takes the plugin and not each service: the menus opened here are built from it. */
     public static @NotNull LiteralCommandNode<CommandSourceStack> create(@NotNull VaultStoragePlugin plugin) {
         return Commands.literal("vault")
                 .requires(source -> source.getSender().hasPermission(Permissions.COMMAND_VAULT))

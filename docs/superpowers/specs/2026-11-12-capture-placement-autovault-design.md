@@ -1,7 +1,7 @@
 # Capture, placement and auto-vault — design
 
 Date: 2026-11-12
-Status: awaiting review
+Status: implemented; see "As built" for where the code differs
 Step 3 of 7. Depends on step 2 (`2026-11-12-persistence-design.md`).
 
 ## Goal
@@ -358,3 +358,32 @@ Manual, on a live server:
 - **Without the PlayerNotifications module the previous owner is not told** that their
   containers were vaulted. Today Essentials is required, so they always get mail. The log
   records each case.
+
+## As built
+
+Names and shapes that differ from the sections above:
+
+| Spec | Code |
+| --- | --- |
+| `CaptureService`, `PlacementService`, `VaultInventories` | `VaultCaptureService`, `VaultPlacementService`, `VaultInventoryService` |
+| `CaptureSessions`, one permanent listener | `CaptureSession`, one per player in capture mode, registered through `DynamicListener` |
+| `DynamicListener` and `VaultSessionManager` removed | kept; `VaultSessionManager` holds each player's mode and action bar |
+| `CaptureResult` with six cases | three (`Vaulted`, `ChangedMeanwhile`, `Failed`); "not allowed", "only unlocked" and "owner unknown" are decided before the pipeline, by `CaptureRules`, `DoubleChestRule` and `CaptureOwners` |
+| `PlacementResult` | `VaultPlacementService.Result(success, messageKey)`; the place permission is checked by the menu |
+| `OwnerNotifier` builds the text; `LoggingOwnerNotifier` | the host's `OwnerNotifications` builds it and `OwnerNotifier.deliver` sends it; with no notifier the host logs |
+| `PlacementGrant.mayPlace(player, Block)` | takes a `Location` |
+| services take collaborators and two executors | they take the plugin |
+| the policy "takes region participation as input" | `CaptureRules.decide` does; `VaultCapturePolicy` gathers it |
+
+Tests named under "Testing" that were not written as unit tests, and what covers the behaviour:
+
+| Promised | Covered by |
+| --- | --- |
+| placement: target no longer air, a second placement refused, the override alone | not unit-tested; `VaultPlacementService` is bound to Bukkit. Live: placement refused on foreign land, allowed on a claim, and a claimed vault refused to a second editor |
+| a furnace round trip | live: a furnace comes back with input, fuel and output in their slots |
+| the busy flag clear after a failure | live: the capture after a database outage succeeds |
+| a member cannot remove a co-member's shop sign | `CaptureRulesTest` for the capture rule; the sign rule itself (override only) is not tested |
+| a sweep rescheduled by a fresh module instance | `PendingSweepStoreTest` at store level only |
+
+A Bolt-locked chest that carries a firm's or an admin shop's sign is vaulted for its Bolt owner:
+the Bolt owner decides, as the ChestShop section says, and the sign goes with the container.

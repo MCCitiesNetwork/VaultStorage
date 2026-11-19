@@ -87,3 +87,8 @@ divided by 20 into `delay-seconds`.
 - **Menus, commands and the capture service reach messages through the static `Text` bridge.**
   They take a `MessageContainer` in their constructor when steps 5 to 7 rewrite them.
 - **`scan.batch-size` keeps the 1.x default of 50.**
+
+## As built
+
+Two limitations above no longer hold: step 6 made the yes/no cases whole sentences, and step 7
+replaced the static `Text` bridge with an instance the plugin owns.

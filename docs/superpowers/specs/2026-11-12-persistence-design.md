@@ -1,7 +1,7 @@
 # Persistence — design
 
 Date: 2026-11-12
-Status: awaiting review
+Status: implemented; see "As built" for where the code differs
 Step 2 of 7. Depends on step 1 (`2026-11-12-playbook-scaffold-and-package-move-design.md`).
 
 ## Goal
@@ -288,3 +288,16 @@ existing vault opens with its items.
   and those classes go when step 3 and later rewrite the callers. This kept every caller
   unchanged in this step, at the cost of a package that exists only to be deleted.
 - **MySQL servers are no longer supported.**
+
+## As built
+
+- **V3 converts timestamps with `FROM_UNIXTIME` after `SET time_zone = '+00:00'`**, not with
+  `TIMESTAMPADD`. Pinning the session zone makes the two equivalent, and `MigrationTest` pins
+  the result.
+- **Shutdown** stops accepting database work, waits up to ten seconds for what is queued, and
+  only then abandons it.
+- **The pool checks a connection every time it hands one out.** With an interval, each
+  connection open across a database restart failed one operation.
+- **`undoAppend` and `countWithoutItems`** were added to `VaultRepository` after this spec:
+  the first for hanging captures, the second for the startup warning named under "Migrations".
+- There is no `WorldEntity` record; the `World` table is only ever upserted.

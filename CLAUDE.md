@@ -58,8 +58,8 @@ Under `com.minecraftcitiesnetwork.vaultstorage`, grouped by feature:
 | `config` | `ConfigFiles`, `PluginSettings`, `MessageKeys`, `Text`, the 1.x import |
 | `database` | MyBatis mappers, `VaultDatabase`, `VaultRepository`, the schema migrator |
 
-`menu` is a layer, not a feature. It is rewritten whole by a later
-step of the programme below.
+`menu` is a layer, not a feature: it holds every screen. Step 6 changed the screens that had
+findings and kept the framework (`ParentMenu`, `ChildMenu`, `AutoDialog`).
 
 ## Rules
 
@@ -78,9 +78,9 @@ step of the programme below.
   `required: false` and `join-classpath: true`. Module class loaders are parented to the host's.
 - **Relocations live only in `vaultstorage-shared-relocation`.** Modules apply it too, so their
   references to plugin-infrastructure land on the host's relocated copy.
-- **Every class meets the playbook's `code-style`.** There is no static way to the plugin: a
-  class takes what it needs in its constructor, and a child menu takes the plugin from its
-  parent. `CaptureSession.capture` is still long; see the step 7 spec.
+- **There is no static way to the plugin.** A class takes what it needs in its constructor, and
+  a child menu takes the plugin from its parent. The playbook's `code-style` applies to new
+  code; the step 7 spec lists where older classes still fall short of it.
 - **`VaultRepository` is the only way to the database.** One method is one unit of work and one
   transaction. It blocks: call it on `VaultStoragePlugin.databaseExecutor()`, never on the main
   thread. Outcomes are sealed result types; only a broken database is an exception.
@@ -109,8 +109,8 @@ step of the programme below.
   `MessageKeys`, named after the key; `MessageKeysTest` fails when either is missing.
 - **Runtime strings go in through `MessageContainer.value`** (or `Text.of(key, map)`, which does
   the same). A component goes in through `MessageContainer.markup`. Never parse a runtime string.
-- **`Text` is a bridge** for classes that reach the plugin statically. A class written new takes
-  the `MessageContainer` in its constructor.
+- **`Text` (`plugin.text()`) renders a message with its placeholders given as a map.** A class
+  that needs `markup` uses the `MessageContainer` (`plugin.messages()`).
 - **A module's bundled config has its own file name** (`realty-autovault.yml`): its class loader
   asks the host's first, so `config.yml` would find the wrong file.
 - **`/vault reload`** parses `settings.yml` and `messages.yml` off the main thread, swaps both
@@ -141,7 +141,9 @@ step of the programme below.
 
 ## Standardisation programme
 
-Specs and plans are in `docs/superpowers/`. One spec and one plan per step.
+Specs are in `docs/superpowers/specs/`, one per step. Steps 1 to 3 also have a plan in
+`docs/superpowers/plans/`; steps 4 to 7 were built from their spec. Where the code differs from
+a spec, the spec's "As built" section says how.
 
 | Step | Status | Delivers |
 | --- | --- | --- |
@@ -153,9 +155,9 @@ Specs and plans are in `docs/superpowers/`. One spec and one plan per step.
 | 6. Menus | done | vault labels, delete confirmation, loading dialogs that end, whole-sentence keys |
 | 7. Sweep | done | no singleton, dead code removed, accessors, annotations, the capture service split |
 
-Step 3 so far, on `refactor/capture-placement` (plan: `docs/superpowers/plans/2026-11-12-capture-placement-autovault.md`):
+What step 3 delivered (plan: `docs/superpowers/plans/2026-11-12-capture-placement-autovault.md`):
 
-- Done: exact region lookups; `CapturePipeline` (every capture saves before it removes); sessions
+- Done: region lookups by real shape, in the capture policy, the sweep and scans; `CapturePipeline` (every capture saves before it removes); sessions
   end on quit; placement claims the vault and asks `Integrations.mayPlace`; the vault inventory
   claims while editing and saves in one transaction; the GriefPrevention module.
 - Also done: owner notifications through the PlayerNotifications module (Essentials is gone);
@@ -208,7 +210,8 @@ part of `build`. It needs Docker and Node.
   places the sign on stone, turns the stone into the chest, then sends the sign text.
 
 Covered live: `/vault` opening and being refused; capturing a locked chest, finding it in the
-menus and placing it back with items in their slots; a capture during a database outage leaving
+menus and placing it back with items in their slots; a furnace coming back with its input, fuel and
+output where they were; a capture during a database outage leaving
 the chest untouched and working again afterwards; viewing a vault without being able to take from
 it; editing a vault and the change being saved; a second editor being refused until the first
 closes; paging through 45 vaults; an admin searching by owner name, deleting a vault,
@@ -254,6 +257,15 @@ Shared steps are in `tests/vaults.ts`.
 - **The sweep has three passes:** Bolt-locked blocks, locked hanging entities, and shops whose
   container nobody locked (`AutoVaultService.vaultShops`). A container with a Bolt owner belongs
   to the first pass only. All three ask the same `SweepFilter`.
+- **Who may vault a container is `CaptureRules.decide`**, a pure function with a test for every
+  outcome. `VaultCapturePolicy` only gathers its inputs from Bolt and WorldGuard.
+- **A region counts by its real shape.** Ask `WorldGuardService.getRegionsAt` or `isInside`;
+  `getRegionsIn` builds every region and is for listing them. A bounding box is used only to
+  ask Bolt for candidates and to decide "nested inside".
+- **A hanging entity follows the ordering rule too:** stored, then checked to be still there and
+  unchanged, then removed. If the check fails the store is undone with `undoAppend`.
+- **A chunk is held with `ChunkHolds` from store to remove** when nothing else keeps it loaded.
+  It counts holders: a plugin chunk ticket is one per chunk.
 - **What a capture does with a block is `DoubleChestRule.decide`**: unprotect it, refuse because
   the other half must go first, or capture. It names no Bukkit type and has its own test.
 - **Nothing removes a container except `CapturePipeline`**, through `BukkitContainerAccess.remove`.

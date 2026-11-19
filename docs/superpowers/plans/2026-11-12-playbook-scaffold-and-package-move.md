@@ -2,6 +2,7 @@
 
 **Goal:** Put VaultStorage on the playbook build at `com.minecraftcitiesnetwork.vaultstorage` on Paper 26.3, without DemocracyLib, with every optional-plugin integration in a feature module.
 **Spec:** `docs/superpowers/specs/2026-11-12-playbook-scaffold-and-package-move-design.md`
+**Status:** executed. Where the code differs from a task, the spec's "As built" section says how.
 
 Conventions used throughout:
 
@@ -19,21 +20,21 @@ targets the same Paper 26.3; that combination has not been tried on 9.2.0.
 
 **Files:** modify `.gitignore`; create `.gitattributes`
 
-- [ ] `git stash push -m "pre-refactor: hang.remove before async save" -- src/main/java/net/democracycraft/vault/internal/service/VaultCaptureService.java`
-- [ ] `git switch -c refactor/playbook-scaffold 1.21.8`
-- [ ] Append to `.gitignore`:
+- [x] `git stash push -m "pre-refactor: hang.remove before async save" -- src/main/java/net/democracycraft/vault/internal/service/VaultCaptureService.java`
+- [x] `git switch -c refactor/playbook-scaffold 1.21.8`
+- [x] Append to `.gitignore`:
   ```text
   bin/
   run/
   /*.sql
   ```
-- [ ] Create `.gitattributes`:
+- [x] Create `.gitattributes`:
   ```text
   * text=auto eol=lf
   *.bat text eol=crlf
   ```
-- [ ] Run `git status --short` and expect only `.gitignore`, `.gitattributes` and `docs/`. `s80037_vaultstorage.sql` must not appear.
-- [ ] Commit: `chore: ignore run output and root sql dumps` (include `docs/superpowers/`)
+- [x] Run `git status --short` and expect only `.gitignore`, `.gitattributes` and `docs/`. `s80037_vaultstorage.sql` must not appear.
+- [x] Commit: `chore: ignore run output and root sql dumps` (include `docs/superpowers/`)
 
 ## Task 2: Kotlin DSL build with conventions, on Paper 26.3
 
@@ -41,19 +42,19 @@ targets the same Paper 26.3; that combination has not been tried on 9.2.0.
 
 **Interfaces:** Gradle project `:plugin`; conventions `vaultstorage-conventions`, `vaultstorage-shared-relocation`; catalog aliases named below.
 
-- [ ] Upgrade the wrapper while the old build still works: `./gradlew wrapper --gradle-version 9.8.2`
-- [ ] `git mv src plugin/src` and `git rm build.gradle settings.gradle`
-- [ ] `settings.gradle.kts`:
+- [x] Upgrade the wrapper while the old build still works: `./gradlew wrapper --gradle-version 9.8.2`
+- [x] `git mv src plugin/src` and `git rm build.gradle settings.gradle`
+- [x] `settings.gradle.kts`:
   ```kotlin
   rootProject.name = "vaultstorage"
 
   include("plugin")
   ```
-- [ ] `gradle.properties`:
+- [x] `gradle.properties`:
   ```properties
   version=2.0.0-SNAPSHOT
   ```
-- [ ] `gradle/libs.versions.toml`:
+- [x] `gradle/libs.versions.toml`:
   ```toml
   [versions]
   java = "25"
@@ -95,7 +96,7 @@ targets the same Paper 26.3; that combination has not been tried on 9.2.0.
   [plugins]
   run-paper = { id = "xyz.jpenilla.run-paper", version.ref = "run-paper" }
   ```
-- [ ] `buildSrc/settings.gradle.kts`:
+- [x] `buildSrc/settings.gradle.kts`:
   ```kotlin
   // buildSrc reads the root catalog, so the Shadow version still lives there.
   dependencyResolutionManagement {
@@ -106,7 +107,7 @@ targets the same Paper 26.3; that combination has not been tried on 9.2.0.
       }
   }
   ```
-- [ ] `buildSrc/build.gradle.kts`:
+- [x] `buildSrc/build.gradle.kts`:
   ```kotlin
   plugins {
       `kotlin-dsl`
@@ -123,7 +124,7 @@ targets the same Paper 26.3; that combination has not been tried on 9.2.0.
       implementation(libs.shadow.gradle.plugin)
   }
   ```
-- [ ] `buildSrc/src/main/kotlin/vaultstorage-conventions.gradle.kts`:
+- [x] `buildSrc/src/main/kotlin/vaultstorage-conventions.gradle.kts`:
   ```kotlin
   plugins {
       java
@@ -183,7 +184,7 @@ targets the same Paper 26.3; that combination has not been tried on 9.2.0.
       }
   }
   ```
-- [ ] `buildSrc/src/main/kotlin/vaultstorage-shared-relocation.gradle.kts`:
+- [x] `buildSrc/src/main/kotlin/vaultstorage-shared-relocation.gradle.kts`:
   ```kotlin
   plugins {
       id("com.gradleup.shadow")
@@ -201,7 +202,7 @@ targets the same Paper 26.3; that combination has not been tried on 9.2.0.
       }
   }
   ```
-- [ ] `plugin/build.gradle.kts`:
+- [x] `plugin/build.gradle.kts`:
   ```kotlin
   plugins {
       `java-library`
@@ -257,25 +258,25 @@ targets the same Paper 26.3; that combination has not been tried on 9.2.0.
       }
   }
   ```
-- [ ] In `plugin/src/main/resources/plugin.yml` change `version: '1.2.0'` to `version: "${version}"`.
-- [ ] Copy the playbook's files unchanged:
+- [x] In `plugin/src/main/resources/plugin.yml` change `version: '1.2.0'` to `version: "${version}"`.
+- [x] Copy the playbook's files unchanged:
   ```bash
   REF=~/.claude/plugins/cache/paper-plugin-playbook/paper-plugin-playbook/0.1.0/skills/project-setup/references
   mkdir -p config/checkstyle
   cp "$REF/checkstyle.xml" config/checkstyle/checkstyle.xml
   cp "$REF/editorconfig.txt" .editorconfig
   ```
-- [ ] Run `./gradlew :plugin:compileJava` and expect FAIL or deprecation output from the 1.21.8 to 26.3 change. Fix each compiler error with the smallest change and keep a list for the commit message. If it compiles clean, record that.
-- [ ] Run `./gradlew :plugin:checkstyleMain` and expect FAIL: wildcard imports in 20 files, `printStackTrace` in `TransferSubcommand`.
-- [ ] Implement: in each file Checkstyle names, replace every `import x.y.*;` with one explicit import per type the file uses from that package. In `TransferSubcommand`, replace `ex.printStackTrace();` with nothing, and change the preceding `plugin.getLogger().warning("[TransferSubcommand] Transfer error ... " + ex.getMessage());` to
+- [x] Run `./gradlew :plugin:compileJava` and expect FAIL or deprecation output from the 1.21.8 to 26.3 change. Fix each compiler error with the smallest change and keep a list for the commit message. If it compiles clean, record that.
+- [x] Run `./gradlew :plugin:checkstyleMain` and expect FAIL: wildcard imports in 20 files, `printStackTrace` in `TransferSubcommand`.
+- [x] Implement: in each file Checkstyle names, replace every `import x.y.*;` with one explicit import per type the file uses from that package. In `TransferSubcommand`, replace `ex.printStackTrace();` with nothing, and change the preceding `plugin.getLogger().warning("[TransferSubcommand] Transfer error ... " + ex.getMessage());` to
   ```java
   plugin.getLogger().log(Level.WARNING,
           "[TransferSubcommand] Transfer error for vault " + vaultId + " to " + newOwnerUUID, ex);
   ```
   with `import java.util.logging.Level;`.
-- [ ] Run `./gradlew :plugin:checkstyleMain` and expect PASS.
-- [ ] Run `./gradlew build`. Check `plugin/build/libs/VaultStorage-2.0.0-SNAPSHOT.jar` exists and `unzip -p` of its `plugin.yml` shows `version: "2.0.0-SNAPSHOT"`.
-- [ ] Commit: `build: move to the playbook Gradle build on Paper 26.3` with the list of API fixes in the body.
+- [x] Run `./gradlew :plugin:checkstyleMain` and expect PASS.
+- [x] Run `./gradlew build`. Check `plugin/build/libs/VaultStorage-2.0.0-SNAPSHOT.jar` exists and `unzip -p` of its `plugin.yml` shows `version: "2.0.0-SNAPSHOT"`.
+- [x] Commit: `build: move to the playbook Gradle build on Paper 26.3` with the list of API fixes in the body.
 
 ## Task 3: Move to `com.minecraftcitiesnetwork.vaultstorage`, by feature
 
@@ -283,7 +284,7 @@ targets the same Paper 26.3; that combination has not been tried on 9.2.0.
 
 **Interfaces:** the package of every class, per the mapping below. Later tasks rely on these names.
 
-- [ ] Save this mapping as `/tmp/vs-move.txt` (old path relative to `net/democracycraft/vault`, then the new package relative to `BASE`; `.` is the root):
+- [x] Save this mapping as `/tmp/vs-move.txt` (old path relative to `net/democracycraft/vault`, then the new package relative to `BASE`; `.` is the root):
   ```text
   VaultStoragePlugin.java .
   api/service/Service.java .
@@ -381,8 +382,8 @@ targets the same Paper 26.3; that combination has not been tried on 9.2.0.
   internal/database/entity/WorldEntity.java database
   ```
   `ChestShopServiceImp`, `BedrockUniqueIdentifierRetriever` and the five auto-vault classes take the package they will have inside their module, so Tasks 7 to 9 move a directory and change no `package` line.
-- [ ] Check the mapping is complete: `wc -l < /tmp/vs-move.txt` must print `94`, the number of `.java` files.
-- [ ] Run the move from the repository root:
+- [x] Check the mapping is complete: `wc -l < /tmp/vs-move.txt` must print `94`, the number of `.java` files.
+- [x] Run the move from the repository root:
   ```bash
   OLD=plugin/src/main/java/net/democracycraft/vault
   NEW=plugin/src/main/java/com/minecraftcitiesnetwork/vaultstorage
@@ -402,12 +403,12 @@ targets the same Paper 26.3; that combination has not been tried on 9.2.0.
   done < /tmp/vs-move.txt
   find "$NEW" -name '*.java' -print0 | xargs -0 sed -i '' -E -f /tmp/vs-sed.txt
   ```
-- [ ] In `plugin.yml` set `main: com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin`.
-- [ ] Run `./gradlew :plugin:compileJava` and expect FAIL: classes that shared a package no longer do, so they need imports, and a few package-private members are now out of reach.
-- [ ] Implement: for each "cannot find symbol", add the explicit import for the class at its new package. For each "is not public ... cannot be accessed from outside package", make that member `public`. Change nothing else. Then delete every `import` Checkstyle reports as unused.
-- [ ] Run `grep -rn "net\.democracycraft\.vault" plugin/src` and expect no output. (`net.democracycraft.democracyLib` imports remain until Task 5.)
-- [ ] Run `./gradlew build`.
-- [ ] Commit: `refactor: move to com.minecraftcitiesnetwork.vaultstorage, grouped by feature`
+- [x] In `plugin.yml` set `main: com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin`.
+- [x] Run `./gradlew :plugin:compileJava` and expect FAIL: classes that shared a package no longer do, so they need imports, and a few package-private members are now out of reach.
+- [x] Implement: for each "cannot find symbol", add the explicit import for the class at its new package. For each "is not public ... cannot be accessed from outside package", make that member `public`. Change nothing else. Then delete every `import` Checkstyle reports as unused.
+- [x] Run `grep -rn "net\.democracycraft\.vault" plugin/src` and expect no output. (`net.democracycraft.democracyLib` imports remain until Task 5.)
+- [x] Run `./gradlew build`.
+- [x] Commit: `refactor: move to com.minecraftcitiesnetwork.vaultstorage, grouped by feature`
 
 ## Task 4: `paper-plugin.yml` and command registration
 
@@ -415,7 +416,7 @@ targets the same Paper 26.3; that combination has not been tried on 9.2.0.
 
 **Interfaces:** `public final class LegacyVaultCommand implements BasicCommand` with constructor `LegacyVaultCommand(@NotNull VaultCommand delegate)`
 
-- [ ] Write the failing tests.
+- [x] Write the failing tests.
   `T/PluginDescriptorTest.java`:
   ```java
   package com.minecraftcitiesnetwork.vaultstorage;
@@ -479,9 +480,9 @@ targets the same Paper 26.3; that combination has not been tried on 9.2.0.
       }
   }
   ```
-- [ ] Run `./gradlew :plugin:test` and expect FAIL: `paper-plugin.yml is not on the classpath`. Check the report shows 2 tests run.
-- [ ] Implement `paper-plugin.yml`: the block in the spec's "Descriptor" section, with the `permissions:` map holding the eight nodes from `plugin.yml`, each keeping its `description` and `default`, indented two spaces. Then `git rm plugin/src/main/resources/plugin.yml`.
-- [ ] Implement `P/command/LegacyVaultCommand.java`:
+- [x] Run `./gradlew :plugin:test` and expect FAIL: `paper-plugin.yml is not on the classpath`. Check the report shows 2 tests run.
+- [x] Implement `paper-plugin.yml`: the block in the spec's "Descriptor" section, with the `permissions:` map holding the eight nodes from `plugin.yml`, each keeping its `description` and `default`, indented two spaces. Then `git rm plugin/src/main/resources/plugin.yml`.
+- [x] Implement `P/command/LegacyVaultCommand.java`:
   ```java
   package com.minecraftcitiesnetwork.vaultstorage.command;
 
@@ -527,16 +528,16 @@ targets the same Paper 26.3; that combination has not been tried on 9.2.0.
   }
   ```
   `VaultCommand.onCommand` and `onTabComplete` never read their `Command` parameter, so `null` is passed. Verify that by reading both methods before relying on it.
-- [ ] In `VaultStoragePlugin.onEnable` replace the `getCommand("vault")` block with:
+- [x] In `VaultStoragePlugin.onEnable` replace the `getCommand("vault")` block with:
   ```java
   VaultCommand vaultCommand = new VaultCommand();
   getLifecycleManager().registerEventHandler(LifecycleEvents.COMMANDS, event ->
           event.registrar().register("vault", "Vault storage tools", new LegacyVaultCommand(vaultCommand)));
   ```
   (`io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents`), and in `validatePermissionsMapping` replace `getDescription().getPermissions()` with `getPluginMeta().getPermissions()`.
-- [ ] Run `./gradlew :plugin:test` and expect PASS, 2 tests.
-- [ ] Run `./gradlew build`.
-- [ ] Commit: `build: replace plugin.yml with paper-plugin.yml`
+- [x] Run `./gradlew :plugin:test` and expect PASS, 2 tests.
+- [x] Run `./gradlew build`.
+- [x] Commit: `build: replace plugin.yml with paper-plugin.yml`
 
 ## Task 5: Names without DemocracyLib
 
@@ -572,7 +573,7 @@ public final class Names implements NameSource {
 ```
 Every `Integrations` field is `volatile`: name lookups complete on other threads.
 
-- [ ] Write the failing tests.
+- [x] Write the failing tests.
   `T/names/NamesTest.java`:
   ```java
   package com.minecraftcitiesnetwork.vaultstorage.names;
@@ -659,23 +660,23 @@ Every `Integrations` field is `volatile`: name lookups complete on other threads
   }
   ```
   `T/names/PaperProfileNameSourceTest.java`: three tests, each building the source with lambdas. `aFailedLookupIsEmptyNotAnException` passes `id -> CompletableFuture.failedFuture(new IllegalStateException("down"))` and asserts `Optional.empty()` from `nameOf(...).join()`. `aNameNoAccountCanHaveIsEmpty` passes `name -> { throw new IllegalArgumentException(name); }` as `byName` and asserts `Optional.empty()` from `uuidOf("not a name!").join()`. `aProfileWithNoNameIsEmpty` passes `id -> CompletableFuture.completedFuture(null)` and asserts `Optional.empty()`. No test builds a `PlayerProfile`; the success path is covered on the live server.
-- [ ] Run `./gradlew :plugin:test --tests "*names*"` and expect FAIL: the classes do not exist.
-- [ ] Implement the five classes.
+- [x] Run `./gradlew :plugin:test --tests "*names*"` and expect FAIL: the classes do not exist.
+- [x] Implement the five classes.
   - `PaperProfileNameSource()` delegates to `this(id -> Bukkit.createProfile(id).update(), name -> Bukkit.createProfile(name).update())`. `nameOf` is `byId.apply(player).thenApply(profile -> Optional.ofNullable(profile).map(PlayerProfile::getName)).exceptionally(failure -> Optional.empty())`. `uuidOf` wraps `byName.apply(name)` in `try`/`catch (IllegalArgumentException)` returning a completed empty, then maps `PlayerProfile::getId` the same way.
   - `FallbackNameSource.nameOf` is `first.nameOf(player).thenCompose(found -> found.isPresent() ? CompletableFuture.completedFuture(found) : second.nameOf(player))`; `uuidOf` likewise.
   - `Names.nameOf`: read `integrations.primaryNames()`; if non-null return its answer. Otherwise read `integrations.bedrockNames()`; if null return `paper.nameOf(player)`, else `new FallbackNameSource(paper, bedrock).nameOf(player)`. `uuidOf` likewise.
   - `Integrations`: four `volatile` fields; `chestShop()` returns the field or a shared `NoOpChestShopService`; `isBedrockClient` returns `check != null && check.test(player)`.
-- [ ] Run `./gradlew :plugin:test --tests "*names*"` and expect PASS, 7 tests.
-- [ ] Rewire the host.
+- [x] Run `./gradlew :plugin:test --tests "*names*"` and expect PASS, 7 tests.
+- [x] Rewire the host.
   - `VaultStoragePlugin`: delete the `democracyLibApi` and `mojangService` fields, their imports, `DemocracyLibApi.instance(...)`, `getMojangService()` and `getBedrockUniqueIdentifierRetriever()`. Add `private final Integrations integrations = new Integrations();`, `private Names names;`, accessors `integrations()` and `names()`, and in `onEnable` `this.names = new Names(new PaperProfileNameSource(), this.integrations);`. Until Task 7, keep Floodgate working from the host: after creating `bedrockUniqueIdentifierRetriever`, call `this.integrations.bedrockNames(...)` with an anonymous `NameSource` that returns `retriever.getPlayerName(uuid).thenApply(Optional::ofNullable).exceptionally(f -> Optional.empty())` and the matching `getUniqueIdentifier` call, and `this.integrations.bedrockClient(FloodgateApi.getInstance()::isFloodgatePlayer)`. Replace `this.chestShopService = chestShop != null ? new ChestShopServiceImp() : new NoOpChestShopService();` with `if (chestShop != null) { this.integrations.chestShop(new ChestShopServiceImp()); }` and make `getChestShopService()` return `this.integrations.chestShop()`.
   - Delete the three `getServicesManager().register(...)` calls for `VaultService`, `WorldGuardService` and `BoltService`.
   - `UniqueIdentifierResolver`: constructor takes one `@NotNull NameSource`. `resolveUuid` keeps the UUID-string shortcut and otherwise returns `names.uuidOf(identifier).thenApply(found -> found.orElse(null))`. `getName` returns `names.nameOf(id).thenApply(found -> found.orElse(null))`. Delete `resolvePlayerName`.
   - The six call-site files: `new UniqueIdentifierResolver(plugin.getMojangService(), plugin.getBedrockUniqueIdentifierRetriever())` becomes `new UniqueIdentifierResolver(plugin.names())`. `mojangService.getName(x).thenAccept(name -> { if (name != null && !name.isBlank()) ... })` becomes `plugin.names().nameOf(x).thenAccept(name -> name.filter(n -> !n.isBlank()).ifPresent(n -> ...))`. In `VaultInventoryService` the title uses `resolved.filter(n -> !n.isBlank()).orElse(ownerUuid.toString())`. Remove every `if (mojangService != null)` guard and its `else` branch.
   - `LoadingMenu.open`: `FloodgateApi.getInstance().isFloodgatePlayer(player.getUniqueId())` becomes `VaultStoragePlugin.getInstance().integrations().isBedrockClient(player.getUniqueId())`; delete the Floodgate import.
-- [ ] Remove `compileOnly(libs.democracylib)` from `plugin/build.gradle.kts`, the `democracylib` version and library from the catalog, and the jitpack repository block from the conventions.
-- [ ] Run `grep -rn -i "democracylib\|MojangService" plugin/src buildSrc gradle` and expect no output.
-- [ ] Run `./gradlew build`.
-- [ ] Commit: `refactor: look names up through Paper and drop DemocracyLib`
+- [x] Remove `compileOnly(libs.democracylib)` from `plugin/build.gradle.kts`, the `democracylib` version and library from the catalog, and the jitpack repository block from the conventions.
+- [x] Run `grep -rn -i "democracylib\|MojangService" plugin/src buildSrc gradle` and expect no output.
+- [x] Run `./gradlew build`.
+- [x] Commit: `refactor: look names up through Paper and drop DemocracyLib`
 
 ## Task 6: Module system and the Namebook adapter
 
@@ -683,7 +684,7 @@ Every `Integrations` field is `volatile`: name lookups complete on other threads
 
 **Interfaces:** `public final class NamebookModule extends SimplePluginModule<VaultStoragePlugin>`; `NamebookNameSource.find(@NotNull ServicesManager) -> @Nullable NameSource`; Gradle configuration `moduleJar` on every module project.
 
-- [ ] `buildSrc/src/main/kotlin/vaultstorage-module-conventions.gradle.kts`:
+- [x] `buildSrc/src/main/kotlin/vaultstorage-module-conventions.gradle.kts`:
   ```kotlin
   plugins {
       `java-library`
@@ -724,9 +725,9 @@ Every `Integrations` field is `volatile`: name lookups complete on other threads
       add(moduleJar.name, tasks.named<Jar>("shadowJar"))
   }
   ```
-- [ ] In `vaultstorage-shared-relocation.gradle.kts` replace the empty list with `listOf("com.minecraftcitiesnetwork.pluginInfrastructure")`.
-- [ ] `settings.gradle.kts`: add `include("modules:namebook-adapter")`.
-- [ ] `plugin/build.gradle.kts`: add `implementation(libs.plugin.infrastructure)`, and:
+- [x] In `vaultstorage-shared-relocation.gradle.kts` replace the empty list with `listOf("com.minecraftcitiesnetwork.pluginInfrastructure")`.
+- [x] `settings.gradle.kts`: add `include("modules:namebook-adapter")`.
+- [x] `plugin/build.gradle.kts`: add `implementation(libs.plugin.infrastructure)`, and:
   ```kotlin
   val moduleJars: Configuration by configurations.creating {
       isCanBeConsumed = false
@@ -748,7 +749,7 @@ Every `Integrations` field is `volatile`: name lookups complete on other threads
       dependsOn(installModules)
   }
   ```
-- [ ] Write the failing test, `NamebookModuleTest.java`:
+- [x] Write the failing test, `NamebookModuleTest.java`:
   ```java
   package com.minecraftcitiesnetwork.vaultstorage.namebook;
 
@@ -793,8 +794,8 @@ Every `Integrations` field is `volatile`: name lookups complete on other threads
       }
   }
   ```
-- [ ] Run `./gradlew :modules:namebook-adapter:test` and expect FAIL: `module-manifest.yml is not on the classpath`.
-- [ ] `modules/namebook-adapter/build.gradle.kts`:
+- [x] Run `./gradlew :modules:namebook-adapter:test` and expect FAIL: `module-manifest.yml is not on the classpath`.
+- [x] `modules/namebook-adapter/build.gradle.kts`:
   ```kotlin
   plugins {
       id("vaultstorage-module-conventions")
@@ -804,7 +805,7 @@ Every `Integrations` field is `volatile`: name lookups complete on other threads
       compileOnly(libs.namebook.api)
   }
   ```
-- [ ] `module-manifest.yml`:
+- [x] `module-manifest.yml`:
   ```yaml
   module-name: namebook-adapter
   entry-class: com.minecraftcitiesnetwork.vaultstorage.namebook.NamebookModule
@@ -812,7 +813,7 @@ Every `Integrations` field is `volatile`: name lookups complete on other threads
   expected-plugin-class: com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin
   reloadable: false
   ```
-- [ ] `NamebookNameSource.java`:
+- [x] `NamebookNameSource.java`:
   ```java
   package com.minecraftcitiesnetwork.vaultstorage.namebook;
 
@@ -851,7 +852,7 @@ Every `Integrations` field is `volatile`: name lookups complete on other threads
       }
   }
   ```
-- [ ] `NamebookModule.java`:
+- [x] `NamebookModule.java`:
   ```java
   package com.minecraftcitiesnetwork.vaultstorage.namebook;
 
@@ -894,7 +895,7 @@ Every `Integrations` field is `volatile`: name lookups complete on other threads
       }
   }
   ```
-- [ ] Host: in `VaultStoragePlugin` add a `ModuleLifecycleManager<VaultStoragePlugin> modules` field, and a `startModules()` method called last in `onEnable`:
+- [x] Host: in `VaultStoragePlugin` add a `ModuleLifecycleManager<VaultStoragePlugin> modules` field, and a `startModules()` method called last in `onEnable`:
   ```java
   private void startModules() {
       try {
@@ -909,14 +910,14 @@ Every `Integrations` field is `volatile`: name lookups complete on other threads
   }
   ```
   and as the first statement of `onDisable`: `if (this.modules != null) { this.modules.stop(); }`.
-- [ ] Run `./gradlew :modules:namebook-adapter:test` and expect PASS, 2 tests.
-- [ ] Run `./gradlew build`, then check the relocation:
+- [x] Run `./gradlew :modules:namebook-adapter:test` and expect PASS, 2 tests.
+- [x] Run `./gradlew build`, then check the relocation:
   ```bash
   unzip -l plugin/build/libs/VaultStorage-2.0.0-SNAPSHOT.jar | grep -c "vaultstorage/libraries/com/minecraftcitiesnetwork/pluginInfrastructure/modules/SimplePluginModule.class"   # 1
   unzip -l plugin/build/libs/VaultStorage-2.0.0-SNAPSHOT.jar | grep -c "^.* com/minecraftcitiesnetwork/pluginInfrastructure/"   # 0
   javap -cp modules/namebook-adapter/build/libs/namebook-adapter-2.0.0-SNAPSHOT.jar -v com.minecraftcitiesnetwork.vaultstorage.namebook.NamebookModule | grep -c "vaultstorage/libraries/com/minecraftcitiesnetwork/pluginInfrastructure/modules/SimplePluginModule"   # at least 1
   ```
-- [ ] Commit: `feat: load feature modules and add the Namebook adapter`
+- [x] Commit: `feat: load feature modules and add the Namebook adapter`
 
 ## Task 7: Floodgate adapter
 
@@ -924,27 +925,27 @@ Every `Integrations` field is `volatile`: name lookups complete on other threads
 
 **Interfaces:** `FloodgateNames.create() -> @NotNull NameSource`; `FloodgateNames.clientCheck() -> @NotNull Predicate<UUID>`
 
-- [ ] Write the failing test: `FloodgateModuleTest`, the same two tests as `NamebookModuleTest` with `module-name: floodgate-adapter`, entry class `com.minecraftcitiesnetwork.vaultstorage.floodgate.FloodgateModule`, class-file path `com/minecraftcitiesnetwork/vaultstorage/floodgate/FloodgateModule.class`, and forbidden package `org/geysermc/floodgate/`. Write it out in full in the file; it shares no code with the Namebook test.
-- [ ] Run `./gradlew :modules:floodgate-adapter:test` after adding `include("modules:floodgate-adapter")` and a `build.gradle.kts` holding `plugins { id("vaultstorage-module-conventions") }` and `dependencies { compileOnly(libs.floodgate.api) }`. Expect FAIL: manifest missing.
-- [ ] `git mv` the retriever to the module as `FloodgateNames.java`, rename the class, and reshape it: a private constructor taking `FloodgateApi`; `public static @NotNull NameSource create()` returning `new FloodgateNames(FloodgateApi.getInstance())`; `implements NameSource` with `nameOf` as the existing XUID conversion and `getGamertagFor` call followed by `.thenApply(Optional::ofNullable).exceptionally(failure -> Optional.empty())`, and `uuidOf` as `getUuidFor(name)` with the same two calls; `public static @NotNull Predicate<UUID> clientCheck()` returning `FloodgateApi.getInstance()::isFloodgatePlayer`.
-- [ ] `FloodgateModule`: as `NamebookModule`, checking `isPluginEnabled("floodgate")`, and inside the `try` calling `plugin.integrations().bedrockNames(FloodgateNames.create())` and `plugin.integrations().bedrockClient(FloodgateNames.clientCheck())`. `shutdown` sets both back to `null`. Its manifest follows the Namebook one with the two names changed.
-- [ ] Host: delete the `bedrockUniqueIdentifierRetriever` field, the temporary `integrations.bedrockNames(...)` and `bedrockClient(...)` calls added in Task 5, and the `FloodgateApi` import. Remove `compileOnly(libs.floodgate.api)` from `plugin/build.gradle.kts`. Add the module to `moduleJars`.
-- [ ] Run `grep -rn "geysermc" plugin/src` and expect no output.
-- [ ] Run `./gradlew :modules:floodgate-adapter:test` and expect PASS, 2 tests. Run `./gradlew build`.
-- [ ] Commit: `refactor: move Floodgate into a module and make it optional`
+- [x] Write the failing test: `FloodgateModuleTest`, the same two tests as `NamebookModuleTest` with `module-name: floodgate-adapter`, entry class `com.minecraftcitiesnetwork.vaultstorage.floodgate.FloodgateModule`, class-file path `com/minecraftcitiesnetwork/vaultstorage/floodgate/FloodgateModule.class`, and forbidden package `org/geysermc/floodgate/`. Write it out in full in the file; it shares no code with the Namebook test.
+- [x] Run `./gradlew :modules:floodgate-adapter:test` after adding `include("modules:floodgate-adapter")` and a `build.gradle.kts` holding `plugins { id("vaultstorage-module-conventions") }` and `dependencies { compileOnly(libs.floodgate.api) }`. Expect FAIL: manifest missing.
+- [x] `git mv` the retriever to the module as `FloodgateNames.java`, rename the class, and reshape it: a private constructor taking `FloodgateApi`; `public static @NotNull NameSource create()` returning `new FloodgateNames(FloodgateApi.getInstance())`; `implements NameSource` with `nameOf` as the existing XUID conversion and `getGamertagFor` call followed by `.thenApply(Optional::ofNullable).exceptionally(failure -> Optional.empty())`, and `uuidOf` as `getUuidFor(name)` with the same two calls; `public static @NotNull Predicate<UUID> clientCheck()` returning `FloodgateApi.getInstance()::isFloodgatePlayer`.
+- [x] `FloodgateModule`: as `NamebookModule`, checking `isPluginEnabled("floodgate")`, and inside the `try` calling `plugin.integrations().bedrockNames(FloodgateNames.create())` and `plugin.integrations().bedrockClient(FloodgateNames.clientCheck())`. `shutdown` sets both back to `null`. Its manifest follows the Namebook one with the two names changed.
+- [x] Host: delete the `bedrockUniqueIdentifierRetriever` field, the temporary `integrations.bedrockNames(...)` and `bedrockClient(...)` calls added in Task 5, and the `FloodgateApi` import. Remove `compileOnly(libs.floodgate.api)` from `plugin/build.gradle.kts`. Add the module to `moduleJars`.
+- [x] Run `grep -rn "geysermc" plugin/src` and expect no output.
+- [x] Run `./gradlew :modules:floodgate-adapter:test` and expect PASS, 2 tests. Run `./gradlew build`.
+- [x] Commit: `refactor: move Floodgate into a module and make it optional`
 
 ## Task 8: ChestShop adapter
 
 **Files:** move `P/chestshop/adapter/ChestShopServiceImp.java` to `modules/chestshop-adapter/src/main/java/com/minecraftcitiesnetwork/vaultstorage/chestshop/adapter/`; create the module's `build.gradle.kts`, `module-manifest.yml`, `ChestShopModule.java`, `ChestShopModuleTest.java`; modify `settings.gradle.kts`, `plugin/build.gradle.kts`, `P/VaultStoragePlugin.java`
 
-- [ ] Write the failing test: `ChestShopModuleTest`, the two tests, with `module-name: chestshop-adapter`, entry class `com.minecraftcitiesnetwork.vaultstorage.chestshop.adapter.ChestShopModule`, and forbidden package `com/Acrobot/`. Written out in full.
-- [ ] Add `include("modules:chestshop-adapter")` and a `build.gradle.kts` with the module convention and `compileOnly(libs.chestshop)`. Run `./gradlew :modules:chestshop-adapter:test` and expect FAIL.
-- [ ] `git mv` `ChestShopServiceImp.java` into the module; its `package` line is already right.
-- [ ] `ChestShopModule`: checks `isPluginEnabled("ChestShop")`; inside `try { } catch (LinkageError)` calls `plugin.integrations().chestShop(new ChestShopServiceImp())`. Because the entry class may not name a `com.Acrobot` type and `ChestShopServiceImp` imports them, the `new` is fine: the entry class names only `ChestShopServiceImp`, and the test proves no `com/Acrobot/` string reaches its class file. `shutdown` calls `plugin.integrations().chestShop(null)`.
-- [ ] Host: delete the `getPlugin("ChestShop")` block and the `ChestShopServiceImp` import; remove `compileOnly(libs.chestshop)` from `plugin/build.gradle.kts`; add the module to `moduleJars`. Every caller already goes through `getChestShopService()`, which reads the slot at call time.
-- [ ] Run `grep -rn "Acrobot" plugin/src` and expect no output.
-- [ ] Run the module's tests and expect PASS, 2 tests. Run `./gradlew build`.
-- [ ] Commit: `refactor: move the ChestShop integration into a module`
+- [x] Write the failing test: `ChestShopModuleTest`, the two tests, with `module-name: chestshop-adapter`, entry class `com.minecraftcitiesnetwork.vaultstorage.chestshop.adapter.ChestShopModule`, and forbidden package `com/Acrobot/`. Written out in full.
+- [x] Add `include("modules:chestshop-adapter")` and a `build.gradle.kts` with the module convention and `compileOnly(libs.chestshop)`. Run `./gradlew :modules:chestshop-adapter:test` and expect FAIL.
+- [x] `git mv` `ChestShopServiceImp.java` into the module; its `package` line is already right.
+- [x] `ChestShopModule`: checks `isPluginEnabled("ChestShop")`; inside `try { } catch (LinkageError)` calls `plugin.integrations().chestShop(new ChestShopServiceImp())`. Because the entry class may not name a `com.Acrobot` type and `ChestShopServiceImp` imports them, the `new` is fine: the entry class names only `ChestShopServiceImp`, and the test proves no `com/Acrobot/` string reaches its class file. `shutdown` calls `plugin.integrations().chestShop(null)`.
+- [x] Host: delete the `getPlugin("ChestShop")` block and the `ChestShopServiceImp` import; remove `compileOnly(libs.chestshop)` from `plugin/build.gradle.kts`; add the module to `moduleJars`. Every caller already goes through `getChestShopService()`, which reads the slot at call time.
+- [x] Run `grep -rn "Acrobot" plugin/src` and expect no output.
+- [x] Run the module's tests and expect PASS, 2 tests. Run `./gradlew build`.
+- [x] Commit: `refactor: move the ChestShop integration into a module`
 
 ## Task 9: Realty auto-vault module
 
@@ -952,11 +953,11 @@ Every `Integrations` field is `volatile`: name lookups complete on other threads
 
 **Interfaces:** `RealtyBinding.createListener(@NotNull AutoVaultService) -> @NotNull Listener`
 
-- [ ] Write the failing test: `AutoVaultModuleTest`, the two tests, with `module-name: realty-autovault`, entry class `com.minecraftcitiesnetwork.vaultstorage.autovault.AutoVaultModule`, and forbidden package `io/github/md5sha256/realty/`. Written out in full.
-- [ ] Add `include("modules:realty-autovault")` and a `build.gradle.kts` with the module convention plus `compileOnly(libs.realty.paper.api) { isTransitive = false }`, `compileOnly(libs.bolt.bukkit)`, `compileOnly(libs.bolt.common)` and `compileOnly(libs.worldguard)` (the sweep reads Bolt protections and WorldGuard regions through the host's services, whose signatures name those types). Run the test and expect FAIL.
-- [ ] `git mv` the five files into the module.
-- [ ] `RealtyBinding`: `public final class` with a private constructor and one static method returning `new RealtyOccupantChangeListener(service)`. It exists so the entry class never names the listener, whose handler signatures name Realty's event types.
-- [ ] `AutoVaultModule`:
+- [x] Write the failing test: `AutoVaultModuleTest`, the two tests, with `module-name: realty-autovault`, entry class `com.minecraftcitiesnetwork.vaultstorage.autovault.AutoVaultModule`, and forbidden package `io/github/md5sha256/realty/`. Written out in full.
+- [x] Add `include("modules:realty-autovault")` and a `build.gradle.kts` with the module convention plus `compileOnly(libs.realty.paper.api) { isTransitive = false }`, `compileOnly(libs.bolt.bukkit)`, `compileOnly(libs.bolt.common)` and `compileOnly(libs.worldguard)` (the sweep reads Bolt protections and WorldGuard regions through the host's services, whose signatures name those types). Run the test and expect FAIL.
+- [x] `git mv` the five files into the module.
+- [x] `RealtyBinding`: `public final class` with a private constructor and one static method returning `new RealtyOccupantChangeListener(service)`. It exists so the entry class never names the listener, whose handler signatures name Realty's event types.
+- [x] `AutoVaultModule`:
   ```java
   package com.minecraftcitiesnetwork.vaultstorage.autovault;
 
@@ -1008,17 +1009,17 @@ Every `Integrations` field is `volatile`: name lookups complete on other threads
       }
   }
   ```
-- [ ] Host: delete the `autoVaultService` field, the "Realty soft dependency" block in `onEnable`, the `autoVaultService.shutdown()` line in `onDisable`, and their imports. Remove `compileOnly(libs.realty.paper.api)` from `plugin/build.gradle.kts`; add the module to `moduleJars`.
-- [ ] Run `grep -rn "md5sha256" plugin/src` and expect no output.
-- [ ] Run the module's tests and expect PASS, 2 tests. Run `./gradlew build`.
-- [ ] Commit: `refactor: move Realty auto-vault into a module`
+- [x] Host: delete the `autoVaultService` field, the "Realty soft dependency" block in `onEnable`, the `autoVaultService.shutdown()` line in `onDisable`, and their imports. Remove `compileOnly(libs.realty.paper.api)` from `plugin/build.gradle.kts`; add the module to `moduleJars`.
+- [x] Run `grep -rn "md5sha256" plugin/src` and expect no output.
+- [x] Run the module's tests and expect PASS, 2 tests. Run `./gradlew build`.
+- [x] Commit: `refactor: move Realty auto-vault into a module`
 
 ## Task 10: CI, documentation and the live-server check
 
 **Files:** modify `.github/workflows/build.yml`, `README.md`; create `CLAUDE.md`
 
-- [ ] `build.yml`: change the step name to `Set up JDK 25` and `java-version` to `'25'`; add `! -name "*-unshaded.jar"` to the `find` in "Collect JARs".
-- [ ] `README.md`: replace the build and install sections with: requirements (Paper 26.3, Java 25, MariaDB or MySQL as today; Bolt, WorldGuard, WorldEdit, Essentials required); `./gradlew build`; the host jar `plugin/build/libs/VaultStorage-<version>.jar` goes in `plugins/`; each module jar `modules/<name>/build/libs/<name>-<version>.jar` goes in `plugins/VaultStorage/modules/`; and this table:
+- [x] `build.yml`: change the step name to `Set up JDK 25` and `java-version` to `'25'`; add `! -name "*-unshaded.jar"` to the `find` in "Collect JARs".
+- [x] `README.md`: replace the build and install sections with: requirements (Paper 26.3, Java 25, MariaDB or MySQL as today; Bolt, WorldGuard, WorldEdit, Essentials required); `./gradlew build`; the host jar `plugin/build/libs/VaultStorage-<version>.jar` goes in `plugins/`; each module jar `modules/<name>/build/libs/<name>-<version>.jar` goes in `plugins/VaultStorage/modules/`; and this table:
 
   | Module jar | Needs | Gives |
   | --- | --- | --- |
@@ -1026,7 +1027,7 @@ Every `Integrations` field is `volatile`: name lookups complete on other threads
   | `floodgate-adapter` | Floodgate | Bedrock names when Namebook is absent; chat fallback for Bedrock loading screens |
   | `chestshop-adapter` | ChestShop | Shop sign handling during capture |
   | `realty-autovault` | Realty | Automatic vaulting when a region changes occupant |
-- [ ] `CLAUDE.md`: sections for build commands (`./gradlew build`, `./gradlew test`, `./gradlew :plugin:runServer`), versions (Java 25, Paper 26.3, Gradle 9.8.2), the project list (`:plugin` and the four modules), the host package table from the spec, the rule "a module's entry class names no type from its optional plugin; a `*ModuleTest` enforces it", the rule "host code reads `Integrations` at use time, never at construction", and the programme table from the spec with step 1 marked done.
-- [ ] Run `./gradlew build`.
-- [ ] Live server. This cannot be automated. With a Paper 26.3 server holding Bolt, WorldGuard, WorldEdit and Essentials, and a database loaded from `s80037_vaultstorage.sql`, run the seven manual checks in the spec's "Testing" section, in order, and record each result in the commit body. A check that fails stops the task.
-- [ ] Commit: `docs: describe the module layout and the 26.3 build`
+- [x] `CLAUDE.md`: sections for build commands (`./gradlew build`, `./gradlew test`, `./gradlew :plugin:runServer`), versions (Java 25, Paper 26.3, Gradle 9.8.2), the project list (`:plugin` and the four modules), the host package table from the spec, the rule "a module's entry class names no type from its optional plugin; a `*ModuleTest` enforces it", the rule "host code reads `Integrations` at use time, never at construction", and the programme table from the spec with step 1 marked done.
+- [x] Run `./gradlew build`.
+- [x] Live server. This cannot be automated. With a Paper 26.3 server holding Bolt, WorldGuard, WorldEdit and Essentials, and a database loaded from `s80037_vaultstorage.sql`, run the seven manual checks in the spec's "Testing" section, in order, and record each result in the commit body. A check that fails stops the task.
+- [x] Commit: `docs: describe the module layout and the 26.3 build`

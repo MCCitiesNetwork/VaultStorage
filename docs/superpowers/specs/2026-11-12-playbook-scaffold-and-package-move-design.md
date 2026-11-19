@@ -1,7 +1,7 @@
 # Playbook scaffold, package move and modules — design
 
 Date: 2026-11-12
-Status: awaiting review
+Status: implemented
 Step 1 of 7 in the VaultStorage standardisation programme (see "Programme" below).
 
 ## Goal
@@ -412,3 +412,9 @@ Deliberately left unaligned with the playbook:
   testing. It must never be committed. It is listed in `.git/info/exclude` now, and this step
   adds `/*.sql` to `.gitignore`; migration scripts live under `src/main/resources`, so the
   root-only pattern does not catch them.
+
+## As built
+
+- `PaperProfileNameSourceTest` covers the failure cases only. A completed profile needs a
+  running server to produce, so the positive case is covered by the live tests that search and
+  transfer by player name.
