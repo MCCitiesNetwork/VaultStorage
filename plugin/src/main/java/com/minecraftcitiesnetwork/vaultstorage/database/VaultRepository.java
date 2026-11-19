@@ -148,10 +148,28 @@ public final class VaultRepository implements VaultStore {
                     wrapper.items().insertAll(rows(room.uuid(), items, room.highestSlot() + 1));
                 }
                 wrapper.vaults().touch(room.uuid(), now());
-                result = new AppendResult.Appended(room.uuid());
+                result = new AppendResult.Appended(room.uuid(), room.highestSlot() + 1, needed);
             }
             wrapper.session().commit();
             return result;
+        }
+    }
+
+    /**
+     * Takes back an append: the slots it filled, or the vault it created. For a capture that
+     * stored something and then found it changed or gone in the world.
+     */
+    public void undoAppend(@NotNull AppendResult append) {
+        try (SqlSessionWrapper wrapper = this.database.openSession()) {
+            switch (append) {
+                case AppendResult.Appended appended -> wrapper.items().deleteSlots(appended.vault(),
+                        appended.firstSlot(), appended.firstSlot() + appended.slots() - 1);
+                case AppendResult.Created created -> {
+                    wrapper.items().deleteByVault(created.vault());
+                    wrapper.vaults().delete(created.vault());
+                }
+            }
+            wrapper.session().commit();
         }
     }
 

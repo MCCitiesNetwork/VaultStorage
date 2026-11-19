@@ -1,5 +1,6 @@
 package com.minecraftcitiesnetwork.vaultstorage.capture;
 
+import java.util.logging.Level;
 import org.jetbrains.annotations.Nullable;
 import java.util.concurrent.CompletableFuture;
 import java.util.Optional;
@@ -224,7 +225,17 @@ public final class CaptureSession implements Listener {
                             actor.sendMessage(plugin.text().of(MessageKeys.CAPTURE_SAVE_FAILED));
                 }
             });
-        }, plugin.getServer().getScheduler().getMainThreadExecutor(plugin));
+        }, plugin.getServer().getScheduler().getMainThreadExecutor(plugin))
+                .exceptionally(failure -> {
+                    // Without this a failed owner lookup would leave the session busy for good.
+                    plugin.getLogger().log(Level.SEVERE, "Capture failed for " + actor.getName()
+                            + "; the container was left in place.", failure);
+                    plugin.getServer().getScheduler().getMainThreadExecutor(plugin).execute(() -> {
+                        busy = false;
+                        actor.sendMessage(plugin.text().of(MessageKeys.CAPTURE_SAVE_FAILED));
+                    });
+                    return null;
+                });
     }
 
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = false)

@@ -14,6 +14,8 @@ dependencies {
     // Its own config.yml, read with the host's Configurate.
     compileOnly(libs.configurate.yaml)
     testImplementation(libs.configurate.yaml)
+    // SweepFilterTest builds regions, whose bounds are a Bukkit type.
+    testImplementation(libs.paper.api)
     // Database tests run against the real engine and need a running Docker daemon.
     testImplementation(libs.mybatis)
     testImplementation(libs.plugin.infrastructure)

@@ -17,18 +17,21 @@ import java.util.List;
  * and does not maintain any internal cache.
  */
 public interface WorldGuardService extends Service {
-    /**
-     * Returns regions overlapping the bounding box in the given world.
-     * The result is fetched live from WorldGuard.
-     */
+    /** The regions that contain the block, by their real shape. */
     @NotNull List<VaultRegion> getRegionsAt(@NotNull Block block);
 
-    /**
-     * Returns all regions in the given world.
-     * The result is fetched live from WorldGuard.
-     */
+    /** Every region in the world. Builds them all: for listing regions, not for finding one. */
     @NotNull List<VaultRegion> getRegionsIn(@NotNull World world);
 
+    /** The region with this id, or null. Does not build the others. */
     @Nullable VaultRegion getRegionById(@NotNull String id, @NotNull World world);
 
+
+    /**
+     * Whether the block is inside the region, by the region's real shape. A region's bounding
+     * box also covers land that is not the region's when the region is not a cuboid.
+     */
+    default boolean isInside(@NotNull String regionId, @NotNull Block block) {
+        return getRegionsAt(block).stream().anyMatch(region -> region.id().equalsIgnoreCase(regionId));
+    }
 }

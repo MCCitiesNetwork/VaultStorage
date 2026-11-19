@@ -88,9 +88,9 @@ public final class WorldGuardServiceImp implements WorldGuardService {
         Objects.requireNonNull(id, "id");
         Objects.requireNonNull(world, "world");
 
-        List<VaultRegion> regions = getRegionsIn(world);
-
-        return regions.stream().filter(region -> region.id().equals(id)).findFirst().orElse(null);
+        RegionManager manager = regionContainer.get(BukkitAdapter.adapt(world));
+        ProtectedRegion region = manager == null ? null : manager.getRegion(id);
+        return region == null ? null : buildVaultRegion(region.getId(), region);
     }
 
     private @NotNull VaultRegion buildVaultRegion(@NotNull String id, @NotNull ProtectedRegion protectedRegion) {

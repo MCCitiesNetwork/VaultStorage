@@ -174,6 +174,38 @@ class VaultRepositoryTest extends DatabaseTestBase {
     }
 
     @Test
+    void undoingAnAppendTakesBackOnlyWhatItAdded() {
+        UUID vault = repository.create(vaultFor(OWNER, WORLD, 2), List.of(item(0), item(1)));
+        AppendResult appended = repository.appendItems(OWNER, List.of(item(0), item(1)), MAX_SLOTS,
+                vaultFor(OWNER, WORLD, 3));
+
+        repository.undoAppend(appended);
+
+        Assertions.assertEquals(List.of(0, 1), found(vault).items().stream().map(VaultItemEntity::slot).toList());
+    }
+
+    @Test
+    void undoingAnAppendThatCreatedAVaultRemovesTheVault() throws SQLException {
+        AppendResult created = repository.appendItems(OWNER, List.of(item(0)), MAX_SLOTS, vaultFor(OWNER, WORLD, 3));
+
+        repository.undoAppend(created);
+
+        Assertions.assertInstanceOf(FindResult.NoSuchVault.class, repository.find(created.vault()));
+        Assertions.assertEquals(0, queryLong("SELECT COUNT(*) FROM VaultItem"));
+    }
+
+    @Test
+    void undoingAnAppendLeavesWhatWasAppendedAfterIt() {
+        UUID vault = repository.create(vaultFor(OWNER, WORLD, 2), List.of(item(0)));
+        AppendResult first = repository.appendItems(OWNER, List.of(item(0)), MAX_SLOTS, vaultFor(OWNER, WORLD, 3));
+        repository.appendItems(OWNER, List.of(item(0)), MAX_SLOTS, vaultFor(OWNER, WORLD, 3));
+
+        repository.undoAppend(first);
+
+        Assertions.assertEquals(List.of(0, 2), found(vault).items().stream().map(VaultItemEntity::slot).toList());
+    }
+
+    @Test
     void concurrentAppendsForOneOwnerNeverShareASlot() throws SQLException {
         repository.create(vaultFor(OWNER, WORLD, 1), List.of());
         List<CompletableFuture<AppendResult>> appends = new ArrayList<>();

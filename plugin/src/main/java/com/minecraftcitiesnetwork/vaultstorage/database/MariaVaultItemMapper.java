@@ -45,4 +45,13 @@ public interface MariaVaultItemMapper extends VaultItemMapper {
             WHERE vaultUuid = #{vaultUuid}
             """)
     int deleteByVault(@Param("vaultUuid") @NotNull UUID vaultUuid);
+
+    @Override
+    @Delete("""
+            DELETE FROM VaultItem
+            WHERE vaultUuid = #{vaultUuid}
+              AND slot BETWEEN #{firstSlot} AND #{lastSlot}
+            """)
+    int deleteSlots(@Param("vaultUuid") @NotNull UUID vaultUuid, @Param("firstSlot") int firstSlot,
+                    @Param("lastSlot") int lastSlot);
 }

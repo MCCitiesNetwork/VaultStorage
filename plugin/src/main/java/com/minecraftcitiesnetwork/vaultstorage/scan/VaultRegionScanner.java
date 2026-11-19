@@ -15,6 +15,7 @@ import com.minecraftcitiesnetwork.vaultstorage.capture.VaultCapturePolicy;
 import com.minecraftcitiesnetwork.vaultstorage.scan.ScanResult;
 import com.minecraftcitiesnetwork.vaultstorage.menu.VaultUIContext;
 import org.bukkit.World;
+import com.minecraftcitiesnetwork.vaultstorage.region.VaultRegion;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitRunnable;
@@ -64,16 +65,14 @@ public final class VaultRegionScanner {
         }
 
 
-        var regions = worldGuardService.getRegionsIn(world);
-        var target = regions.stream().filter(r -> r.id().equalsIgnoreCase(regionId)).findFirst();
-        if (target.isEmpty()) {
+        VaultRegion region = worldGuardService.getRegionById(regionId, world);
+        if (region == null) {
             player.closeDialog();
             player.sendMessage(plugin.text().of(MessageKeys.SCAN_REGION_NOT_FOUND, Map.of("%region%", regionId)));
             callback.accept(null);
             return;
         }
 
-        var region = target.get();
         boolean actorOwnsRegion = region.isOwner(player.getUniqueId());
         BoundingBox boundingBox = region.boundingBox();
 
@@ -85,7 +84,9 @@ public final class VaultRegionScanner {
 
         List<BlockProtection> blockProtections = new ArrayList<>();
         for (Protection protection : protections) {
-            if (protection instanceof BlockProtection bp) {
+            // Bolt was asked by bounding box; the region's shape decides what is in it.
+            if (protection instanceof BlockProtection bp
+                    && worldGuardService.isInside(regionId, world.getBlockAt(bp.getX(), bp.getY(), bp.getZ()))) {
                 blockProtections.add(bp);
             }
         }

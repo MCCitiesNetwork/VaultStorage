@@ -168,16 +168,17 @@ public final class AutoVaultService {
             return;
         }
         WorldGuardService wgs = plugin.worldGuard();
-        // Resolve every region once: the swept region plus the sweep filter both come from this single list.
-        List<VaultRegion> regions = wgs.getRegionsIn(world);
-        VaultRegion region = regions.stream().filter(r -> r.id().equals(key.regionId())).findFirst().orElse(null);
+        VaultRegion region = wgs.getRegionById(key.regionId(), world);
         if (region == null) {
             // Region was deleted during the delay window; nothing to sweep.
             forget(key);
             return;
         }
 
-        SweepFilter filter = SweepFilter.forSweep(regions, region, initiator);
+        // Asked for each candidate, so a region counts by its shape and not by its bounding box.
+        // getBlockAt does not load a chunk, and the lookup needs only the position.
+        SweepFilter filter = SweepFilter.forSweep(region, initiator,
+                (x, y, z) -> wgs.getRegionsAt(world.getBlockAt(x, y, z)));
         // One notifier shared by both passes, so the occupant is messaged at most once per sweep.
         Runnable onVaulted = vaultedNotifier(initiator);
         Sweep sweep = new Sweep();

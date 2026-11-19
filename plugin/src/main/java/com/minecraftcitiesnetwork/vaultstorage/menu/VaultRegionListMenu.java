@@ -173,8 +173,8 @@ public final class VaultRegionListMenu extends ChildMenuImp {
      */
     private void openResultsFor(@NotNull Player player, @NotNull String regionId) {
         WorldGuardService regions = plugin.worldGuard();
-        boolean allowed = regions != null && regions.getRegionsIn(player.getWorld()).stream()
-                .anyMatch(region -> region.id().equals(regionId) && mayScan(player, region));
+        VaultRegion target = regions == null ? null : regions.getRegionById(regionId, player.getWorld());
+        boolean allowed = target != null && mayScan(player, target);
         if (!allowed) {
             player.sendMessage(plugin.text().of(MessageKeys.SCAN_NOT_YOUR_REGION));
             return;

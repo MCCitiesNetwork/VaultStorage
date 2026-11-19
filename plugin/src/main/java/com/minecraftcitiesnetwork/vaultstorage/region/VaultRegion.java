@@ -52,7 +52,4 @@ public interface VaultRegion {
      * Note: This is an AABB check and may include points outside polygonal shapes
      * if the underlying region is non-rectangular; acceptable for fast filtering.
      */
-    default boolean contains(double x, double y, double z) {
-        return boundingBox().contains(x, y, z);
-    }
 }

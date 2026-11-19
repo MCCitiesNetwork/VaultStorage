@@ -1,95 +1,79 @@
 package com.minecraftcitiesnetwork.vaultstorage.autovault;
 
-import org.jetbrains.annotations.Nullable;
-import org.jetbrains.annotations.NotNull;
 import com.minecraftcitiesnetwork.vaultstorage.region.RegionGeometry;
-
 import com.minecraftcitiesnetwork.vaultstorage.region.VaultRegion;
-import org.bukkit.util.BoundingBox;
-
-import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import org.bukkit.util.BoundingBox;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 /**
- * The auto-vault sweep's "should this locked container be vaulted?" decision, in one place for every kind of
- * vaultable thing (locked blocks, hanging entities, and any future pass). A candidate is spared (left alone) when:
- * <ul>
- *   <li>it lies outside the swept region's bounds;</li>
- *   <li>its Bolt owner is allowed — a participant of the swept region, or the new occupant;</li>
- *   <li>it sits inside a region nested within the swept one;</li>
- *   <li>its owner participates in an overlapping region that covers the spot.</li>
- * </ul>
- * Box-based: works from precomputed region bounding boxes rather than per-block region queries. Holding the
- * swept box here lets every pass share the bounds check, whether or not its caller already clipped to the region.
+ * Whether a sweep vaults something a previous occupant left locked. One rule for every pass:
+ * locked blocks, hanging entities and shops.
+ *
+ * <p>It asks which regions are at the thing's position, so a region counts by its real shape:
+ * the corner of a bounding box that an L-shaped plot leaves out is not the plot. Only "nested
+ * inside the swept region" is still decided by bounding boxes.
  */
 public final class SweepFilter {
 
-    /** A region overlapping the swept area, paired with its participants (owners ∪ members). */
-    public record OwnerZone(@NotNull BoundingBox box, @NotNull Set<UUID> participants) {}
+    /** The regions at a block, by their real shape. */
+    @FunctionalInterface
+    public interface RegionsAt {
+        @NotNull List<VaultRegion> at(int x, int y, int z);
+    }
 
-    private final BoundingBox sweptBox;
-    private final Set<UUID> allowed;
-    private final List<BoundingBox> exclusions;
-    private final List<OwnerZone> ownerZones;
+    private final @NotNull String sweptId;
+    private final @NotNull BoundingBox sweptBox;
+    private final @NotNull Set<UUID> allowed;
+    private final @NotNull RegionsAt regionsAt;
 
-    private SweepFilter(@NotNull BoundingBox sweptBox, @NotNull Set<UUID> allowed, @NotNull List<BoundingBox> exclusions, @NotNull List<OwnerZone> ownerZones) {
+    private SweepFilter(@NotNull String sweptId, @NotNull BoundingBox sweptBox, @NotNull Set<UUID> allowed,
+                        @NotNull RegionsAt regionsAt) {
+        this.sweptId = sweptId;
         this.sweptBox = sweptBox;
         this.allowed = allowed;
-        this.exclusions = exclusions;
-        this.ownerZones = ownerZones;
+        this.regionsAt = regionsAt;
     }
 
     /**
-     * Builds the filter for a sweep of {@code swept}: the allowed set (its participants plus the new
-     * {@code initiator}), the nested sub-regions to skip entirely, and the overlapping regions whose participants
-     * are spared where their box covers a container. Classifies every other region using the same bounding-box
-     * containment/overlap tests as {@link RegionGeometry}.
+     * @param swept     the region that changed hands
+     * @param initiator its new occupant
+     * @param regionsAt asked once for each candidate
      */
-    public static @NotNull SweepFilter forSweep(@NotNull List<VaultRegion> regions, @NotNull VaultRegion swept, @NotNull UUID initiator) {
-        Set<UUID> allowed = participants(swept);
+    public static @NotNull SweepFilter forSweep(@NotNull VaultRegion swept, @NotNull UUID initiator,
+                                                @NotNull RegionsAt regionsAt) {
+        Set<UUID> allowed = new HashSet<>(swept.owners());
+        allowed.addAll(swept.members());
         allowed.add(initiator);
-
-        BoundingBox sweptBox = swept.boundingBox();
-        List<BoundingBox> exclusions = new ArrayList<>();
-        List<OwnerZone> ownerZones = new ArrayList<>();
-        for (VaultRegion other : regions) {
-            if (other.id().equals(swept.id())) continue;
-            BoundingBox otherBox = other.boundingBox();
-            if (RegionGeometry.containsInclusive(sweptBox, otherBox)) {
-                exclusions.add(otherBox);
-                continue;
-            }
-            if (!RegionGeometry.overlapsInclusive(sweptBox, otherBox)) continue;
-            Set<UUID> participants = participants(other);
-            if (participants.isEmpty()) continue;
-            ownerZones.add(new OwnerZone(otherBox, participants));
-        }
-        return new SweepFilter(sweptBox, allowed, exclusions, ownerZones);
+        return new SweepFilter(swept.id(), swept.boundingBox(), allowed, regionsAt);
     }
 
-    /** A region's participants: its owners and members combined into a fresh, mutable set for O(1) lookups. */
-    private static @NotNull Set<UUID> participants(@NotNull VaultRegion region) {
-        Set<UUID> combined = new HashSet<>(region.owners());
-        combined.addAll(region.members());
-        return combined;
-    }
-
-    /** Whether a locked thing with the given Bolt owner at (x, y, z) should be vaulted by this sweep. */
+    /**
+     * A thing with this owner at this position is vaulted when all of these hold:
+     * <ul>
+     *   <li>it has an owner, who is neither the new occupant nor an owner or member of the swept region;</li>
+     *   <li>the swept region is among the regions at its position;</li>
+     *   <li>no region there is nested inside the swept region: a nested region is someone's own;</li>
+     *   <li>its owner has no part in any other region there.</li>
+     * </ul>
+     */
     public boolean shouldVault(@Nullable UUID owner, double x, double y, double z) {
-        // Never vault anything outside the swept region.
-        if (!RegionGeometry.containsInclusive(sweptBox, x, y, z)) return false;
-        if (owner == null || allowed.contains(owner)) return false;
-        for (BoundingBox exclusion : exclusions) {
-            if (RegionGeometry.containsInclusive(exclusion, x, y, z)) return false;
+        if (owner == null || this.allowed.contains(owner)) {
+            return false;
         }
-        for (OwnerZone zone : ownerZones) {
-            if (zone.participants().contains(owner) && RegionGeometry.containsInclusive(zone.box(), x, y, z)) {
+        boolean inSwept = false;
+        for (VaultRegion region : this.regionsAt.at((int) Math.floor(x), (int) Math.floor(y), (int) Math.floor(z))) {
+            if (region.id().equals(this.sweptId)) {
+                inSwept = true;
+            } else if (RegionGeometry.containsInclusive(this.sweptBox, region.boundingBox())
+                    || region.isPartOfRegion(owner)) {
                 return false;
             }
         }
-        return true;
+        return inSwept;
     }
 }

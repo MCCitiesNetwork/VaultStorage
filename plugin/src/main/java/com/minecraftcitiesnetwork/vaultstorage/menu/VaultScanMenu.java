@@ -170,9 +170,8 @@ public final class VaultScanMenu extends ChildMenuImp {
                     ctx.player().sendMessage(plugin.text().of(MessageKeys.SCAN_SERVICES_MISSING));
                     return;
                 }
-                var all = wgs.getRegionsIn(ctx.player().getWorld());
-                var loc = ctx.player().getLocation();
-                List<VaultRegion> containing = all.stream().filter(r -> r.contains(loc.getX(), loc.getY(), loc.getZ())).toList();
+                // By the regions' real shapes, not their bounding boxes.
+                List<VaultRegion> containing = wgs.getRegionsAt(ctx.player().getLocation().getBlock());
                 if (containing.isEmpty()) {
                     ctx.player().sendMessage(plugin.text().of(MessageKeys.SCAN_NO_REGION_HERE));
                     return;
@@ -231,6 +230,8 @@ public final class VaultScanMenu extends ChildMenuImp {
                 return builder.build();
             }
             Map<EntityProtection, Entity> protections = boltService.getProtectedEntities(player().getWorld(), region.boundingBox());
+            // Bolt was asked by bounding box; the region's shape decides what is in it.
+            protections.values().removeIf(entity -> !worldGuardService.isInside(regionId, entity.getLocation().getBlock()));
             // A fixed order, so that a page shows the same entities each time it is built.
             List<EntityProtection> ordered = protections.keySet().stream()
                     .sorted(Comparator.<EntityProtection>comparingInt(p -> protections.get(p).getLocation().getBlockX())

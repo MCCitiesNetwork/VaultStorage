@@ -14,4 +14,7 @@ public interface VaultItemMapper {
     @NotNull List<VaultItemEntity> selectByVault(@NotNull UUID vaultUuid);
 
     int deleteByVault(@NotNull UUID vaultUuid);
+
+    /** Deletes the items in slots {@code firstSlot} to {@code lastSlot}, both included. */
+    int deleteSlots(@NotNull UUID vaultUuid, int firstSlot, int lastSlot);
 }
