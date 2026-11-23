@@ -307,8 +307,9 @@ test('the teleport button takes staff to a result, and is not offered without it
         (await scanMenu(player, dialogs, true)).click('Here');
         (await scanResults(dialogs)).click('(teleport)');
         await sleep(800);
-        // On top of the chest: a chest cannot be stood in.
-        await server.execute(`execute as ${player.username} at @s if block ~ ~-1 ~ minecraft:chest run say teleported-onto-the-chest`);
+        // On top of the chest: a chest cannot be stood in. Half a block down, because a chest
+        // is lower than a full block and the player settles onto its lid.
+        await server.execute(`execute as ${player.username} at @s if block ~ ~-0.5 ~ minecraft:chest run say teleported-onto-the-chest`);
         await expect(server).toHaveReceivedMessage('teleported-onto-the-chest');
     });
 

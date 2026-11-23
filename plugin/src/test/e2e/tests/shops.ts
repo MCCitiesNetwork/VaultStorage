@@ -48,8 +48,8 @@ export function requireRealty(): void {
 /**
  * A chest with the owner's shop sign standing on it, locked by the owner with Bolt or not.
  *
- * The sign is placed on a stone block and the block is turned into the chest afterwards: a
- * click on a chest opens it unless the player sneaks, and these bots send no input packets.
+ * The sign is placed on a stone block and the block is turned into the chest afterwards, so
+ * no click lands on a chest. movement.spec.ts places one the way a player does, sneaking.
  * The sign text is sent the way a client sends it, so ChestShop registers the shop.
  */
 export async function shop(server: ServerWrapper, owner: PlayerWrapper, x: number, z: number, withItems: boolean, locked: boolean): Promise<void> {

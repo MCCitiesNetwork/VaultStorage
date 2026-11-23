@@ -224,9 +224,14 @@ installs the host and module jars, and runs the specs in `plugin/src/test/e2e/te
 part of `build`. It needs Docker, Node and `gh` signed in to an account that can read the
 Realty and hibernia-economy repositories.
 
-- Bots join as 1.21.11 clients; `plugins/test-server.ts` keeps them connected and still.
-- Bots do not walk: place them with `standAt`. Click blocks with `rightClick` in `tests/world.ts`,
-  which writes the packet itself; mineflayer's `activateBlock` gets bots kicked here.
+- Bots join as 1.21.11 clients with physics on. `plugins/test-server.ts` has each bot send
+  `tick_end` after every movement packet: Paper 26.3 kicks a client that sends two positions in one tick
+  ("Invalid move player packet received"), and mineflayer never ends its ticks.
+- Place a bot with `standAt`; walk it with `walkTo` and sneak with `sneak` (`tests/world.ts`)
+  only when the test is about getting there. Click blocks with `rightClick`, which writes the
+  packet itself; mineflayer's `activateBlock` turns the bot first and works too.
+- The plugin gives every bot a name that cannot repeat within a run (`pw_<run>_<n>`):
+  plugwright's four hex digits do, and a name is a player.
 - Use `minecraft:tp` and `minecraft:item`, so another plugin's command of the same name cannot
   shadow them.
 - Bolt answers on the action bar, which a bot's chat log does not hold.
@@ -273,7 +278,7 @@ Realty and hibernia-economy repositories.
 - To run a few specs: `./gradlew :plugin:plugwrightTestLocal -Pspecs=capture-edges,sweep` runs
   the spec files whose names contain one of those. `plugwrightTest` takes no filter.
 - A test run starts by emptying `Vault`, `VaultItem` and `PendingSweep` (`resetE2eData`): bots get
-  a random four-character name, and a name seen before would bring its old vaults.
+  a name unique within a run only, and a name seen before would bring its old vaults.
 - To make the world change in the middle of a capture or a placement, hold its database step
   open with `holdVaultTables(seconds)` in `tests/database.ts`, change the world, and wait.
 - The restart test is two spec files and a task, `plugwrightRestartTest`, that runs one, then
@@ -282,8 +287,8 @@ Realty and hibernia-economy repositories.
 - Other dimensions are not flat: `netherPlatform` and `standInNether` in `tests/world.ts`.
 - A vault's row exists a tick before its block is removed. Wait for the message that follows
   the removal, not for the row, before asserting on the block.
-- A bot cannot sneak, so it cannot put a sign on a chest. `shop` in `tests/shops.ts`
-  places the sign on stone, turns the stone into the chest, then sends the sign text.
+- `shop` in `tests/shops.ts` places the sign on stone, turns the stone into the chest, then
+  sends the sign text. A sneaking bot can put a sign on a chest itself (`movement.spec.ts`).
 
 ### What the live suite covers
 
@@ -315,6 +320,7 @@ file for its area; a bug found by hand gets a test before its fix.
 | `worlds` | a chest vaulted in the nether and placed in the overworld; an overworld region not applying in the nether; a vault from a world the server no longer has |
 | `names` | Namebook and Floodgate each taking over at start-up; an offline player found by name; names in any case; a Java player not taken for a Bedrock one |
 | `restart-before`, `restart-after` | across a real stop and start of the server: a waiting sweep resumes and runs, a stale claim is released and logged, a stored vault keeps its items. Run by `./gradlew :plugin:plugwrightRestartTest`, not by the ordinary run |
+| `movement` | a bot standing still for seconds; walking into and out of a region for "Here"; walking into reach of a chest in capture mode; a click that turns to the block first; walking away during a capture's database step; a shop sign put on a chest by a sneaking player |
 | `zz-scale` | lists over 5,000 vaults of one owner and 35,000 in the table opening within three seconds; tick time while they do |
 
 Not covered live, and why:
@@ -327,7 +333,7 @@ Not covered live, and why:
   server, and a disconnect saves the edit by the ordinary path.
 
 Helpers: `vaults.ts` (vaults, locks, capture mode, placing, entities, the action bar),
-`world.ts` (clicks, block and item assertions), `players.ts` (exact permissions), `realty.ts`
+`world.ts` (clicks, walking, sneaking, block and item assertions), `players.ts` (exact permissions), `realty.ts`
 (regions changing hands, polygons), `shops.ts` (shops, required plugins), `files.ts` (editing a
 config and reloading), `database.ts`, `dialogs.ts`.
 

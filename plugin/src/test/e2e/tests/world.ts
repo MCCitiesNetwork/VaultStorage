@@ -15,7 +15,7 @@ export function freshSpot(): { x: number; z: number } {
     return { x: spot, z: spot };
 }
 
-/** Puts the player at a spot. Bots do not send movement, so they are placed with the console. */
+/** Puts the player at a spot at once. Most tests need a place to stand, not a walk: see walkTo. */
 export async function standAt(server: ServerWrapper, player: PlayerWrapper, x: number, z: number): Promise<void> {
     await server.execute(`minecraft:tp ${player.username} ${x}.5 ${FLOOR} ${z}.5`);
     // The chunk around the new position has to reach the bot before it can click a block in it.
@@ -25,10 +25,9 @@ export async function standAt(server: ServerWrapper, player: PlayerWrapper, x: n
 let clickSequence = 1;
 
 /**
- * Right-clicks the top face of a block. The packet is written directly instead of through
- * mineflayer's activateBlock, which first turns the bot to face the block: through ViaBackwards
- * that look packet now and then gets the bot kicked ("Invalid move player packet received"). The
- * server does not need the player to face a block to accept a click on it.
+ * Right-clicks the top face of a block. The packet is written directly: the server does not
+ * need the player to face a block to accept a click on it, and a test can then click a block
+ * behind another. mineflayer's activateBlock turns the bot first; movement.spec.ts uses it.
  */
 export async function rightClick(player: PlayerWrapper, x: number, y: number, z: number): Promise<void> {
     // A chunk can reach a bot a few seconds after the teleport when several bots have just joined.
@@ -114,3 +113,52 @@ export async function expectNetherBlock(server: ServerWrapper, x: number, y: num
     await expect(server).toHaveReceivedMessage(marker);
 }
 
+
+/** Where the server has the player, which is where the plugin sees them. */
+export async function serverPosition(server: ServerWrapper, player: PlayerWrapper): Promise<{ x: number; y: number; z: number }> {
+    const answer = await server.execute(`minecraft:data get entity ${player.username} Pos`);
+    const numbers = answer.match(/\[(-?[\d.]+)d, (-?[\d.]+)d, (-?[\d.]+)d\]/);
+    if (numbers === null) {
+        throw new Error(`No position for ${player.username}: ${answer}`);
+    }
+    return { x: Number(numbers[1]), y: Number(numbers[2]), z: Number(numbers[3]) };
+}
+
+/**
+ * Walks the player to the middle of a block's column, in a straight line over flat ground, and
+ * checks the server followed: a walk the server refused would leave the plugin seeing the
+ * player where they started.
+ */
+export async function walkTo(server: ServerWrapper, player: PlayerWrapper, x: number, z: number): Promise<void> {
+    const bot = player.bot as any;
+    const target = () => new Vec3(x + 0.5, bot.entity.position.y + 1.62, z + 0.5);
+    const remaining = () => Math.hypot(bot.entity.position.x - (x + 0.5), bot.entity.position.z - (z + 0.5));
+    // Aimed again every tick, so a step that drifts is corrected instead of circling the target.
+    const aim = () => {
+        if (remaining() > 0.3) {
+            void bot.lookAt(target(), true);
+        } else {
+            bot.setControlState('forward', false);
+        }
+    };
+    await bot.lookAt(target(), true);
+    bot.on('physicsTick', aim);
+    bot.setControlState('forward', true);
+    try {
+        await waitUntil(() => remaining() <= 0.3,
+            { timeout: 20000, message: `${player.username} did not reach ${x},${z}` });
+    } finally {
+        bot.removeListener('physicsTick', aim);
+        bot.setControlState('forward', false);
+    }
+    // The last position packets reach the server within a few ticks.
+    await sleep(500);
+    const at = await serverPosition(server, player);
+    expect(Math.hypot(at.x - (x + 0.5), at.z - (z + 0.5))).toBeLessThan(1);
+}
+
+/** Holds or lets go of the sneak key. */
+export async function sneak(player: PlayerWrapper, held: boolean): Promise<void> {
+    (player.bot as any).setControlState('sneak', held);
+    await sleep(200);
+}
