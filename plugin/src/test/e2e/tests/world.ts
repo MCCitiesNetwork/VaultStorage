@@ -54,3 +54,39 @@ export async function expectItem(server: ServerWrapper, x: number, y: number, z:
     await server.execute(`execute if items block ${x} ${y} ${z} container.${slot} minecraft:${item} run say ${marker}`);
     await expect(server).toHaveReceivedMessage(marker);
 }
+
+/**
+ * Left-clicks a block: starts to dig it and stops at once, which is what a single click sends.
+ * The block is not broken.
+ */
+export async function leftClick(player: PlayerWrapper, x: number, y: number, z: number): Promise<void> {
+    const client = (player.bot as any)._client;
+    client.write('block_dig', { status: 0, location: { x, y, z }, face: 1, sequence: clickSequence++ });
+    client.write('block_dig', { status: 1, location: { x, y, z }, face: 1, sequence: clickSequence++ });
+    await sleep(100);
+}
+
+/** Right-clicks a face of a block: 0 bottom, 1 top, 2 north, 3 south, 4 west, 5 east. */
+export async function rightClickFace(player: PlayerWrapper, x: number, y: number, z: number, face: number): Promise<void> {
+    await waitUntil(() => player.bot.blockAt(new Vec3(x, y, z)) !== null,
+        { timeout: 10000, message: `${player.username} has no block loaded at ${x},${y},${z}` });
+    (player.bot as any)._client.write('block_place', {
+        hand: 0, location: { x, y, z }, direction: face,
+        cursorX: 0.5, cursorY: 0.5, cursorZ: 0.5,
+        insideBlock: false, worldBorderHit: false, sequence: clickSequence++,
+    });
+    await sleep(100);
+}
+
+/** Asserts through the console that a block has this state, such as `chest[facing=east]`. */
+export async function expectBlockState(server: ServerWrapper, x: number, y: number, z: number, state: string, marker: string): Promise<void> {
+    await server.execute(`execute if block ${x} ${y} ${z} minecraft:${state} run say ${marker}`);
+    await expect(server).toHaveReceivedMessage(marker);
+}
+
+/** Asserts through the console that a container slot holds this many of the given item. */
+export async function expectItemCount(server: ServerWrapper, x: number, y: number, z: number, slot: number, item: string, count: number, marker: string): Promise<void> {
+    await server.execute(`execute if items block ${x} ${y} ${z} container.${slot} minecraft:${item}[minecraft:count=${count}] run say ${marker}`);
+    await expect(server).toHaveReceivedMessage(marker);
+}
+

@@ -1,4 +1,7 @@
 import { expect, sleep, waitUntil, type PlayerWrapper, type ServerWrapper } from '@plugwright/runner';
+import nbt from 'prismarine-nbt';
+import { Vec3 } from 'vec3';
+import { query } from './database.js';
 import { Dialogs, type Dialog } from './dialogs.js';
 import { FLOOR, freshSpot, rightClick, standAt } from './world.js';
 
@@ -77,3 +80,118 @@ export async function openWindow(player: PlayerWrapper): Promise<any> {
     await sleep(300);
     return (player.bot as any).currentWindow;
 }
+
+/** Locks whatever block is at the spot for the owner, with Bolt's /lock. */
+export async function lock(owner: PlayerWrapper, x: number, z: number, y: number = FLOOR): Promise<void> {
+    owner.chat('/lock');
+    await sleep(500);
+    await rightClick(owner, x, y, z);
+    await sleep(500);
+}
+
+/** Puts the player in capture mode. */
+export async function captureMode(player: PlayerWrapper): Promise<void> {
+    player.chat('/vault capture');
+    await expect(player).toHaveReceivedMessage('Capture session started');
+}
+
+/** How many vaults the player owns. */
+export function vaultCount(player: PlayerWrapper): number {
+    return Number(query(`SELECT COUNT(*) FROM Vault WHERE ownerUuid = '${player.bot.player.uuid}'`)[0]);
+}
+
+/** How many item rows the player's vaults hold between them. */
+export function vaultItemCount(player: PlayerWrapper): number {
+    return Number(query('SELECT COUNT(*) FROM VaultItem i JOIN Vault v ON v.uuid = i.vaultUuid '
+        + `WHERE v.ownerUuid = '${player.bot.player.uuid}'`)[0]);
+}
+
+/** Waits until the player owns this many vaults. */
+export async function expectVaults(player: PlayerWrapper, expected: number): Promise<void> {
+    await waitUntil(() => vaultCount(player) === expected,
+        { timeout: 10000, message: `${player.username} has ${vaultCount(player)} vaults, expected ${expected}` });
+}
+
+/**
+ * The owner places their first vault through the menus, by clicking the top of the ground
+ * block at the spot. Returns once the plugin has answered; the caller asserts on the answer.
+ */
+export async function placeFirstVault(owner: PlayerWrapper, dialogs: Dialogs, x: number, z: number): Promise<void> {
+    (await ownVaultActions(owner, dialogs)).click('Place Block');
+    (await dialogTitled(dialogs, 'Vault Placement')).click('Start Placement');
+    await sleep(300);
+    await rightClick(owner, x, FLOOR - 1, z);
+}
+
+/** Right-clicks an entity. Written as a packet, like block clicks: see rightClick in world.ts. */
+export function clickEntity(player: PlayerWrapper, entityId: number): void {
+    // "Interact at": the form a client sends with the point it clicked. The plain interact form
+    // does not get through to this server from a 1.21.11 bot.
+    (player.bot as any)._client.write('use_entity', {
+        target: entityId, mouse: 2, x: 0, y: 0, z: 0, sneaking: false, hand: 0,
+    });
+}
+
+/** The id, as this bot knows it, of the entity of this kind standing in the block column. */
+export async function entityIdAt(player: PlayerWrapper, kind: string, x: number, z: number): Promise<number> {
+    const find = () => Object.values((player.bot as any).entities as Record<string, any>).find((entity) =>
+        entity.name === kind && Math.floor(entity.position.x) === x && Math.floor(entity.position.z) === z);
+    await waitUntil(() => find() !== undefined, { timeout: 5000, message: `${player.username} never saw a ${kind} at ${x},${z}` });
+    return find().id;
+}
+
+/**
+ * The action bar lines a player is sent. Bolt and the capture and placement modes answer
+ * there, and a bot's chat log does not hold them.
+ */
+export class ActionBars {
+    private readonly lines: string[] = [];
+
+    constructor(player: PlayerWrapper) {
+        const client = (player.bot as any)._client;
+        const read = (component: any): string => {
+            if (component == null) {
+                return '';
+            }
+            if (typeof component === 'string') {
+                // Older protocol versions send JSON text.
+                try {
+                    return read(JSON.parse(component));
+                } catch {
+                    return component;
+                }
+            }
+            if (Array.isArray(component)) {
+                return component.map(read).join('');
+            }
+            if (component.type !== undefined && component.value !== undefined) {
+                // Raw NBT: a string tag, or a compound of text and extra.
+                return component.type === 'string' ? component.value : read(nbt.simplify(component));
+            }
+            return (component.text ?? component[''] ?? '') + (component.extra ?? []).map(read).join('');
+        };
+        client.on('action_bar', (packet: any) => this.lines.push(read(packet.text)));
+        client.on('system_chat', (packet: any) => {
+            if (packet.isActionBar) {
+                this.lines.push(read(packet.content));
+            }
+        });
+    }
+
+    /** Waits for an action bar line containing the text, among those sent from now on. */
+    async next(text: string, timeoutMs = 6000): Promise<string> {
+        const from = this.lines.length;
+        await waitUntil(() => this.lines.slice(from).some((line) => line.includes(text)), {
+            timeout: timeoutMs,
+            message: `No action bar line containing "${text}". Last lines: ${this.lines.slice(-3).join(' // ')}`,
+        });
+        return this.lines.slice(from).find((line) => line.includes(text))!;
+    }
+}
+
+/** Turns the player to face the middle of a block, so the server knows what they look at. */
+export async function lookAtBlock(player: PlayerWrapper, x: number, y: number, z: number): Promise<void> {
+    await (player.bot as any).lookAt(new Vec3(x + 0.5, y + 0.5, z + 0.5), true);
+    await sleep(300);
+}
+

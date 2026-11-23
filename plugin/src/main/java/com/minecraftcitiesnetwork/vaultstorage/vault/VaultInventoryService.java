@@ -54,11 +54,18 @@ public final class VaultInventoryService implements Listener {
     }
 
     /**
-     * Opens the vault for the player. With a parent menu, a loading menu is shown meanwhile.
+     * Opens the vault for the player, if they may use the action. With a parent menu, a loading
+     * menu is shown meanwhile. Main thread.
      * {@code reopenCallback} runs on the main thread after the inventory closes.
      */
     public void openVirtualInventory(@NotNull Player player, @NotNull UUID vaultId, @NotNull VaultAction action,
                                      @Nullable ParentMenu parentMenu, @Nullable Runnable reopenCallback) {
+        // Checked here, where every way of opening a vault ends up. A menu lists only the actions
+        // a player may use, but its answer comes from the client and can name any of them.
+        if (!player.hasPermission(action.permission())) {
+            player.sendMessage(plugin.text().of(MessageKeys.COMMAND_OPEN_NO_PERMISSION));
+            return;
+        }
         Executor mainThread = plugin.getServer().getScheduler().getMainThreadExecutor(plugin);
         if (parentMenu != null) {
             Map<String, String> placeholders = Map.of("%player%", player.getName(), "%vault%", String.valueOf(vaultId));

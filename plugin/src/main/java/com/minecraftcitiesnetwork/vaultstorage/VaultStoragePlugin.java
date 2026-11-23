@@ -324,6 +324,9 @@ public final class VaultStoragePlugin extends JavaPlugin {
                 .whenComplete((done, failure) -> {
                     if (failure != null) {
                         getLogger().log(Level.SEVERE, "The reload failed. The old settings are still in use.", failure);
+                    } else {
+                        // Also for a sender that cannot be answered later, such as a remote console.
+                        getLogger().info("Reloaded settings.yml, messages.yml and the modules that reload.");
                     }
                 });
     }
