@@ -2,7 +2,6 @@ package com.minecraftcitiesnetwork.vaultstorage.capture;
 
 import com.minecraftcitiesnetwork.vaultstorage.database.VaultItem;
 import com.minecraftcitiesnetwork.vaultstorage.vault.ItemSerialization;
-import java.util.ArrayList;
 import java.util.List;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Hanging;
@@ -17,12 +16,7 @@ public final class HangingAccess implements ContainerAccess<Hanging> {
 
     /** The entity and what it shows, in the order they are stored. A slot is an offset from the first free one. */
     private static @NotNull List<VaultItem> itemsOf(@NotNull Hanging hanging) {
-        List<ItemStack> stacks = HangingVaultSupport.itemStacksFrom(hanging);
-        List<VaultItem> items = new ArrayList<>(stacks.size());
-        for (int offset = 0; offset < stacks.size(); offset++) {
-            items.add(ItemSerialization.toVaultItem(offset, stacks.get(offset)));
-        }
-        return items;
+        return ItemSerialization.toVaultItems(HangingVaultSupport.itemStacksFrom(hanging).toArray(ItemStack[]::new));
     }
 
     /** Anchored at the block the entity hangs on. */

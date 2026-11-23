@@ -250,6 +250,7 @@ public final class VaultCommand {
                     return CompletableFuture.<TransferOutcome>supplyAsync(
                             () -> switch (plugin.repository().setOwner(vault, newOwner)) {
                                 case OwnerResult.NoSuchVault missing -> new TransferOutcome.NoSuchVault(vault);
+                                case OwnerResult.InUse held -> new TransferOutcome.InUse(vault);
                                 case OwnerResult.Changed changed ->
                                         new TransferOutcome.Transferred(vault, changed.previous(), newOwner);
                             }, plugin.databaseExecutor());
@@ -277,6 +278,8 @@ public final class VaultCommand {
             }
             case TransferOutcome.NoSuchVault missing -> messages.messageFor(MessageKeys.COMMAND_TRANSFER_NOT_FOUND,
                     MessageContainer.value("vault", missing.vault().toString()));
+            case TransferOutcome.InUse held -> messages.messageFor(MessageKeys.COMMAND_TRANSFER_IN_USE,
+                    MessageContainer.value("vault", held.vault().toString()));
             case TransferOutcome.UnknownPlayer unknown -> messages.messageFor(
                     MessageKeys.COMMAND_TRANSFER_UNKNOWN_PLAYER, MessageContainer.value("player", unknown.name()));
             case TransferOutcome.Failed failed -> messages.messageFor(MessageKeys.COMMAND_TRANSFER_FAILED);

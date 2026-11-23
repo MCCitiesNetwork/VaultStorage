@@ -24,6 +24,7 @@ class CapturePipelineTest {
         private final Map<UUID, List<VaultItem>> vaults = new HashMap<>();
         private boolean failCreate;
         private boolean failDelete;
+        private boolean inUse;
 
         @Override
         public @NotNull Stored store(@NotNull ContainerSnapshot snapshot, @NotNull UUID owner) {
@@ -39,7 +40,8 @@ class CapturePipelineTest {
                 }
                 CapturePipelineTest.this.events.add("deleted");
                 this.vaults.remove(uuid);
-            });
+                return !this.inUse;
+            }, () -> CapturePipelineTest.this.events.add("settled"));
         }
     }
 
@@ -74,7 +76,7 @@ class CapturePipelineTest {
     void theBlockIsRemovedOnlyAfterTheVaultIsStored() {
         CaptureResult result = this.pipeline.capture(CHEST, OWNER).join();
         UUID vault = Assertions.assertInstanceOf(CaptureResult.Vaulted.class, result).vault();
-        Assertions.assertEquals(List.of("created", "removed"), this.events);
+        Assertions.assertEquals(List.of("created", "removed", "settled"), this.events);
         Assertions.assertEquals(List.of(CHEST), this.access.removed);
         // Items keep the slots they had in the container.
         Assertions.assertEquals(List.of(0, 13), this.store.vaults.get(vault).stream().map(VaultItem::slot).toList());
@@ -103,6 +105,15 @@ class CapturePipelineTest {
     void aVaultThatCannotBeTakenBackIsReportedAsAFailureAndTheBlockStays() {
         this.access.changesAfterSnapshot = true;
         this.store.failDelete = true;
+        CaptureResult result = this.pipeline.capture(CHEST, OWNER).join();
+        Assertions.assertInstanceOf(CaptureResult.Failed.class, result);
+        Assertions.assertTrue(this.access.removed.isEmpty());
+    }
+
+    @Test
+    void aStaleCopyInAVaultSomeoneHoldsIsReportedAsAFailure() {
+        this.access.changesAfterSnapshot = true;
+        this.store.inUse = true;
         CaptureResult result = this.pipeline.capture(CHEST, OWNER).join();
         Assertions.assertInstanceOf(CaptureResult.Failed.class, result);
         Assertions.assertTrue(this.access.removed.isEmpty());

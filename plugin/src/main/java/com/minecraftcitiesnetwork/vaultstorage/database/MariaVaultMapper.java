@@ -17,13 +17,13 @@ public interface MariaVaultMapper extends VaultMapper {
 
     @Override
     @Insert("""
-            INSERT INTO Vault (uuid, ownerUuid, worldUuid, x, y, z, material, blockData,
+            INSERT INTO Vault (uuid, ownerUuid, worldUuid, x, y, z, material, blockData, claimToken,
                                createdTime, updatedTime)
             VALUES (#{vault.uuid}, #{vault.ownerUuid}, #{vault.worldUuid}, #{vault.x}, #{vault.y}, #{vault.z},
-                    #{vault.material}, #{vault.blockData},
+                    #{vault.material}, #{vault.blockData}, #{token},
                     #{vault.createdTime}, #{vault.updatedTime})
             """)
-    int insert(@Param("vault") @NotNull VaultEntity vault);
+    int insert(@Param("vault") @NotNull VaultEntity vault, @Param("token") @Nullable UUID token);
 
     @Override
     @Select("""
@@ -59,6 +59,7 @@ public interface MariaVaultMapper extends VaultMapper {
             UPDATE Vault
             SET ownerUuid = #{ownerUuid}, updatedTime = #{updatedTime}
             WHERE uuid = #{uuid}
+            AND claimToken IS NULL
             """)
     int updateOwner(@Param("uuid") @NotNull UUID uuid, @Param("ownerUuid") @NotNull UUID ownerUuid,
                     @Param("updatedTime") @NotNull Instant updatedTime);
@@ -85,8 +86,10 @@ public interface MariaVaultMapper extends VaultMapper {
     @Delete("""
             DELETE FROM Vault
             WHERE uuid = #{uuid}
+            AND claimToken IS NULL
+            AND NOT EXISTS (SELECT 1 FROM VaultItem WHERE vaultUuid = #{uuid})
             """)
-    int delete(@Param("uuid") @NotNull UUID uuid);
+    int deleteFreeIfEmpty(@Param("uuid") @NotNull UUID uuid);
 
     @Override
     @Delete("""

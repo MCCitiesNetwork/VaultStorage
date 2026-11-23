@@ -15,6 +15,10 @@ public sealed interface TransferOutcome {
     record UnknownPlayer(@NotNull String name) implements TransferOutcome {
     }
 
+    /** Someone has the vault open, or is placing or deleting it. */
+    record InUse(@NotNull UUID vault) implements TransferOutcome {
+    }
+
     /** The database failed; the cause is in the log. */
     record Failed() implements TransferOutcome {
     }

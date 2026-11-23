@@ -9,13 +9,15 @@ import org.jetbrains.annotations.Nullable;
 /** Vendor-neutral contract for the {@code Vault} table. The SQL lives on the vendor sub-interface. */
 public interface VaultMapper {
 
-    int insert(@NotNull VaultEntity vault);
+    /** @param token the claim the vault is created under, or null for a vault nobody holds */
+    int insert(@NotNull VaultEntity vault, @Nullable UUID token);
 
     @Nullable VaultEntity selectByUuid(@NotNull UUID uuid);
 
     /** The owner, locking the row until the transaction ends; null when there is no such vault. */
     @Nullable UUID selectOwnerForUpdate(@NotNull UUID uuid);
 
+    /** @return 1 when the owner was changed, 0 when the vault is gone or someone holds it */
     int updateOwner(@NotNull UUID uuid, @NotNull UUID ownerUuid, @NotNull Instant updatedTime);
 
     int touch(@NotNull UUID uuid, @NotNull Instant updatedTime);
@@ -23,10 +25,10 @@ public interface VaultMapper {
     /** As {@link #touch}, for a vault held with this token only. */
     int touchHeld(@NotNull UUID uuid, @NotNull UUID token, @NotNull Instant updatedTime);
 
-    /** @return the number of rows deleted: 0 means there was no such vault */
-    int delete(@NotNull UUID uuid);
+    /** Deletes a vault that holds nothing and that nobody holds. @return the number of rows deleted */
+    int deleteFreeIfEmpty(@NotNull UUID uuid);
 
-    /** As {@link #delete}, for a vault held with this token only. */
+    /** Deletes a vault held with this token only. @return the number of rows deleted */
     int deleteHeld(@NotNull UUID uuid, @NotNull UUID token);
 
     int count(@Nullable UUID ownerUuid, @Nullable UUID worldUuid);

@@ -105,6 +105,9 @@ test('a placed vault is locked for its owner, whoever placed it',
 
         // Vaulting it again gives it back to the owner: the lock on the placed block is theirs.
         await captureMode(player);
+        // Staff were told "Capture mode is on" once already, while setting up, so that wait
+        // returns at once. A click can reach the server before the command that precedes it.
+        await sleep(500);
         await rightClick(player, x + 2, FLOOR, z + 2);
         await expectVaults(owner, 1);
         expect(vaultCount(player)).toBe(0);

@@ -2,7 +2,6 @@ package com.minecraftcitiesnetwork.vaultstorage.capture;
 
 import java.util.ArrayList;
 import java.util.List;
-import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.block.Chest;
@@ -43,10 +42,9 @@ public final class ContainerBlocks {
         // which is exactly what we need for split-logic.
         Inventory inv = (c instanceof Chest chest) ? chest.getBlockInventory() : c.getInventory();
         for (ItemStack stack : inv.getContents()) {
-            if (stack == null) continue;
-            if (stack.getType() == Material.AIR) continue;
-            if (stack.getAmount() <= 0) continue;
-            return false; // Found meaningful content
+            if (stack != null && !stack.isEmpty()) {
+                return false;
+            }
         }
         return true;
     }
@@ -96,5 +94,10 @@ public final class ContainerBlocks {
             }
         }
         return null;
+    }
+
+    /** Where a block is, for a log line: {@code world x,y,z}. */
+    public static @NotNull String describe(@NotNull Block block) {
+        return block.getWorld().getName() + " " + block.getX() + "," + block.getY() + "," + block.getZ();
     }
 }

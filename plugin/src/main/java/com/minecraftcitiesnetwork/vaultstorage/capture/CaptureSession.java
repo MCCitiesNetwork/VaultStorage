@@ -166,7 +166,7 @@ public final class CaptureSession implements Listener {
         }
         return service.owners().validate(outcome.finalOwner(), actor).thenComposeAsync(owner -> {
             if (owner == null) {
-                ownerUnknown(captureBlock);
+                service.ownerUnknown(actor, captureBlock);
                 return DONE;
             }
             return service.storeThenRemove(captureBlock, owner, outcome.reProtectedHalves())
@@ -196,13 +196,6 @@ public final class CaptureSession implements Listener {
         service.removeAttachments(actor, attached);
         actor.sendMessage(plugin.text().of(MessageKeys.CAPTURE_ATTACHMENT_REMOVED));
         return true;
-    }
-
-    private void ownerUnknown(@NotNull Block captureBlock) {
-        actor.sendMessage(plugin.text().of(MessageKeys.CAPTURE_OWNER_UNKNOWN));
-        plugin.getLogger().warning("Capture by " + actor.getName() + " at " + captureBlock.getWorld().getName()
-                + " " + captureBlock.getX() + "," + captureBlock.getY() + "," + captureBlock.getZ()
-                + " stopped: the owner's id could not be checked.");
     }
 
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = false)

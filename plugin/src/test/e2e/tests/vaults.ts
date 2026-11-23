@@ -1,7 +1,7 @@
 import { expect, sleep, waitUntil, type PlayerWrapper, type ServerWrapper } from '@plugwright/runner';
 import nbt from 'prismarine-nbt';
 import { Vec3 } from 'vec3';
-import { query } from './database.js';
+import { query, sql } from './database.js';
 import { Dialogs, type Dialog } from './dialogs.js';
 import { FLOOR, freshSpot, rightClick, standAt } from './world.js';
 
@@ -42,6 +42,9 @@ export async function vaultFor(server: ServerWrapper, staff: PlayerWrapper, owne
         server.execute(`op ${staff.username}`),
         server.execute(`op ${owner.username}`),
     ]);
+    // A bot's name is four random characters and can repeat within a run. A name is an id here,
+    // so an earlier bot's vaults would be this one's too.
+    sql(`DELETE FROM Vault WHERE ownerUuid = '${owner.bot.player.uuid}'`);
     await standAt(server, staff, x, z);
     await standAt(server, owner, x, z + 1);
     await lockedChest(server, owner, x + 2, z);

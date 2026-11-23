@@ -11,10 +11,8 @@ import com.minecraftcitiesnetwork.vaultstorage.database.VaultItem;
 import com.minecraftcitiesnetwork.vaultstorage.database.VaultItemEntity;
 import com.minecraftcitiesnetwork.vaultstorage.menu.LoadingMenu;
 import com.minecraftcitiesnetwork.vaultstorage.menu.ParentMenu;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -208,19 +206,23 @@ public final class VaultInventoryService implements Listener {
         }
         Runnable afterClose = view.afterClose();
         Executor mainThread = plugin.mainThread();
-        if (!VaultViewRules.savesOnClose(view.action())) {
+        Claim claim = view.claim();
+        if (claim == null) {
             if (afterClose != null) {
                 mainThread.execute(afterClose);
             }
             return;
         }
         List<VaultItem> items = itemsOf(event.getInventory());
-        CompletableFuture.runAsync(() -> saveAndRelease(plugin, view, items), plugin.databaseExecutor())
-                .exceptionally(failure -> {
-                    plugin.getLogger().log(Level.SEVERE, "Vault " + view.vault() + " could not be saved after "
-                            + event.getPlayer().getName() + " edited it. It keeps its previous contents; what they"
-                            + " put in is lost and what they took out exists twice.", failure);
-                    event.getPlayer().sendMessage(plugin.text().of(MessageKeys.INVENTORY_SAVE_FAILED));
+        CompletableFuture.supplyAsync(() -> saveAndRelease(plugin, claim, items), plugin.databaseExecutor())
+                .handle((result, failure) -> {
+                    if (!(result instanceof ReplaceResult.Replaced)) {
+                        plugin.getLogger().log(Level.SEVERE, "Vault " + claim.vault() + " could not be saved after "
+                                + event.getPlayer().getName() + " edited it: " + notSaved(result) + ". It keeps its"
+                                + " previous contents; what they put in is lost and what they took out exists"
+                                + " twice.", failure);
+                        event.getPlayer().sendMessage(plugin.text().of(MessageKeys.INVENTORY_SAVE_FAILED));
+                    }
                     return null;
                 })
                 .thenRunAsync(() -> {
@@ -231,34 +233,26 @@ public final class VaultInventoryService implements Listener {
     }
 
     private static @NotNull List<VaultItem> itemsOf(@NotNull Inventory inventory) {
-        ItemStack[] contents = inventory.getContents();
-        List<VaultItem> items = new ArrayList<>();
-        for (int slot = 0; slot < contents.length; slot++) {
-            ItemStack stack = contents[slot];
-            if (stack != null && !stack.getType().isAir() && stack.getAmount() > 0) {
-                items.add(ItemSerialization.toVaultItem(slot, stack));
-            }
-        }
-        return items;
+        return ItemSerialization.toVaultItems(inventory.getContents());
     }
 
     /** Saves, then gives the vault back even if the save failed, so it is not held forever. */
-    private static void saveAndRelease(@NotNull VaultStoragePlugin plugin, @NotNull VaultView view, @NotNull List<VaultItem> items) {
-        UUID vault = view.vault();
-        Claim claim = Objects.requireNonNull(view.claim(), "a view that saves holds its vault");
+    private static @NotNull ReplaceResult saveAndRelease(@NotNull VaultStoragePlugin plugin, @NotNull Claim claim,
+                                                         @NotNull List<VaultItem> items) {
         try {
-            // Anything but a save is reported like a failed one: the editor is told and the log
-            // says what was lost.
-            switch (plugin.repository().replaceItems(claim, items)) {
-                case ReplaceResult.Replaced saved -> { }
-                case ReplaceResult.NoSuchVault gone ->
-                        throw new IllegalStateException("vault " + vault + " no longer exists");
-                case ReplaceResult.NotHeld lost ->
-                        throw new IllegalStateException("vault " + vault + " is no longer held by this edit");
-            }
+            return plugin.repository().replaceItems(claim, items);
         } finally {
             plugin.claimReleases().release(claim);
         }
+    }
+
+    /** Why a save did not happen, for the log. */
+    private static @NotNull String notSaved(@Nullable ReplaceResult result) {
+        return switch (result) {
+            case ReplaceResult.NoSuchVault gone -> "the vault no longer exists";
+            case ReplaceResult.NotHeld lost -> "this edit no longer holds the vault";
+            case null, default -> "the database failed";
+        };
     }
 
     /**
@@ -268,11 +262,15 @@ public final class VaultInventoryService implements Listener {
     public void saveOpenViews() {
         for (Player player : Bukkit.getOnlinePlayers()) {
             Inventory open = player.getOpenInventory().getTopInventory();
-            if (!(open.getHolder() instanceof VaultView view) || !VaultViewRules.savesOnClose(view.action())) {
+            if (!(open.getHolder() instanceof VaultView view) || view.claim() == null) {
                 continue;
             }
             try {
-                saveAndRelease(plugin, view, itemsOf(open));
+                ReplaceResult result = saveAndRelease(plugin, view.claim(), itemsOf(open));
+                if (!(result instanceof ReplaceResult.Replaced)) {
+                    plugin.getLogger().severe("Vault " + view.vault() + " could not be saved at shutdown: "
+                            + notSaved(result) + ".");
+                }
             } catch (RuntimeException ex) {
                 plugin.getLogger().log(Level.SEVERE, "Vault " + view.vault() + " could not be saved at shutdown.", ex);
             }

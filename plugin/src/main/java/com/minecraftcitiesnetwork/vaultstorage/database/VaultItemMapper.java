@@ -15,6 +15,11 @@ public interface VaultItemMapper {
 
     int deleteByVault(@NotNull UUID vaultUuid);
 
-    /** Deletes the items in slots {@code firstSlot} to {@code lastSlot}, both included. */
-    int deleteSlots(@NotNull UUID vaultUuid, int firstSlot, int lastSlot);
+    /**
+     * Deletes the items in slots {@code firstSlot} to {@code lastSlot}, both included, unless
+     * someone holds the vault.
+     *
+     * @return the number of rows deleted
+     */
+    int deleteFreeSlots(@NotNull UUID vaultUuid, int firstSlot, int lastSlot);
 }

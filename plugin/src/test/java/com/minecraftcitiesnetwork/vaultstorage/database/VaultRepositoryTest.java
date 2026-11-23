@@ -153,11 +153,11 @@ class VaultRepositoryTest extends DatabaseTestBase {
     @Test
     void aClaimFromBeforeARestartDoesNotReleaseTheNextHolders() {
         UUID vault = repository.create(vaultFor(OWNER, WORLD, 10), List.of());
-        ClaimResult.Claimed stale = Assertions.assertInstanceOf(ClaimResult.Claimed.class, repository.claim(vault));
+        Claim stale = claimOf(vault);
         repository.releaseAllClaims();
-        Assertions.assertInstanceOf(ClaimResult.Claimed.class, repository.claim(vault));
+        claimOf(vault);
 
-        repository.release(stale.claim());
+        repository.release(stale);
 
         Assertions.assertInstanceOf(ClaimResult.AlreadyClaimed.class, repository.claim(vault));
     }
@@ -184,14 +184,16 @@ class VaultRepositoryTest extends DatabaseTestBase {
 
         AppendResult appended = repository.appendItems(OWNER, List.of(item(0), item(1)), MAX_SLOTS,
                 vaultFor(OWNER, WORLD, 3));
-        Assertions.assertEquals(withRoom, Assertions.assertInstanceOf(AppendResult.Appended.class, appended).vault());
+        Assertions.assertFalse(appended.created());
+        Assertions.assertEquals(withRoom, appended.vault());
         Assertions.assertEquals(List.of(0, 1, 2, 3), found(withRoom).items().stream().map(VaultItemEntity::slot).toList());
     }
 
     @Test
     void appendingCreatesAVaultWhenNoneHasRoom() {
         AppendResult created = repository.appendItems(OWNER, List.of(item(0)), MAX_SLOTS, vaultFor(OWNER, WORLD, 3));
-        UUID vault = Assertions.assertInstanceOf(AppendResult.Created.class, created).vault();
+        Assertions.assertTrue(created.created());
+        UUID vault = created.vault();
         Assertions.assertEquals(1, found(vault).items().size());
         Assertions.assertEquals(3, found(vault).vault().x());
     }
@@ -212,7 +214,7 @@ class VaultRepositoryTest extends DatabaseTestBase {
         AppendResult appended = repository.appendItems(OWNER, List.of(item(0), item(1)), MAX_SLOTS,
                 vaultFor(OWNER, WORLD, 3));
 
-        repository.undoAppend(appended);
+        Assertions.assertTrue(repository.undoAppend(appended));
 
         Assertions.assertEquals(List.of(0, 1), found(vault).items().stream().map(VaultItemEntity::slot).toList());
     }
@@ -274,9 +276,10 @@ class VaultRepositoryTest extends DatabaseTestBase {
     @Test
     void deletingRemovesTheVaultAndItsItems() throws SQLException {
         UUID vault = repository.create(vaultFor(OWNER, WORLD, 10), List.of(item(0), item(1)));
-        Assertions.assertInstanceOf(DeleteResult.Deleted.class, repository.delete(vault));
+        Claim claim = claimOf(vault);
+        Assertions.assertInstanceOf(DeleteResult.Deleted.class, repository.delete(claim));
         Assertions.assertEquals(0, queryLong("SELECT COUNT(*) FROM VaultItem"));
-        Assertions.assertInstanceOf(DeleteResult.NoSuchVault.class, repository.delete(vault));
+        Assertions.assertInstanceOf(DeleteResult.NoSuchVault.class, repository.delete(claim));
     }
 
     @Test
@@ -311,6 +314,49 @@ class VaultRepositoryTest extends DatabaseTestBase {
         Assertions.assertInstanceOf(ReplaceResult.NotHeld.class, repository.replaceItems(stale, List.of()));
         Assertions.assertInstanceOf(ReplaceResult.Replaced.class, repository.replaceItems(next, List.of(item(3))));
         Assertions.assertEquals(List.of(3), found(vault).items().stream().map(VaultItemEntity::slot).toList());
+    }
+
+    @Test
+    void aVaultCreatedForACaptureIsHeldUntilTheCaptureLetsGo() {
+        Claim held = repository.createClaimed(vaultFor(OWNER, WORLD, 10), List.of(item(0)));
+
+        Assertions.assertInstanceOf(ClaimResult.AlreadyClaimed.class, repository.claim(held.vault()));
+        Assertions.assertInstanceOf(OwnerResult.InUse.class, repository.setOwner(held.vault(), OTHER_OWNER));
+
+        repository.release(held);
+        Assertions.assertInstanceOf(ClaimResult.Claimed.class, repository.claim(held.vault()));
+    }
+
+    @Test
+    void aVaultSomeoneHoldsIsNotTransferred() {
+        UUID vault = repository.create(vaultFor(OWNER, WORLD, 10), List.of());
+        Claim claim = claimOf(vault);
+
+        Assertions.assertInstanceOf(OwnerResult.InUse.class, repository.setOwner(vault, OTHER_OWNER));
+        Assertions.assertEquals(OWNER, found(vault).vault().ownerUuid());
+
+        repository.release(claim);
+        Assertions.assertInstanceOf(OwnerResult.Changed.class, repository.setOwner(vault, OTHER_OWNER));
+    }
+
+    @Test
+    void anAppendIsNotUndoneInAVaultSomeoneHasOpened() {
+        UUID vault = repository.create(vaultFor(OWNER, WORLD, 2), List.of(item(0)));
+        AppendResult appended = repository.appendItems(OWNER, List.of(item(0)), MAX_SLOTS, vaultFor(OWNER, WORLD, 3));
+        claimOf(vault);
+
+        Assertions.assertFalse(repository.undoAppend(appended));
+        Assertions.assertEquals(List.of(0, 1), found(vault).items().stream().map(VaultItemEntity::slot).toList());
+    }
+
+    @Test
+    void undoingTheAppendThatCreatedAVaultLeavesWhatAnotherAppendPutInIt() {
+        AppendResult created = repository.appendItems(OWNER, List.of(item(0)), MAX_SLOTS, vaultFor(OWNER, WORLD, 3));
+        repository.appendItems(OWNER, List.of(item(0)), MAX_SLOTS, vaultFor(OWNER, WORLD, 3));
+
+        repository.undoAppend(created);
+
+        Assertions.assertEquals(List.of(1), found(created.vault()).items().stream().map(VaultItemEntity::slot).toList());
     }
 
     private static Claim claimOf(UUID vault) {

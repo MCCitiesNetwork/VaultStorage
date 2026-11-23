@@ -144,6 +144,7 @@ public final class MessageKeys {
     public static final String COMMAND_TRANSFER_RESOLVING = "command.transfer.resolving";
     public static final String COMMAND_TRANSFER_UNKNOWN_PLAYER = "command.transfer.unknown-player";
     public static final String COMMAND_TRANSFER_NOT_FOUND = "command.transfer.not-found";
+    public static final String COMMAND_TRANSFER_IN_USE = "command.transfer.in-use";
     public static final String COMMAND_TRANSFER_DONE = "command.transfer.done";
     public static final String COMMAND_TRANSFER_FAILED = "command.transfer.failed";
     public static final String COMMAND_OPEN_UNKNOWN_ACTION = "command.open.unknown-action";

@@ -1,6 +1,8 @@
 package com.minecraftcitiesnetwork.vaultstorage.vault;
 
 import com.minecraftcitiesnetwork.vaultstorage.database.VaultItem;
+import java.util.ArrayList;
+import java.util.List;
 import org.jetbrains.annotations.Nullable;
 import org.bukkit.inventory.ItemStack;
 import org.jetbrains.annotations.NotNull;
@@ -14,6 +16,18 @@ public final class ItemSerialization {
     /** The stack as it is stored, for this slot. */
     public static @NotNull VaultItem toVaultItem(int slot, @NotNull ItemStack stack) {
         return new VaultItem(slot, stack.getAmount(), toBytes(stack));
+    }
+
+    /** An inventory's contents as they are stored: each stack with its slot, empty slots left out. */
+    public static @NotNull List<VaultItem> toVaultItems(ItemStack @NotNull [] contents) {
+        List<VaultItem> items = new ArrayList<>();
+        for (int slot = 0; slot < contents.length; slot++) {
+            ItemStack stack = contents[slot];
+            if (stack != null && !stack.isEmpty()) {
+                items.add(toVaultItem(slot, stack));
+            }
+        }
+        return items;
     }
 
     /**

@@ -192,7 +192,7 @@ public final class VaultCapturePolicy {
         if (block == null) {
             return "<null>";
         }
-        return block.getWorld().getName() + "@" + block.getX() + "," + block.getY() + "," + block.getZ() + "[" + block.getType() + "]";
+        return ContainerBlocks.describe(block) + " [" + block.getType() + "]";
     }
 
 }

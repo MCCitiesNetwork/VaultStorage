@@ -3,7 +3,6 @@ package com.minecraftcitiesnetwork.vaultstorage.capture;
 import com.minecraftcitiesnetwork.vaultstorage.bolt.BoltService;
 import com.minecraftcitiesnetwork.vaultstorage.database.VaultItem;
 import com.minecraftcitiesnetwork.vaultstorage.vault.ItemSerialization;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.logging.Level;
@@ -13,7 +12,6 @@ import org.bukkit.block.Block;
 import org.bukkit.block.Chest;
 import org.bukkit.block.Container;
 import org.bukkit.inventory.Inventory;
-import org.bukkit.inventory.ItemStack;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -46,16 +44,7 @@ public final class BukkitContainerAccess implements ContainerAccess<Block> {
         if (!(block.getState() instanceof Container container)) {
             throw new IllegalArgumentException("Target block is not a container.");
         }
-        ItemStack[] contents = inventoryOf(container).getContents();
-        List<VaultItem> items = new ArrayList<>();
-        for (int slot = 0; slot < contents.length; slot++) {
-            ItemStack stack = contents[slot];
-            if (stack == null || stack.getType() == Material.AIR || stack.getAmount() <= 0) {
-                continue;
-            }
-            items.add(ItemSerialization.toVaultItem(slot, stack));
-        }
-        return items;
+        return ItemSerialization.toVaultItems(inventoryOf(container).getContents());
     }
 
     @Override
@@ -84,7 +73,7 @@ public final class BukkitContainerAccess implements ContainerAccess<Block> {
             } catch (RuntimeException ex) {
                 // The items are safely stored; a protection left behind is the lesser problem.
                 this.logger.log(Level.WARNING, "Could not move the Bolt protection at "
-                        + block.getWorld().getName() + " " + block.getX() + "," + block.getY() + "," + block.getZ(), ex);
+                        + ContainerBlocks.describe(block), ex);
             }
         }
         if (block.getState() instanceof Container container) {

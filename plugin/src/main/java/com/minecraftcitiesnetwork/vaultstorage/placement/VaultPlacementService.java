@@ -101,9 +101,11 @@ public final class VaultPlacementService {
         return CompletableFuture.supplyAsync(() -> {
             try {
                 if (!(this.store.delete(claim) instanceof DeleteResult.Deleted)) {
-                    // Its claim was lost, to a restart or another server on this database.
+                    // The claim was lost while the block was being placed: every claim is
+                    // released when a server starts on this database.
                     this.logger.log(Level.SEVERE, "Vault " + vaultUuid + " was placed at " + describe(targetLoc)
-                            + " but was no longer this placement's to delete. Delete it by hand.");
+                            + " but was no longer this placement's to delete. If it is still listed, delete it"
+                            + " by hand.");
                 }
             } catch (RuntimeException ex) {
                 // The block is in the world. The vault stays claimed, so it cannot be placed again.

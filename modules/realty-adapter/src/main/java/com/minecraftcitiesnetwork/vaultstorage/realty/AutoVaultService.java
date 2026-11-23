@@ -186,7 +186,7 @@ public final class AutoVaultService {
                 : vaultBlocks(key.worldId(), displaced, initiator, onVaulted, sweep);
         CompletableFuture<Void> hangingsDispatched =
                 this.settings.get().includeHangings()
-                        ? vaultHangings(key.worldId(), region.boundingBox(), filter, initiator, onVaulted, sweep)
+                        ? vaultHangings(key.worldId(), region.boundingBox(), filter, onVaulted, sweep)
                         : CompletableFuture.completedFuture(null);
 
         CompletableFuture<Void> unlockedDispatched =
@@ -287,7 +287,7 @@ public final class AutoVaultService {
      * by coordinate, so every chunk in the region's bounds is loaded and its hanging entities inspected.
      */
     private @NotNull CompletableFuture<Void> vaultHangings(@NotNull UUID worldId, @NotNull BoundingBox box,
-                                                          @NotNull SweepFilter filter, @NotNull UUID initiator,
+                                                          @NotNull SweepFilter filter,
                                                           @NotNull Runnable onVaulted, @NotNull Sweep sweep) {
         VaultCaptureService captureService = plugin.captureService();
         BoltService bolt = plugin.bolt();
@@ -302,7 +302,7 @@ public final class AutoVaultService {
                         UUID owner = bolt.getOwner(entity);
                         if (owner == null || !filter.shouldVault(owner, entity.getX(), entity.getY(), entity.getZ())) continue;
                         sweep.track(owner, captureService.captureHangingOfflineAsync(
-                                (Hanging) entity, owner, initiator, onVaulted));
+                                (Hanging) entity, owner, onVaulted));
                     }
                 });
     }

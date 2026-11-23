@@ -97,7 +97,7 @@ public final class VaultCaptureService {
             this.plugin.bolt().removeProtection(block);
         } catch (RuntimeException ex) {
             this.plugin.getLogger().log(Level.WARNING, "Could not remove the Bolt protection at "
-                    + block.getWorld().getName() + " " + block.getX() + "," + block.getY() + "," + block.getZ() + ".", ex);
+                    + ContainerBlocks.describe(block) + ".", ex);
         }
     }
 
@@ -107,11 +107,19 @@ public final class VaultCaptureService {
      */
     @NotNull CompletableFuture<CaptureResult> storeThenRemove(@NotNull Block block, @NotNull UUID owner,
                                                                     @NotNull List<Block> otherHalves) {
-        CapturePipeline<Block> pipeline = new CapturePipeline<>(CaptureStore.inNewVault(plugin.repository()),
+        CapturePipeline<Block> pipeline = new CapturePipeline<>(
+                CaptureStore.inNewVault(plugin.repository(), plugin.claimReleases()),
                 new BukkitContainerAccess(plugin.bolt(), owner, otherHalves, plugin.getLogger()),
                 plugin.databaseExecutor(), plugin.mainThread(),
                 plugin.getLogger());
         return pipeline.capture(block, owner);
+    }
+
+    /** Tells the actor the capture stopped because the owner's id could not be checked, and logs where. */
+    void ownerUnknown(@NotNull Player actor, @NotNull Block at) {
+        actor.sendMessage(plugin.text().of(MessageKeys.CAPTURE_OWNER_UNKNOWN));
+        plugin.getLogger().warning("Capture by " + actor.getName() + " at " + ContainerBlocks.describe(at)
+                + " stopped: the owner's id could not be checked.");
     }
 
     /**
@@ -221,12 +229,7 @@ public final class VaultCaptureService {
         // The owner is validated first; the rest runs on the main thread, where the pipeline starts.
         this.owners.validate(finalOwner, actor).thenAcceptAsync(validatedOwner -> {
             if (validatedOwner == null) {
-                actor.sendMessage(plugin.text().of(MessageKeys.CAPTURE_OWNER_UNKNOWN));
-                plugin.getLogger().warning(
-                    "[VaultCaptureService] Direct vault capture aborted for " + actor.getName() +
-                    " at " + block.getWorld().getName() + ":" + block.getX() + "," + block.getY() + "," + block.getZ() +
-                    " - could not validate owner UUID"
-                );
+                ownerUnknown(actor, block);
                 onDoneMain.accept(false);
                 return;
             }
@@ -275,7 +278,7 @@ public final class VaultCaptureService {
         return this.owners.validate(decision.containerOwner(), actor)
                 .thenComposeAsync(owner -> {
                     if (owner == null) {
-                        actor.sendMessage(this.plugin.text().of(MessageKeys.CAPTURE_OWNER_UNKNOWN));
+                        ownerUnknown(actor, supporting);
                         return CompletableFuture.completedFuture(false);
                     }
                     return storeThenRemove(hang, owner).thenApply(result -> report(actor, result, supporting, owner));
@@ -301,9 +304,8 @@ public final class VaultCaptureService {
     }
 
     /**
-     * Offline-safe capture: no live {@link Player} and no policy evaluation; the caller decides what to vault.
-     * The vault is owned by {@code boltOwner} (falls back to {@code initiatorUuid} when null) and created by
-     * {@code initiatorUuid}. Must be called on the main thread; persistence runs async (fire-and-forget).
+     * A capture with no player and no policy: the caller has decided what to vault and for whom.
+     * Call on the main thread. The future says whether a vault was stored.
      */
     public @NotNull CompletableFuture<Boolean> captureOfflineAsync(@NotNull Block block,
                                     @NotNull UUID initiatorUuid,
@@ -317,10 +319,8 @@ public final class VaultCaptureService {
 
         UUID finalOwner = outcome.finalOwner();
         if (!UniqueIdentifierResolver.isValidUUID(finalOwner)) {
-            plugin.getLogger().warning(
-                    "[VaultCaptureService] Offline capture aborted at " + block.getWorld().getName() + ":"
-                            + block.getX() + "," + block.getY() + "," + block.getZ()
-                            + " - invalid vault owner UUID: " + finalOwner);
+            plugin.getLogger().warning("Offline capture at " + ContainerBlocks.describe(block)
+                    + " stopped: the vault owner's id is not valid: " + finalOwner);
             return CompletableFuture.completedFuture(false);
         }
 
@@ -354,7 +354,7 @@ public final class VaultCaptureService {
      * <p>Must be called on the main thread with the entity loaded; persistence runs async.</p>
      */
     public @NotNull CompletableFuture<Boolean> captureHangingOfflineAsync(@NotNull Hanging hang, @NotNull UUID boltOwner,
-                                           @NotNull UUID initiatorUuid, @NotNull Runnable onVaulted) {
+                                                                          @NotNull Runnable onVaulted) {
         if (!HangingVaultSupport.isSupported(hang)) {
             return CompletableFuture.completedFuture(false);
         }

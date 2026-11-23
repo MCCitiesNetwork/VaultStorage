@@ -10,4 +10,8 @@ public sealed interface OwnerResult {
 
     record NoSuchVault() implements OwnerResult {
     }
+
+    /** Someone holds the vault: it is being edited, placed or deleted. Nothing was changed. */
+    record InUse() implements OwnerResult {
+    }
 }

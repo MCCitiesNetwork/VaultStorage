@@ -1,6 +1,5 @@
 package com.minecraftcitiesnetwork.vaultstorage.database;
 
-import com.minecraftcitiesnetwork.vaultstorage.placement.PlacementStore;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -8,6 +7,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 /**
  * Every way the plugin reads or writes vaults. One method is one unit of work: it opens one
@@ -16,7 +16,7 @@ import org.jetbrains.annotations.NotNull;
  * <p>Every method blocks on the database and must be called off the main thread. Outcomes a
  * caller must handle are result types; only a broken database is an exception.
  */
-public final class VaultRepository implements PlacementStore {
+public final class VaultRepository {
 
     private final @NotNull VaultDatabase database;
     private final @NotNull Clock clock;
@@ -43,19 +43,34 @@ public final class VaultRepository implements PlacementStore {
         return rows;
     }
 
-    private @NotNull UUID insertVault(@NotNull SqlSessionWrapper wrapper, @NotNull NewVault vault) {
+    private @NotNull UUID insertVault(@NotNull SqlSessionWrapper wrapper, @NotNull NewVault vault,
+                                      @Nullable UUID token) {
         UUID uuid = UUID.randomUUID();
         Instant now = now();
         wrapper.worlds().upsert(vault.worldUuid(), vault.worldName());
         wrapper.vaults().insert(new VaultEntity(uuid, vault.ownerUuid(), vault.worldUuid(), vault.x(), vault.y(),
-                vault.z(), vault.material(), vault.blockData(), now, now));
+                vault.z(), vault.material(), vault.blockData(), now, now), token);
         return uuid;
     }
 
-    /** Creates a vault and its items together: either all of it is stored or none of it. */
-    public @NotNull UUID create(@NotNull NewVault vault, @NotNull List<VaultItem> items) {
+    /** Creates a vault nobody holds, and its items. For tests in this package: a capture uses {@link #createClaimed}. */
+    @NotNull UUID create(@NotNull NewVault vault, @NotNull List<VaultItem> items) {
+        return create(vault, items, null);
+    }
+
+    /**
+     * Creates a vault already held by the caller, and its items: either all of it is stored or
+     * none of it. For a capture, which may still have to take the vault back: until it lets go,
+     * nobody can open, place or transfer what it stored.
+     */
+    public @NotNull Claim createClaimed(@NotNull NewVault vault, @NotNull List<VaultItem> items) {
+        UUID token = UUID.randomUUID();
+        return new Claim(create(vault, items, token), token);
+    }
+
+    private @NotNull UUID create(@NotNull NewVault vault, @NotNull List<VaultItem> items, @Nullable UUID token) {
         try (SqlSessionWrapper wrapper = this.database.openSession()) {
-            UUID uuid = insertVault(wrapper, vault);
+            UUID uuid = insertVault(wrapper, vault, token);
             if (!items.isEmpty()) {
                 wrapper.items().insertAll(rows(uuid, items, 0));
             }
@@ -104,40 +119,34 @@ public final class VaultRepository implements PlacementStore {
         }
     }
 
-    /**
-     * Deletes a vault nobody can have claimed; its items go with it. For a capture taking back
-     * the vault it has just stored. A vault a player can reach is deleted with its {@link Claim}.
-     */
-    public @NotNull DeleteResult delete(@NotNull UUID vault) {
-        try (SqlSessionWrapper wrapper = this.database.openSession(true)) {
-            return wrapper.vaults().delete(vault) > 0 ? new DeleteResult.Deleted() : new DeleteResult.NoSuchVault();
-        }
-    }
-
     /** Deletes the vault this claim holds; its items go with it. Deletes nothing it does not hold. */
-    @Override
     public @NotNull DeleteResult delete(@NotNull Claim claim) {
-        try (SqlSessionWrapper wrapper = this.database.openSession()) {
-            DeleteResult result;
+        try (SqlSessionWrapper wrapper = this.database.openSession(true)) {
             if (wrapper.vaults().deleteHeld(claim.vault(), claim.token()) > 0) {
-                result = new DeleteResult.Deleted();
-            } else {
-                result = wrapper.vaults().selectByUuid(claim.vault()) == null
-                        ? new DeleteResult.NoSuchVault() : new DeleteResult.NotHeld();
+                return new DeleteResult.Deleted();
             }
-            wrapper.session().commit();
-            return result;
+            return exists(wrapper, claim.vault()) ? new DeleteResult.NotHeld() : new DeleteResult.NoSuchVault();
         }
     }
 
-    /** Reads before it writes, because the caller reports who owned the vault before. */
+    /** For a write that changed no row: whether that is because someone else holds the vault. */
+    private static boolean exists(@NotNull SqlSessionWrapper wrapper, @NotNull UUID vault) {
+        return wrapper.vaults().selectByUuid(vault) != null;
+    }
+
+    /**
+     * Gives the vault to another owner, unless someone holds it. Reads before it writes, because
+     * the caller reports who owned the vault before.
+     */
     public @NotNull OwnerResult setOwner(@NotNull UUID vault, @NotNull UUID owner) {
         try (SqlSessionWrapper wrapper = this.database.openSession()) {
             UUID previous = wrapper.vaults().selectOwnerForUpdate(vault);
             if (previous == null) {
                 return new OwnerResult.NoSuchVault();
             }
-            wrapper.vaults().updateOwner(vault, owner, now());
+            if (wrapper.vaults().updateOwner(vault, owner, now()) == 0) {
+                return new OwnerResult.InUse();
+            }
             wrapper.session().commit();
             return new OwnerResult.Changed(previous);
         }
@@ -152,8 +161,7 @@ public final class VaultRepository implements PlacementStore {
         UUID vault = claim.vault();
         try (SqlSessionWrapper wrapper = this.database.openSession()) {
             if (wrapper.vaults().touchHeld(vault, claim.token(), now()) == 0) {
-                return wrapper.vaults().selectByUuid(vault) == null
-                        ? new ReplaceResult.NoSuchVault() : new ReplaceResult.NotHeld();
+                return exists(wrapper, vault) ? new ReplaceResult.NotHeld() : new ReplaceResult.NoSuchVault();
             }
             wrapper.items().deleteByVault(vault);
             if (!items.isEmpty()) {
@@ -176,17 +184,17 @@ public final class VaultRepository implements PlacementStore {
             VaultRoom room = wrapper.vaults().selectOldestWithRoom(owner, needed, maxSlots);
             AppendResult result;
             if (room == null) {
-                UUID created = insertVault(wrapper, ifNoneFits);
+                UUID created = insertVault(wrapper, ifNoneFits, null);
                 if (!items.isEmpty()) {
                     wrapper.items().insertAll(rows(created, items, 0));
                 }
-                result = new AppendResult.Created(created);
+                result = new AppendResult(created, 0, needed, true);
             } else {
                 if (!items.isEmpty()) {
                     wrapper.items().insertAll(rows(room.uuid(), items, room.highestSlot() + 1));
                 }
                 wrapper.vaults().touch(room.uuid(), now());
-                result = new AppendResult.Appended(room.uuid(), room.highestSlot() + 1, needed);
+                result = new AppendResult(room.uuid(), room.highestSlot() + 1, needed, false);
             }
             wrapper.session().commit();
             return result;
@@ -201,20 +209,24 @@ public final class VaultRepository implements PlacementStore {
     }
 
     /**
-     * Takes back an append: the slots it filled, or the vault it created. For a capture that
-     * stored something and then found it changed or gone in the world.
+     * Takes back an append: the slots it filled, and the vault it created if that is empty
+     * again. For a capture that stored something and then found it changed or gone in the world.
+     *
+     * @return false when someone holds the vault by now, or it no longer has those slots.
+     *         Nothing was taken back: what they see and save includes the appended items.
      */
-    public void undoAppend(@NotNull AppendResult append) {
+    public boolean undoAppend(@NotNull AppendResult append) {
         try (SqlSessionWrapper wrapper = this.database.openSession()) {
-            switch (append) {
-                case AppendResult.Appended appended -> wrapper.items().deleteSlots(appended.vault(),
-                        appended.firstSlot(), appended.firstSlot() + appended.slots() - 1);
-                case AppendResult.Created created -> {
-                    wrapper.items().deleteByVault(created.vault());
-                    wrapper.vaults().delete(created.vault());
-                }
+            int removed = wrapper.items().deleteFreeSlots(append.vault(), append.firstSlot(),
+                    append.firstSlot() + append.slots() - 1);
+            if (removed == 0 && append.slots() > 0) {
+                return false;
+            }
+            if (append.created()) {
+                wrapper.vaults().deleteFreeIfEmpty(append.vault());
             }
             wrapper.session().commit();
+            return true;
         }
     }
 
@@ -223,13 +235,11 @@ public final class VaultRepository implements PlacementStore {
      * database: of two callers, exactly one gets {@link ClaimResult.Claimed}, with the claim
      * that releases it.
      */
-    @Override
     public @NotNull ClaimResult claim(@NotNull UUID vault) {
         try (SqlSessionWrapper wrapper = this.database.openSession()) {
             Claim claim = new Claim(vault, UUID.randomUUID());
             if (wrapper.vaults().claim(vault, claim.token()) == 0) {
-                return wrapper.vaults().selectByUuid(vault) == null
-                        ? new ClaimResult.NoSuchVault() : new ClaimResult.AlreadyClaimed();
+                return exists(wrapper, vault) ? new ClaimResult.AlreadyClaimed() : new ClaimResult.NoSuchVault();
             }
             VaultEntity entity = wrapper.vaults().selectByUuid(vault);
             if (entity == null) {
@@ -245,7 +255,6 @@ public final class VaultRepository implements PlacementStore {
      * Gives a claimed vault back. Does nothing if the vault is gone or is no longer held with
      * this claim: it was released at a restart and may be someone else's by now.
      */
-    @Override
     public void release(@NotNull Claim claim) {
         try (SqlSessionWrapper wrapper = this.database.openSession(true)) {
             wrapper.vaults().release(claim.vault(), claim.token());

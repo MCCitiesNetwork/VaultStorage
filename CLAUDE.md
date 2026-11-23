@@ -372,8 +372,11 @@ config and reloading), `database.ts`, `dialogs.ts`.
   in use exactly while that column is not null; there is no `status` column. Only the
   claim it was taken with releases a vault, saves an edit to it or deletes it, so a path that
   never got the claim, or that held it before a restart, cannot touch someone else's. Whoever
-  claims keeps the `Claim` it was given. `VaultRepository.delete(UUID)` is for a capture taking
-  back a vault it has just stored, which nobody can have claimed.
+  claims keeps the `Claim` it was given. Nothing deletes a vault by its id alone.
+- **A capture holds the vault it creates** (`createClaimed`) until it has removed the container,
+  then lets go through `ClaimReleases`. A vault made for item frames is not held, so the next
+  frame joins it; undoing such an append leaves a vault someone has opened meanwhile.
+- **A transfer does not move a vault someone holds**: `setOwner` answers `InUse`.
 - **A claim is given back through `ClaimReleases`**, never `VaultRepository.release` directly: it
   retries while the database is down, so an outage does not leave a vault in use until a restart.
 - **A sweep captures both halves of a double chest**, the half with items first. Bolt keeps one
@@ -382,6 +385,9 @@ config and reloading), `database.ts`, `dialogs.ts`.
   someone is looking at one other player's things.
 - **Editing a vault claims it.** Every claim is released: on close, on a failed open, at
   shutdown, and for all vaults at startup.
+- **One server per database.** Startup releases every claim in the table, so a second server
+  on the same database would release the first one's. Tokens keep that from losing an edit,
+  but a placement under way would leave both its block and its vault.
 - **A module that owns a table** keeps its own migrator and version table, registers its mapper
   with `VaultDatabase.registerMapper`, and reads it through `SqlSessionWrapper.mapper`. The
   auto-vault module's `PendingSweepStore` is the example.

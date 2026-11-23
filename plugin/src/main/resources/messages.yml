@@ -192,6 +192,8 @@ command:
     unknown-player: 'No player called <player> has been on this server. Check the spelling.'
     # <vault>
     not-found: 'No vault has the id <vault>. Copy the id from the vault''s list entry.'
+    # <vault>
+    in-use: 'Vault <vault> is in use: someone has it open, or is placing or deleting it. Try again in a moment.'
     # <vault> <from> <to>
     done: 'Vault <vault> transferred from <from> to <to>.'
     failed: 'The transfer failed. See the server log.'

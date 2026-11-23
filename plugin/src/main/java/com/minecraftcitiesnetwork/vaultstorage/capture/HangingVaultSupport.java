@@ -18,9 +18,7 @@ import java.util.List;
  */
 public final class HangingVaultSupport {
 
-    /**
-     * Max slots when merging hangings into an existing vault (27, one single chest). Tail append only; does not use a 54-slot grid.
-     */
+    /** How many slots a vault that holds item frames and paintings may fill: one single chest. */
     public static final int MAX_VAULT_SLOTS = 27;
 
     private HangingVaultSupport() {}
@@ -47,10 +45,7 @@ public final class HangingVaultSupport {
      * @return true if there is nothing to treat as contents
      */
     public static boolean isItemFrameDisplayEmpty(@NotNull ItemFrame frame) {
-        ItemStack inner = frame.getItem();
-        if (inner == null) return true;
-        if (inner.getType() == Material.AIR) return true;
-        return inner.getAmount() <= 0;
+        return frame.getItem().isEmpty();
     }
 
     /**
