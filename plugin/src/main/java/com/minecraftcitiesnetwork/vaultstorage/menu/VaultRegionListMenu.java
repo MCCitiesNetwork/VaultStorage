@@ -33,7 +33,7 @@ public final class VaultRegionListMenu extends ChildMenuImp {
 
     private final String query; // used only in browse mode
     private final int page; // 0-based
-    private final List<String> subsetIds; // when non-null, list only these region ids
+    private final @Nullable List<String> subsetIds; // when non-null, list only these region ids
 
     /** Browse mode: filter by query across all regions in world. */
     public VaultRegionListMenu(
@@ -198,7 +198,7 @@ public final class VaultRegionListMenu extends ChildMenuImp {
         var session = plugin.sessionManager().getOrCreate(player.getUniqueId());
         long now = System.currentTimeMillis();
         long last = session.lastScanTime();
-        long cooldownMs = plugin.settings().get().scan().cooldownSeconds() * 1000;
+        long cooldownMs = plugin.settings().scan().cooldownSeconds() * 1000;
         if (now - last < cooldownMs) {
             long remaining = (cooldownMs - (now - last)) / 1000;
             player.sendMessage(plugin.text().of(MessageKeys.REGIONS_SCAN_COOLDOWN, Map.of("%time%", String.valueOf(remaining))));

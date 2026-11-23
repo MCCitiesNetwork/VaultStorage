@@ -1,5 +1,7 @@
 package com.minecraftcitiesnetwork.vaultstorage.menu;
 
+import java.util.Objects;
+import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.NotNull;
 import com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin;
 import io.papermc.paper.dialog.Dialog;
@@ -16,7 +18,7 @@ public abstract class ParentMenuImp implements ParentMenu {
     protected final @NotNull VaultStoragePlugin plugin;
     protected final Player player;
     private final String id;
-    private Dialog dialog;
+    private @Nullable Dialog dialog;
 
     protected ParentMenuImp(@NotNull VaultStoragePlugin plugin, @NotNull Player player, @NotNull String id) {
         this.plugin = plugin;
@@ -31,7 +33,9 @@ public abstract class ParentMenuImp implements ParentMenu {
     public @NotNull String id() { return id; }
 
     @Override
-    public @NotNull Dialog dialog() { return dialog; }
+    public @NotNull Dialog dialog() {
+        return Objects.requireNonNull(dialog, "the menu's constructor sets its dialog");
+    }
 
     @Override
     public void open() {

@@ -5,6 +5,9 @@ paper-api = "26.3.+"
 annotations = "24.1.0"
 junit = "5.14.3"
 checkstyle = "14.4.0"
+errorprone = "2.53.0"
+errorprone-plugin = "5.2.0"
+nullaway = "0.14.4"
 shadow = "9.4.1"
 run-paper = "3.1.0"
 plugwright = "3.0.0"
@@ -16,7 +19,7 @@ player-notifications-api = "1.2.0"
 floodgate-api = "2.2.5-SNAPSHOT"
 chestshop = "3.12.2"
 treasury-api = "2026.11.38.1-gf6a41413b320"
-realty-paper-api = "1.4.0"
+realty = "2.4.0"
 griefprevention = "16.18.8"
 configurate = "4.2.0"
 mybatis = "3.5.19"
@@ -40,13 +43,17 @@ player-notifications-api = { module = "io.github.md5sha256:player-notifications-
 floodgate-api = { module = "org.geysermc.floodgate:api", version.ref = "floodgate-api" }
 chestshop = { module = "com.acrobot.chestshop:chestshop", version.ref = "chestshop" }
 treasury-api = { module = "io.paradaux:treasury-api", version.ref = "treasury-api" }
-realty-paper-api = { module = "io.github.md5sha256:realty-paper-api", version.ref = "realty-paper-api" }
+realty-paper-api = { module = "io.github.md5sha256:realty-paper-api", version.ref = "realty" }
+realty-backend-api = { module = "io.github.md5sha256:realty-backend-api", version.ref = "realty" }
 griefprevention = { module = "com.github.TechFortress:GriefPrevention", version.ref = "griefprevention" }
 configurate-yaml = { module = "org.spongepowered:configurate-yaml", version.ref = "configurate" }
 mybatis = { module = "org.mybatis:mybatis", version.ref = "mybatis" }
 mariadb-java-client = { module = "org.mariadb.jdbc:mariadb-java-client", version.ref = "mariadb" }
 testcontainers-mariadb = { module = "org.testcontainers:testcontainers-mariadb", version.ref = "testcontainers-mariadb" }
 testcontainers-junit-jupiter = { module = "org.testcontainers:testcontainers-junit-jupiter", version.ref = "testcontainers-junit" }
+errorprone-core = { module = "com.google.errorprone:error_prone_core", version.ref = "errorprone" }
+errorprone-gradle-plugin = { module = "net.ltgt.gradle:gradle-errorprone-plugin", version.ref = "errorprone-plugin" }
+nullaway = { module = "com.uber.nullaway:nullaway", version.ref = "nullaway" }
 
 [plugins]
 run-paper = { id = "xyz.jpenilla.run-paper", version.ref = "run-paper" }

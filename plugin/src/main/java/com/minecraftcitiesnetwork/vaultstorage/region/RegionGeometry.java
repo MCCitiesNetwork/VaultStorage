@@ -26,6 +26,14 @@ public final class RegionGeometry {
                 && outer.getMinZ() <= inner.getMinZ() && outer.getMaxZ() >= inner.getMaxZ();
     }
 
+    /**
+     * True if {@code inner} lies inside {@code outer} and is not the same box. Two regions with
+     * the same bounds are neither nested in the other.
+     */
+    public static boolean nestedInside(@NotNull BoundingBox outer, @NotNull BoundingBox inner) {
+        return containsInclusive(outer, inner) && !outer.equals(inner);
+    }
+
     /** True if the two boxes intersect or merely touch (inclusive on the max edge). */
     public static boolean overlapsInclusive(@NotNull BoundingBox a, @NotNull BoundingBox b) {
         return a.getMinX() <= b.getMaxX() && a.getMaxX() >= b.getMinX()

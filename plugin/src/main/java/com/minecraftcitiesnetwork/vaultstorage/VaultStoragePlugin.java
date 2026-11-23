@@ -1,5 +1,6 @@
 package com.minecraftcitiesnetwork.vaultstorage;
 
+import java.util.Objects;
 import com.minecraftcitiesnetwork.vaultstorage.chestshop.ShopOwnerLookup;
 import org.jetbrains.annotations.NotNull;
 import com.minecraftcitiesnetwork.vaultstorage.capture.VaultCapturePolicy;
@@ -13,6 +14,7 @@ import io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents;
 import com.minecraftcitiesnetwork.vaultstorage.bolt.BoltServiceImp;
 import com.minecraftcitiesnetwork.vaultstorage.capture.VaultCaptureService;
 import com.minecraftcitiesnetwork.vaultstorage.vault.VaultInventoryService;
+import com.minecraftcitiesnetwork.vaultstorage.placement.BukkitPlacementWorld;
 import com.minecraftcitiesnetwork.vaultstorage.placement.VaultPlacementService;
 import com.minecraftcitiesnetwork.vaultstorage.scan.VaultScanServiceImpl;
 import com.minecraftcitiesnetwork.vaultstorage.region.WorldGuardServiceImp;
@@ -56,6 +58,8 @@ import org.bukkit.plugin.java.JavaPlugin;
 /**
  * Main plugin entry point responsible for bootstrapping configuration, database, and services.
  */
+// The services are built in onEnable: a plugin has no constructor to build them in.
+@SuppressWarnings("NullAway.Init")
 public final class VaultStoragePlugin extends JavaPlugin {
 
     private final VaultSessionManager sessionManager = new VaultSessionManager(
@@ -130,8 +134,10 @@ public final class VaultStoragePlugin extends JavaPlugin {
     /** messages.yml. One instance, reloaded in place. */
     public @NotNull MessageContainer messages() { return messages; }
 
-    /** settings.yml. Read it through the reference each time: a reload swaps what it holds. */
-    public @NotNull AtomicReference<PluginSettings> settings() { return settings; }
+    /** settings.yml as it is now. Ask each time: a reload swaps it. */
+    public @NotNull PluginSettings settings() {
+        return Objects.requireNonNull(settings.get(), "settings are loaded before anything reads them");
+    }
 
     /** Player name and UUID lookups. */
     public @NotNull Names names() { return names; }
@@ -189,7 +195,8 @@ public final class VaultStoragePlugin extends JavaPlugin {
         // Domain services
         this.shopOwners = new ShopOwnerLookup(this.integrations, getServer().getScheduler().getMainThreadExecutor(this));
         this.captureService = new VaultCaptureService(this);
-        this.placementService = new VaultPlacementService(this);
+        this.placementService = new VaultPlacementService(this.repository, new BukkitPlacementWorld(this::bolt),
+                this.databaseExecutor, getServer().getScheduler().getMainThreadExecutor(this), getLogger());
         this.inventoryService = new VaultInventoryService(this);
         this.scanService = new VaultScanServiceImpl(this);
 

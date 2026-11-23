@@ -1,5 +1,6 @@
 package com.minecraftcitiesnetwork.vaultstorage.database;
 
+import com.minecraftcitiesnetwork.vaultstorage.placement.PlacementStore;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -15,7 +16,7 @@ import org.jetbrains.annotations.NotNull;
  * <p>Every method blocks on the database and must be called off the main thread. Outcomes a
  * caller must handle are result types; only a broken database is an exception.
  */
-public final class VaultRepository implements VaultStore {
+public final class VaultRepository implements VaultStore, PlacementStore {
 
     private final @NotNull VaultDatabase database;
     private final @NotNull Clock clock;
@@ -184,6 +185,7 @@ public final class VaultRepository implements VaultStore {
      * Takes a vault for one actor, to place or edit it. A compare-and-set in the database: of
      * two callers, exactly one gets {@link ClaimResult.Claimed}.
      */
+    @Override
     public @NotNull ClaimResult claim(@NotNull UUID vault) {
         try (SqlSessionWrapper wrapper = this.database.openSession()) {
             if (wrapper.vaults().claim(vault) == 0) {
@@ -201,6 +203,7 @@ public final class VaultRepository implements VaultStore {
     }
 
     /** Gives a claimed vault back. Does nothing if the vault is gone. */
+    @Override
     public void release(@NotNull UUID vault) {
         try (SqlSessionWrapper wrapper = this.database.openSession(true)) {
             wrapper.vaults().release(vault);

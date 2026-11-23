@@ -82,7 +82,7 @@ public final class VaultActionMenu extends ChildMenuImp {
                 entries.add(SingleOptionDialogInput.OptionEntry.create(value, plugin.text().of(MessageKeys.ACTION_ACTION_OPTION_FORMAT, ph), selected));
             }
         }
-        if (entries.isEmpty()) {
+        if (firstValue == null) {
             builder.addBody(DialogBody.plainMessage(plugin.text().of(MessageKeys.ACTION_NO_ACTIONS)));
             builder.button(plugin.text().of(MessageKeys.ACTION_BACK_BTN), ctx -> this.back.accept(ctx.player()));
             return builder.build();

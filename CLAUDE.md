@@ -24,7 +24,7 @@ project version lives in `gradle.properties`.
 | `:modules:namebook-adapter` | `namebook-adapter-<version>.jar` | Names through Namebook |
 | `:modules:floodgate-adapter` | `floodgate-adapter-<version>.jar` | Bedrock names and the Bedrock client check |
 | `:modules:chestshop-adapter` | `chestshop-adapter-<version>.jar` | ChestShop sign handling; shop owners from Treasury |
-| `:modules:realty-autovault` | `realty-autovault-<version>.jar` | Auto-vault on a Realty occupant change |
+| `:modules:realty` | `realty-<version>.jar` | Auto-vault on a Realty occupant change |
 | `:modules:griefprevention-adapter` | `griefprevention-adapter-<version>.jar` | Placing vaults on GriefPrevention claims |
 | `:modules:player-notifications-adapter` | `player-notifications-adapter-<version>.jar` | Telling owners about new vaults |
 
@@ -111,7 +111,7 @@ findings and kept the framework (`ParentMenu`, `ChildMenu`, `AutoDialog`).
   the same). A component goes in through `MessageContainer.markup`. Never parse a runtime string.
 - **`Text` (`plugin.text()`) renders a message with its placeholders given as a map.** A class
   that needs `markup` uses the `MessageContainer` (`plugin.messages()`).
-- **A module's bundled config has its own file name** (`realty-autovault.yml`): its class loader
+- **A module's bundled config has its own file name** (`realty.yml`): its class loader
   asks the host's first, so `config.yml` would find the wrong file.
 - **`/vault reload`** parses `settings.yml` and `messages.yml` off the main thread, swaps both
   only if both parsed, then reloads modules whose manifest says `reloadable: true`.

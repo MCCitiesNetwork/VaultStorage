@@ -3,7 +3,7 @@ package com.minecraftcitiesnetwork.vaultstorage.capture;
 import java.util.logging.Level;
 import org.jetbrains.annotations.Nullable;
 import java.util.concurrent.CompletableFuture;
-import java.util.Optional;
+import java.util.concurrent.Executor;
 import com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin;
 import com.minecraftcitiesnetwork.vaultstorage.capture.PlayerVaultEvent;
 import com.minecraftcitiesnetwork.vaultstorage.capture.VaultCapturePolicy;
@@ -26,7 +26,6 @@ import org.bukkit.event.block.Action;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.EquipmentSlot;
-import org.bukkit.scheduler.BukkitRunnable;
 import org.jetbrains.annotations.NotNull;
 
 /**
@@ -34,6 +33,8 @@ import org.jetbrains.annotations.NotNull;
  * Registered while the mode lasts; {@link VaultCaptureService} does the work.
  */
 public final class CaptureSession implements Listener {
+
+    private static final CompletableFuture<Void> DONE = CompletableFuture.completedFuture(null);
 
     /** A left-click this soon after a capture is another plugin's echo of the right-click, not a cancel. */
     private static final long CANCEL_COOLDOWN_MILLIS = 100L;
@@ -99,12 +100,23 @@ public final class CaptureSession implements Listener {
         boolean clickedSign = ContainerBlocks.isSign(block);
         // A shop container nobody locked belongs to the shop's player. The shop registry is a
         // database, so the rest of the click waits for its answer; with nothing to ask, it runs now.
-        CompletableFuture<Optional<UUID>> shopOwner = plugin.shopOwners().ownerOf(captureBlock);
-        if (shopOwner.isDone()) {
-            capture(captureBlock, clickedSign);
-        } else {
-            shopOwner.thenRun(() -> capture(captureBlock, clickedSign));
+        plugin.shopOwners().ownerOf(captureBlock)
+                .thenCompose(shopOwner -> capture(captureBlock, clickedSign))
+                .whenCompleteAsync((done, failure) -> finish(failure), mainThread());
+    }
+
+    /** Ends a click, however it went. Main thread. */
+    private void finish(@Nullable Throwable failure) {
+        busy = false;
+        if (failure != null) {
+            plugin.getLogger().log(Level.SEVERE, "Capture failed for " + actor.getName()
+                    + "; the container was left in place.", failure);
+            actor.sendMessage(plugin.text().of(MessageKeys.CAPTURE_SAVE_FAILED));
         }
+    }
+
+    private @NotNull Executor mainThread() {
+        return plugin.getServer().getScheduler().getMainThreadExecutor(plugin);
     }
 
     /**
@@ -137,105 +149,90 @@ public final class CaptureSession implements Listener {
         return block;
     }
 
-    /** Applies the policy to the container and vaults it, unlocks it, or says why not. Main thread. */
-    private void capture(@NotNull Block captureBlock, boolean clickedSign) {
+    /**
+     * Applies the policy to the container and vaults it, unlocks it, or says why not. Main
+     * thread. The future completes when the click is dealt with.
+     */
+    private @NotNull CompletableFuture<Void> capture(@NotNull Block captureBlock, boolean clickedSign) {
         if (!actor.isOnline() || session.mode() != Mode.CAPTURE) {
             // They left, or left capture mode, while the shop registry was being read.
-            busy = false;
-            return;
+            return DONE;
         }
-        ChestShopService chestShop = plugin.chestShop();
         VaultCapturePolicy.Decision decision = plugin.capturePolicy().evaluate(actor, captureBlock);
-        UUID originalOwner = decision.containerOwner();
         if (!decision.allowed()) {
-            // A shop sign on an empty container that cannot be captured is removed only with the
-            // override permission. Region membership alone let any member remove anyone's shop sign.
-            if (chestShop.isAvailable() && ContainerBlocks.isEmpty(captureBlock)) {
-                List<Block> shopSigns = chestShop.findShopSigns(captureBlock);
-                if (!shopSigns.isEmpty()
-                        && plugin.capturePolicy().evaluateChestShopSignRemoval(actor, captureBlock).allowed()) {
-                    service.removeShopSigns(actor, shopSigns);
-                    actor.sendMessage(plugin.text().of(MessageKeys.CAPTURE_CHEST_SHOP_SIGN_REMOVED));
-                    busy = false;
-                    return;
-                }
-            }
-            actor.sendMessage(plugin.text().of(clickedSign ? MessageKeys.CAPTURE_CONTAINER_NOT_ALLOWED : MessageKeys.CAPTURE_NOT_ALLOWED));
-            busy = false;
-            return;
+            refuse(captureBlock, clickedSign);
+            return DONE;
         }
-
+        UUID originalOwner = decision.containerOwner();
         VaultCaptureService.CaptureOutcome outcome = service.prepare(captureBlock, originalOwner, actor.getUniqueId(), actor::sendMessage);
         if (outcome.empty()) {
-            // Only send "Protection removed" if we actually removed protection.
-            // If protectionRemoved is false, it means we sent a warning (e.g., "Vault the other side first").
+            // Without a removed protection, prepare has already said why (the other half goes first).
             if (outcome.protectionRemoved()) {
-                // Drop any shop sign left on the now-unlocked container.
-                if (chestShop.isAvailable()) {
-                    List<Block> shopSigns = chestShop.findShopSigns(captureBlock);
-                    if (!shopSigns.isEmpty()) {
-                        service.removeShopSigns(actor, shopSigns);
-                        actor.sendMessage(plugin.text().of(MessageKeys.CAPTURE_CHEST_SHOP_SIGN_REMOVED));
-                    }
-                }
+                removeShopSigns(captureBlock);
                 actor.sendMessage(plugin.text().of(MessageKeys.CAPTURE_EMPTY_CAPTURE_SKIPPED));
             }
-            busy = false;
-            return;
+            return DONE;
         }
-
         if (originalOwner == null && decision.hasOverride()) {
             actor.sendMessage(plugin.text().of(MessageKeys.CAPTURE_NO_BOLT_OWNER));
         }
-
-        final Block finalCaptureBlock = captureBlock;
-        UUID finalOwner = outcome.finalOwner();
-
-        service.owners().validate(finalOwner, actor).thenAcceptAsync(validatedOwner -> {
-            if (validatedOwner == null) {
-
-                new BukkitRunnable(){
-
-                    @Override
-                    public void run() {
-                        actor.sendMessage(plugin.text().of(MessageKeys.CAPTURE_OWNER_UNKNOWN));
-                        plugin.getLogger().warning(
-                                "[VaultCaptureService] Vault capture aborted for " + actor.getName() +
-                                        " at " + finalCaptureBlock.getWorld().getName() + ":" + finalCaptureBlock.getX() + "," + finalCaptureBlock.getY() + "," + finalCaptureBlock.getZ() +
-                                        " - could not validate owner UUID"
-                        );
-                        busy = false;
-                    }
-                }.runTask(plugin);
-                return;
+        return service.owners().validate(outcome.finalOwner(), actor).thenComposeAsync(owner -> {
+            if (owner == null) {
+                ownerUnknown(captureBlock);
+                return DONE;
             }
+            return service.storeThenRemove(captureBlock, owner, outcome.reProtectedHalves())
+                    .thenAccept(result -> report(result, captureBlock, owner));
+        }, mainThread());
+    }
 
-            service.storeThenRemove(finalCaptureBlock, validatedOwner, outcome.reProtectedHalves()).thenAccept(result -> {
-                busy = false;
-                switch (result) {
-                    case CaptureResult.Vaulted vaulted -> {
-                        actor.sendMessage(plugin.text().of(MessageKeys.CAPTURE_CAPTURED_OK));
-                        service.mailOwner(finalCaptureBlock, actor.getUniqueId(), validatedOwner);
-                        new PlayerVaultEvent(actor, vaulted.vault(), validatedOwner,
-                                finalCaptureBlock.getLocation()).callEvent();
-                    }
-                    case CaptureResult.ChangedMeanwhile changed ->
-                            actor.sendMessage(plugin.text().of(MessageKeys.CAPTURE_CHANGED_MEANWHILE));
-                    case CaptureResult.Failed failed ->
-                            actor.sendMessage(plugin.text().of(MessageKeys.CAPTURE_SAVE_FAILED));
-                }
-            });
-        }, plugin.getServer().getScheduler().getMainThreadExecutor(plugin))
-                .exceptionally(failure -> {
-                    // Without this a failed owner lookup would leave the session busy for good.
-                    plugin.getLogger().log(Level.SEVERE, "Capture failed for " + actor.getName()
-                            + "; the container was left in place.", failure);
-                    plugin.getServer().getScheduler().getMainThreadExecutor(plugin).execute(() -> {
-                        busy = false;
-                        actor.sendMessage(plugin.text().of(MessageKeys.CAPTURE_SAVE_FAILED));
-                    });
-                    return null;
-                });
+    /**
+     * Tells the actor they may not vault the container. A shop sign on an empty container goes
+     * first when the actor holds the override: region membership alone does not remove one.
+     */
+    private void refuse(@NotNull Block captureBlock, boolean clickedSign) {
+        if (plugin.chestShop().isAvailable() && ContainerBlocks.isEmpty(captureBlock)
+                && plugin.capturePolicy().mayRemoveShopSign(actor) && removeShopSigns(captureBlock)) {
+            return;
+        }
+        actor.sendMessage(plugin.text().of(clickedSign
+                ? MessageKeys.CAPTURE_CONTAINER_NOT_ALLOWED : MessageKeys.CAPTURE_NOT_ALLOWED));
+    }
+
+    /** Removes the container's shop signs and says so. False when it has none. */
+    private boolean removeShopSigns(@NotNull Block captureBlock) {
+        ChestShopService chestShop = plugin.chestShop();
+        if (!chestShop.isAvailable()) {
+            return false;
+        }
+        List<Block> shopSigns = chestShop.findShopSigns(captureBlock);
+        if (shopSigns.isEmpty()) {
+            return false;
+        }
+        service.removeShopSigns(actor, shopSigns);
+        actor.sendMessage(plugin.text().of(MessageKeys.CAPTURE_CHEST_SHOP_SIGN_REMOVED));
+        return true;
+    }
+
+    private void ownerUnknown(@NotNull Block captureBlock) {
+        actor.sendMessage(plugin.text().of(MessageKeys.CAPTURE_OWNER_UNKNOWN));
+        plugin.getLogger().warning("Capture by " + actor.getName() + " at " + captureBlock.getWorld().getName()
+                + " " + captureBlock.getX() + "," + captureBlock.getY() + "," + captureBlock.getZ()
+                + " stopped: the owner's id could not be checked.");
+    }
+
+    private void report(@NotNull CaptureResult result, @NotNull Block captureBlock, @NotNull UUID owner) {
+        switch (result) {
+            case CaptureResult.Vaulted vaulted -> {
+                actor.sendMessage(plugin.text().of(MessageKeys.CAPTURE_CAPTURED_OK));
+                service.mailOwner(captureBlock, actor.getUniqueId(), owner);
+                new PlayerVaultEvent(actor, vaulted.vault(), owner, captureBlock.getLocation()).callEvent();
+            }
+            case CaptureResult.ChangedMeanwhile changed ->
+                    actor.sendMessage(plugin.text().of(MessageKeys.CAPTURE_CHANGED_MEANWHILE));
+            case CaptureResult.Failed failed ->
+                    actor.sendMessage(plugin.text().of(MessageKeys.CAPTURE_SAVE_FAILED));
+        }
     }
 
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = false)
@@ -252,6 +249,6 @@ public final class CaptureSession implements Listener {
 
         busy = true;
         cancelCooldownUntil = System.currentTimeMillis() + CANCEL_COOLDOWN_MILLIS;
-        service.captureHanging(actor, (Hanging) clicked).whenComplete((vaulted, failure) -> busy = false);
+        service.captureHanging(actor, (Hanging) clicked).whenCompleteAsync((vaulted, failure) -> finish(failure), mainThread());
     }
 }

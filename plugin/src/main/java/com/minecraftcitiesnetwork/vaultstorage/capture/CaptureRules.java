@@ -29,6 +29,15 @@ public final class CaptureRules {
     }
 
     /**
+     * Whether the actor may remove a shop sign from a container that cannot be vaulted. Only
+     * the override allows it. A part in the region does not: the sign may be the region
+     * owner's or another member's.
+     */
+    public static boolean mayRemoveShopSign(boolean hasOverride) {
+        return hasOverride;
+    }
+
+    /**
      * A container is vaulted only for an owner, so one without an owner never is. Beyond that:
      * a participant of a region there may vault what belongs to someone with no part in any
      * region there, and never their own; anyone else may vault only their own. The override

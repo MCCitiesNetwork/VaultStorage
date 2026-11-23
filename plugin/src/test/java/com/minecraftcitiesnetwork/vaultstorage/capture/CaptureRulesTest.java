@@ -105,6 +105,12 @@ class CaptureRulesTest {
     }
 
     @Test
+    void onlyTheOverrideRemovesAShopSignFromAContainerThatCannotBeVaulted() {
+        Assertions.assertTrue(CaptureRules.mayRemoveShopSign(true));
+        Assertions.assertFalse(CaptureRules.mayRemoveShopSign(false));
+    }
+
+    @Test
     void theDecisionListsEveryRegionAtTheBlock() {
         Decision decision = decide(OWNER, false, region(true, false));
         Assertions.assertEquals(List.of(new VaultCapturePolicy.RegionStatus("plot", true, false)), decision.regionStatuses());

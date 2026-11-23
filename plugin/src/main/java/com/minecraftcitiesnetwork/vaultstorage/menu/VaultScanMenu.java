@@ -1,5 +1,7 @@
 package com.minecraftcitiesnetwork.vaultstorage.menu;
 
+import java.util.Objects;
+import org.jetbrains.annotations.Nullable;
 import org.bukkit.entity.Hanging;
 import java.util.Comparator;
 import com.minecraftcitiesnetwork.vaultstorage.permission.Permissions;
@@ -74,7 +76,7 @@ public final class VaultScanMenu extends ChildMenuImp {
     /** Scan results shown on one page: few enough for a dialog. */
     private static final int RESULTS_PER_PAGE = 5;
 
-    private final String regionId; // null -> browse/search mode; non-null -> results mode
+    private final @Nullable String regionId; // null -> browse/search mode; non-null -> results mode
     private final List<ScanResult> entries; // only used in results mode (full set from computeEntries: containers + other protected blocks like paintings)
     /** Zero-based current page index in results mode. */
     private final int pageIndex;
@@ -136,7 +138,7 @@ public final class VaultScanMenu extends ChildMenuImp {
         var session = plugin.sessionManager().getOrCreate(player.getUniqueId());
         long now = System.currentTimeMillis();
         long last = session.lastScanTime();
-        long cooldownMs = plugin.settings().get().scan().cooldownSeconds() * 1000;
+        long cooldownMs = plugin.settings().scan().cooldownSeconds() * 1000;
         if (now - last < cooldownMs) {
             long remaining = (cooldownMs - (now - last)) / 1000;
             player.sendMessage(plugin.text().of(MessageKeys.SCAN_SCAN_COOLDOWN, Map.of("%time%", String.valueOf(remaining))));
@@ -171,7 +173,7 @@ public final class VaultScanMenu extends ChildMenuImp {
                     return;
                 }
                 // By the regions' real shapes, not their bounding boxes.
-                List<VaultRegion> containing = wgs.getRegionsAt(ctx.player().getLocation().getBlock());
+                List<VaultRegion> containing = wgs.getRegionsAt(locationOf(ctx.player()).getBlock());
                 if (containing.isEmpty()) {
                     ctx.player().sendMessage(plugin.text().of(MessageKeys.SCAN_NO_REGION_HERE));
                     return;
@@ -233,11 +235,12 @@ public final class VaultScanMenu extends ChildMenuImp {
             // Bolt was asked by bounding box; the region's shape decides what is in it.
             protections.values().removeIf(entity -> !worldGuardService.isInside(regionId, entity.getLocation().getBlock()));
             // A fixed order, so that a page shows the same entities each time it is built.
-            List<EntityProtection> ordered = protections.keySet().stream()
-                    .sorted(Comparator.<EntityProtection>comparingInt(p -> protections.get(p).getLocation().getBlockX())
-                            .thenComparingInt(p -> protections.get(p).getLocation().getBlockY())
-                            .thenComparingInt(p -> protections.get(p).getLocation().getBlockZ())
-                            .thenComparing(p -> protections.get(p).getUniqueId()))
+            List<Map.Entry<EntityProtection, Entity>> ordered = protections.entrySet().stream()
+                    .sorted(Comparator.<Map.Entry<EntityProtection, Entity>>comparingInt(
+                                    entry -> entry.getValue().getLocation().getBlockX())
+                            .thenComparingInt(entry -> entry.getValue().getLocation().getBlockY())
+                            .thenComparingInt(entry -> entry.getValue().getLocation().getBlockZ())
+                            .thenComparing(entry -> entry.getValue().getUniqueId()))
                     .toList();
             int eSize = protections.size();
             if (eSize == 0) {
@@ -252,7 +255,8 @@ public final class VaultScanMenu extends ChildMenuImp {
 
             Set<UUID> toResolve = new HashSet<>();
             for (int i = eStart; i < eEnd; i++) {
-                EntityProtection protection = ordered.get(i);
+                EntityProtection protection = ordered.get(i).getKey();
+                Entity protectedEntity = ordered.get(i).getValue();
                 UUID ownerUuid = protection.getOwner();
                 String ownerName;
                 if (ownerUuid == null) {
@@ -268,11 +272,11 @@ public final class VaultScanMenu extends ChildMenuImp {
                 }
                 String index = String.valueOf(i + 1);
 
-                Location entityLoc = protections.get(protection).getLocation();
+                Location entityLoc = protectedEntity.getLocation();
 
-                String entityName = VaultLabel.materialName(protections.get(protection).getType().name());
+                String entityName = VaultLabel.materialName(protectedEntity.getType().name());
 
-                var decision = plugin.capturePolicy().evaluate(player(), protections.get(protection));
+                var decision = plugin.capturePolicy().evaluate(player(), protectedEntity);
 
                 Map<String,String> placeholdersEntry = Map.of(
                         "%x%", String.valueOf(entityLoc.getBlockX()),
@@ -286,7 +290,7 @@ public final class VaultScanMenu extends ChildMenuImp {
                         ? MessageKeys.SCAN_ENTRY_VAULTABLE : MessageKeys.SCAN_ENTRY_NOT_VAULTABLE, placeholdersEntry)));
                 // Remove protection button for entity (calls BoltService#removeProtection with the EntityProtection instance)
                 builder.sizableButton(plugin.text().of(MessageKeys.SCAN_ENTRY_VAULT_BUTTON, placeholdersEntry), ctx -> {
-                    var check = plugin.capturePolicy().evaluate(ctx.player(), protections.get(protection));
+                    var check = plugin.capturePolicy().evaluate(ctx.player(), protectedEntity);
                     if (!check.allowed()) {
                         ctx.player().sendMessage(plugin.text().of(MessageKeys.SCAN_NOT_ALLOWED));
                         return;
@@ -296,7 +300,7 @@ public final class VaultScanMenu extends ChildMenuImp {
                             entries, eCurrentPage, FilterMode.ENTITY).open();
                     // An item frame or painting is vaulted with what it shows. Any other locked
                     // entity holds nothing to store, so it only loses its lock.
-                    if (protections.get(protection) instanceof Hanging hanging && hanging.isValid()) {
+                    if (protectedEntity instanceof Hanging hanging && hanging.isValid()) {
                         plugin.captureService().captureHanging(ctx.player(), hanging)
                                 .thenRun(refresh);
                         return;
@@ -384,7 +388,7 @@ public final class VaultScanMenu extends ChildMenuImp {
                 if (!ctx.player().hasPermission(Permissions.SCAN_TELEPORT)) return;
                 boolean passable = entryBlock.isPassable();
                 double destY = passable ? entryBlock.getY() : (entryBlock.getY() + 1);
-                Location destination = new Location(ctx.player().getWorld(), entryBlock.getX() + 0.5, destY, entryBlock.getZ() + 0.5, ctx.player().getLocation().getYaw(), ctx.player().getLocation().getPitch());
+                Location destination = new Location(ctx.player().getWorld(), entryBlock.getX() + 0.5, destY, entryBlock.getZ() + 0.5, locationOf(ctx.player()).getYaw(), locationOf(ctx.player()).getPitch());
                 ctx.player().teleport(destination);
             });
         }
@@ -409,9 +413,10 @@ public final class VaultScanMenu extends ChildMenuImp {
             case CONTAINER -> MessageKeys.SCAN_FILTER_BTN_CONTAINER;
             case ENTITY -> MessageKeys.SCAN_FILTER_BTN_ENTITY;
         };
+        String region = Objects.requireNonNull(regionId, "only a results page has a filter button");
         builder.sizableButton(plugin.text().of(label), ctx -> {
             FilterMode next = filterMode.next();
-            new VaultScanMenu(ctx.player(), parentMenu(), uiContext, regionId, entries, currentPage, next).open();
+            new VaultScanMenu(ctx.player(), parentMenu(), uiContext, region, entries, currentPage, next).open();
         }, 100);
     }
 
@@ -459,5 +464,12 @@ public final class VaultScanMenu extends ChildMenuImp {
         setDialog(build());
         super.open();
     }
-}
 
+    /**
+     * A player's location, read as an entity's. Player also inherits OfflinePlayer's
+     * getLocation, which may be null, and the null check takes that one.
+     */
+    private static @NotNull Location locationOf(@NotNull Entity entity) {
+        return entity.getLocation();
+    }
+}

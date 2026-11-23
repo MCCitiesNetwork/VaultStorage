@@ -48,7 +48,7 @@ public final class AutoDialog {
 
 
         private Component title = Component.text("Dialog");
-        private Component externalTitle = null;
+        private @Nullable Component externalTitle;
         private boolean canCloseWithEscape = true;
         private boolean pause = true;
         private DialogBase.DialogAfterAction afterAction = DialogBase.DialogAfterAction.CLOSE;

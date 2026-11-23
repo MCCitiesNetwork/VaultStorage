@@ -43,7 +43,7 @@ public final class VaultListMenu extends ChildMenuImp {
 
     /** Vaults per page, from settings.yml; read each time, so a reload takes effect at the next open. */
     private int pageSize() {
-        return plugin.settings().get().vaultList().pageSize();
+        return plugin.settings().vaultList().pageSize();
     }
 
     /** Wide enough for a whole label; the client shrinks it to the window. */
@@ -228,7 +228,8 @@ public final class VaultListMenu extends ChildMenuImp {
                         List<Entry> entries = new ArrayList<>();
                         int index = paging.offset() + 1;
                         for (VaultSummary vault : page.vaults()) {
-                            entries.add(new Entry(vault, names.get(vault.ownerUuid()), index++));
+                            entries.add(new Entry(vault, names.getOrDefault(vault.ownerUuid(),
+                                    vault.ownerUuid().toString().substring(0, 8)), index++));
                         }
                         return new Loaded(entries, paging);
                     });

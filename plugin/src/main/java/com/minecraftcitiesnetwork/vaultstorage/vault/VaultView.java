@@ -15,6 +15,8 @@ public final class VaultView implements InventoryHolder {
     private final @NotNull UUID vault;
     private final @NotNull VaultAction action;
     private final @Nullable Runnable afterClose;
+    // Set by the one caller, straight after it builds the inventory this holder is for.
+    @SuppressWarnings("NullAway.Init")
     private Inventory inventory;
 
     public VaultView(@NotNull UUID vault, @NotNull VaultAction action, @Nullable Runnable afterClose) {

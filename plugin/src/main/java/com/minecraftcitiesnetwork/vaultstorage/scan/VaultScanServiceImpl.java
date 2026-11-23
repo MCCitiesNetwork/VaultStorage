@@ -45,7 +45,7 @@ public final class VaultScanServiceImpl implements VaultScanService {
         // Check cache
         if (cache.containsKey(key)) {
             CacheEntry entry = cache.get(key);
-            long ttlSeconds = plugin.settings().get().scan().cacheTtlSeconds();
+            long ttlSeconds = plugin.settings().scan().cacheTtlSeconds();
             if (Instant.now().isBefore(entry.timestamp.plusSeconds(ttlSeconds))) {
                 // Cache hit and valid
                 callback.accept(List.copyOf(entry.results));
@@ -129,7 +129,7 @@ public final class VaultScanServiceImpl implements VaultScanService {
                 && first.getX() == second.getX() && first.getY() == second.getY() && first.getZ() == second.getZ();
     }
 
-    private record CacheKey(@NotNull String regionId, @NotNull UUID playerUuid, @NotNull UUID filterOwner) {
+    private record CacheKey(@NotNull String regionId, @NotNull UUID playerUuid, @Nullable UUID filterOwner) {
         @Override
         public boolean equals(@Nullable Object o) {
             if (this == o) return true;

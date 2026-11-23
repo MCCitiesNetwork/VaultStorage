@@ -11,6 +11,7 @@ import com.minecraftcitiesnetwork.vaultstorage.names.UniqueIdentifierResolver;
 import com.minecraftcitiesnetwork.vaultstorage.permission.Permissions;
 import com.minecraftcitiesnetwork.vaultstorage.vault.VaultAction;
 import com.mojang.brigadier.Command;
+import com.mojang.brigadier.arguments.ArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.suggestion.Suggestions;
@@ -44,41 +45,100 @@ public final class VaultCommand {
     private VaultCommand() {
     }
 
+    /** What each branch runs. The tree is built from this, so its shape can be tested without a server. */
+    interface Handlers {
+        /** @param ownerName whose vaults to list, or null for the sender's own */
+        int menu(@NotNull CommandContext<CommandSourceStack> context, @Nullable String ownerName);
+
+        int capture(@NotNull CommandContext<CommandSourceStack> context);
+
+        int open(@NotNull CommandContext<CommandSourceStack> context, @NotNull String actionWord);
+
+        int admin(@NotNull CommandContext<CommandSourceStack> context);
+
+        int transfer(@NotNull CommandContext<CommandSourceStack> context);
+
+        int reload(@NotNull CommandContext<CommandSourceStack> context);
+
+        @NotNull CompletableFuture<Suggestions> onlinePlayers(@NotNull SuggestionsBuilder builder);
+    }
+
     /** Takes the plugin and not each service: the menus opened here are built from it. */
     public static @NotNull LiteralCommandNode<CommandSourceStack> create(@NotNull VaultStoragePlugin plugin) {
+        return tree(new Handlers() {
+            @Override
+            public int menu(@NotNull CommandContext<CommandSourceStack> context, @Nullable String ownerName) {
+                return VaultCommand.menu(plugin, context, ownerName);
+            }
+
+            @Override
+            public int capture(@NotNull CommandContext<CommandSourceStack> context) {
+                return VaultCommand.capture(plugin, context);
+            }
+
+            @Override
+            public int open(@NotNull CommandContext<CommandSourceStack> context, @NotNull String actionWord) {
+                return VaultCommand.open(plugin, context, actionWord);
+            }
+
+            @Override
+            public int admin(@NotNull CommandContext<CommandSourceStack> context) {
+                return VaultCommand.admin(plugin, context);
+            }
+
+            @Override
+            public int transfer(@NotNull CommandContext<CommandSourceStack> context) {
+                return VaultCommand.transfer(plugin, context);
+            }
+
+            @Override
+            public int reload(@NotNull CommandContext<CommandSourceStack> context) {
+                return VaultCommand.reload(plugin, context);
+            }
+
+            @Override
+            public @NotNull CompletableFuture<Suggestions> onlinePlayers(@NotNull SuggestionsBuilder builder) {
+                return VaultCommand.onlinePlayers(plugin, builder);
+            }
+        }, ArgumentTypes.uuid());
+    }
+
+    /** @param vaultId how a vault's id is read; Paper's own needs a running server */
+    static @NotNull LiteralCommandNode<CommandSourceStack> tree(@NotNull Handlers handlers,
+                                                                 @NotNull ArgumentType<UUID> vaultId) {
         return Commands.literal("vault")
                 .requires(source -> source.getSender().hasPermission(Permissions.COMMAND_VAULT))
-                .executes(context -> menu(plugin, context, null))
+                .executes(context -> handlers.menu(context, null))
                 .then(Commands.literal("menu")
-                        .executes(context -> menu(plugin, context, null))
+                        .executes(context -> handlers.menu(context, null))
                         .then(Commands.argument(PLAYER_ARGUMENT, StringArgumentType.word())
                                 .requires(source -> source.getSender().hasPermission(Permissions.COMMAND_VAULT_OTHERS))
-                                .suggests((context, builder) -> onlinePlayers(plugin, builder))
-                                .executes(context -> menu(plugin, context,
+                                .suggests((context, builder) -> handlers.onlinePlayers(builder))
+                                .executes(context -> handlers.menu(context,
                                         StringArgumentType.getString(context, PLAYER_ARGUMENT)))))
                 .then(Commands.literal("capture")
                         .requires(source -> source.getSender().hasPermission(Permissions.ACTION_CAPTURE))
-                        .executes(context -> capture(plugin, context)))
+                        .executes(handlers::capture))
                 .then(Commands.literal("open")
                         .requires(source -> source.getSender().hasPermission(Permissions.COMMAND_OPEN))
-                        .then(Commands.argument(VAULT_ARGUMENT, ArgumentTypes.uuid())
-                                .executes(context -> open(plugin, context, "view"))
+                        .then(Commands.argument(VAULT_ARGUMENT, vaultId)
+                                .executes(context -> handlers.open(context, "view"))
                                 .then(Commands.argument(ACTION_ARGUMENT, StringArgumentType.word())
                                         .suggests((context, builder) -> actions(context.getSource().getSender(), builder))
-                                        .executes(context -> open(plugin, context,
+                                        .executes(context -> handlers.open(context,
                                                 StringArgumentType.getString(context, ACTION_ARGUMENT))))))
                 .then(Commands.literal("admin")
                         .requires(source -> source.getSender().hasPermission(Permissions.COMMAND_ADMIN))
-                        .executes(context -> admin(plugin, context)))
+                        .executes(handlers::admin))
                 .then(Commands.literal("transfer")
                         .requires(source -> source.getSender().hasPermission(Permissions.COMMAND_TRANSFER))
-                        .then(Commands.argument(VAULT_ARGUMENT, ArgumentTypes.uuid())
+                        .then(Commands.argument(VAULT_ARGUMENT, vaultId)
                                 .then(Commands.argument(PLAYER_ARGUMENT, StringArgumentType.word())
-                                        .suggests((context, builder) -> onlinePlayers(plugin, builder))
-                                        .executes(context -> transfer(plugin, context)))))
+                                        .suggests((context, builder) -> handlers.onlinePlayers(builder))
+                                        .executes(handlers::transfer))))
                 .then(Commands.literal("reload")
                         .requires(source -> source.getSender().hasPermission(Permissions.COMMAND_RELOAD))
-                        .executes(context -> reload(plugin, context)))
+                        .executes(handlers::reload))
                 .build();
     }
 

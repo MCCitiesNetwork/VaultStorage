@@ -39,7 +39,7 @@ dependencies {
     moduleJars(project(path = ":modules:namebook-adapter", configuration = "moduleJar"))
     moduleJars(project(path = ":modules:floodgate-adapter", configuration = "moduleJar"))
     moduleJars(project(path = ":modules:chestshop-adapter", configuration = "moduleJar"))
-    moduleJars(project(path = ":modules:realty-autovault", configuration = "moduleJar"))
+    moduleJars(project(path = ":modules:realty", configuration = "moduleJar"))
     moduleJars(project(path = ":modules:griefprevention-adapter", configuration = "moduleJar"))
     moduleJars(project(path = ":modules:player-notifications-adapter", configuration = "moduleJar"))
 }

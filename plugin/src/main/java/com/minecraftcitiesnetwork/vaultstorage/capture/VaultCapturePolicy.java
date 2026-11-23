@@ -14,7 +14,6 @@ import org.bukkit.entity.Entity;
 import org.bukkit.entity.Hanging;
 import org.bukkit.entity.Player;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -152,58 +151,12 @@ public final class VaultCapturePolicy {
             plugin.getLogger().log(Level.WARNING, "Could not read the regions at " + formatBlock(block) + ".", ex);
             return List.of();
         }
-        UUID actorUuid = actor.getUniqueId();
-        List<CaptureRules.RegionAt> result = new ArrayList<>(regions.size());
-        for (VaultRegion region : regions) {
-            boolean encloses = regions.stream()
-                    .anyMatch(other -> other != region && region.boundingBox().contains(other.boundingBox()));
-            result.add(new CaptureRules.RegionAt(region.id(), region.isPartOfRegion(actorUuid),
-                    originalOwner != null && region.isPartOfRegion(originalOwner), encloses));
-        }
-        return result;
+        return CaptureRegions.at(actor.getUniqueId(), originalOwner, regions);
     }
 
-    /**
-     * Evaluate whether the actor may remove a ChestShop sign on the given container.
-     * Only the override permission allows it.
-     */
-    public @NotNull Decision evaluateChestShopSignRemoval(@NotNull Player actor, @NotNull Block containerBlock) {
-        BoltService bolt = plugin.bolt();
-        UUID originalOwner = null;
-        if (bolt != null) {
-            try {
-                originalOwner = bolt.getOwner(containerBlock);
-            } catch (Throwable t) {
-                plugin.getLogger().warning("[VaultCapturePolicy] Error obtaining Bolt owner for block in "
-                        + formatBlock(containerBlock) + ": " + t.getClass().getSimpleName() + " - " + t.getMessage());
-            }
-        }
-
-        boolean hasOverride = actor.hasPermission(Permissions.BYPASS_REGION);
-        boolean actorIsContainerOwner = originalOwner != null && originalOwner.equals(actor.getUniqueId());
-        List<CaptureRules.RegionAt> regions = regionsAt(actor, containerBlock, originalOwner);
-
-        // Region membership is not enough: the plugin cannot tell whose shop it is, and a member
-        // could otherwise remove the region owner's or another member's shop sign.
-        boolean allowed = hasOverride;
-
-        Decision.Reason reason = allowed
-                ? Decision.Reason.ALLOWED
-                : (regions.isEmpty() ? Decision.Reason.NOT_IN_REGION : Decision.Reason.NOT_INVOLVED_NOT_OWNER);
-
-        return new Decision(
-                allowed,
-                hasOverride,
-                regions.stream().anyMatch(region -> region.actorHasPart() && !region.encloses()),
-                regions.stream().anyMatch(CaptureRules.RegionAt::ownerHasPart),
-                actorIsContainerOwner,
-                false,
-                allowed,
-                originalOwner,
-                reason,
-                regions.stream().map(region -> new RegionStatus(region.id(), region.actorHasPart(),
-                        region.ownerHasPart())).toList()
-        );
+    /** Whether the actor may remove the shop signs of a container they cannot vault. */
+    public boolean mayRemoveShopSign(@NotNull Player actor) {
+        return CaptureRules.mayRemoveShopSign(actor.hasPermission(Permissions.BYPASS_REGION));
     }
 
     /**

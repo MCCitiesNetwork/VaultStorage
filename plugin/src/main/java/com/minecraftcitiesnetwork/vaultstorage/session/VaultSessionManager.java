@@ -29,7 +29,7 @@ public final class VaultSessionManager {
         Session(@NotNull Consumer<Listener> register) {
             this.dynamicListener = new DynamicListener(register);
         }
-        private BukkitTask actionBarTask;
+        private @Nullable BukkitTask actionBarTask;
         private Mode mode = Mode.NONE;
         private long lastScanTime = 0;
 

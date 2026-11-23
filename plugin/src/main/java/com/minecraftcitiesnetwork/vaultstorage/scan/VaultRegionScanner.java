@@ -39,7 +39,7 @@ public final class VaultRegionScanner {
     private final String regionId;
     private final VaultUIContext uiContext;
     private final Consumer<List<ScanResult>> callback;
-    private BukkitTask task;
+    private @Nullable BukkitTask task;
     /** Chunks held loaded for this scan. Main thread only. */
     private final List<Chunk> heldChunks = new ArrayList<>();
 
@@ -132,7 +132,7 @@ public final class VaultRegionScanner {
             this.protections = protections;
             this.world = world;
             this.actorOwnsRegion = actorOwnsRegion;
-            this.batchSize = plugin.settings().get().scan().batchSize();
+            this.batchSize = plugin.settings().scan().batchSize();
         }
 
         @Override

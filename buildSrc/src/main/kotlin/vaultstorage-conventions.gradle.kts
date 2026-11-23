@@ -1,6 +1,10 @@
+import net.ltgt.gradle.errorprone.CheckSeverity
+import net.ltgt.gradle.errorprone.errorprone
+
 plugins {
     java
     checkstyle
+    id("net.ltgt.errorprone")
 }
 
 // Precompiled script plugins cannot use the generated `libs` accessors.
@@ -38,6 +42,8 @@ repositories {
 dependencies {
     compileOnly(libs.findLibrary("annotations").get())
     testCompileOnly(libs.findLibrary("annotations").get())
+    errorprone(libs.findLibrary("errorprone-core").get())
+    errorprone(libs.findLibrary("nullaway").get())
     testImplementation(platform(libs.findLibrary("junit-bom").get()))
     testImplementation(libs.findLibrary("junit-jupiter").get())
     testRuntimeOnly(libs.findLibrary("junit-platform-launcher").get())
@@ -73,5 +79,13 @@ tasks {
         options.encoding = "UTF-8"
         options.isFork = true
         options.isDeprecation = true
+        // The only Error Prone check that runs is NullAway: a value that may be null is not
+        // passed, returned or dereferenced where @Nullable does not say so. Main code only.
+        options.errorprone {
+            disableAllChecks.set(true)
+            enabled.set(name == "compileJava")
+            check("NullAway", CheckSeverity.ERROR)
+            option("NullAway:AnnotatedPackages", "com.minecraftcitiesnetwork.vaultstorage")
+        }
     }
 }

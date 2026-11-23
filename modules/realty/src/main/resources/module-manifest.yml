@@ -1,0 +1,5 @@
+module-name: realty
+entry-class: com.minecraftcitiesnetwork.vaultstorage.realty.AutoVaultModule
+author: MCCitiesNetwork
+expected-plugin-class: com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin
+reloadable: true

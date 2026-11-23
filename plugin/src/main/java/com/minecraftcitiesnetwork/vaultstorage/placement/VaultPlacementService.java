@@ -1,28 +1,15 @@
 package com.minecraftcitiesnetwork.vaultstorage.placement;
 
 import com.minecraftcitiesnetwork.vaultstorage.config.MessageKeys;
-import com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin;
-import com.minecraftcitiesnetwork.vaultstorage.bolt.BoltService;
 import com.minecraftcitiesnetwork.vaultstorage.database.ClaimResult;
 import com.minecraftcitiesnetwork.vaultstorage.database.StoredVault;
-import com.minecraftcitiesnetwork.vaultstorage.database.VaultItemEntity;
-import com.minecraftcitiesnetwork.vaultstorage.database.VaultRepository;
-import com.minecraftcitiesnetwork.vaultstorage.vault.ItemSerialization;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.function.Consumer;
 import java.util.logging.Level;
-import org.bukkit.Bukkit;
+import java.util.logging.Logger;
 import org.bukkit.Location;
-import org.bukkit.Material;
-import org.bukkit.World;
-import org.bukkit.block.Block;
-import org.bukkit.block.Container;
-import org.bukkit.block.data.BlockData;
-import org.bukkit.block.data.type.Chest;
-import org.bukkit.inventory.Inventory;
-import org.bukkit.inventory.ItemStack;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -40,10 +27,19 @@ import org.jetbrains.annotations.Nullable;
  */
 public final class VaultPlacementService {
 
-    private final @NotNull VaultStoragePlugin plugin;
+    private final @NotNull PlacementStore store;
+    private final @NotNull PlacementWorld world;
+    private final @NotNull Executor database;
+    private final @NotNull Executor mainThread;
+    private final @NotNull Logger logger;
 
-    public VaultPlacementService(@NotNull VaultStoragePlugin plugin) {
-        this.plugin = plugin;
+    public VaultPlacementService(@NotNull PlacementStore store, @NotNull PlacementWorld world,
+                                 @NotNull Executor database, @NotNull Executor mainThread, @NotNull Logger logger) {
+        this.store = store;
+        this.world = world;
+        this.database = database;
+        this.mainThread = mainThread;
+        this.logger = logger;
     }
 
     /** {@code messageKey} names the line in messages.yml that tells the player what happened. */
@@ -58,119 +54,61 @@ public final class VaultPlacementService {
      */
     public void placeFromDatabaseRelativeAsync(@NotNull UUID vaultUuid, @NotNull Location targetLoc,
                                                @Nullable Consumer<Result> callback) {
-        VaultRepository repository = plugin.repository();
-        Executor database = plugin.databaseExecutor();
-        Executor mainThread = plugin.getServer().getScheduler().getMainThreadExecutor(plugin);
         Consumer<Result> reply = callback == null ? result -> { } : callback;
 
-        CompletableFuture.supplyAsync(() -> repository.claim(vaultUuid), database)
+        CompletableFuture.supplyAsync(() -> this.store.claim(vaultUuid), this.database)
                 .thenComposeAsync(claim -> switch (claim) {
                     case ClaimResult.NoSuchVault missing ->
                             CompletableFuture.completedFuture(new Result(false, MessageKeys.INVENTORY_NOT_FOUND));
                     case ClaimResult.AlreadyClaimed held ->
                             CompletableFuture.completedFuture(new Result(false, MessageKeys.INVENTORY_IN_USE));
-                    case ClaimResult.Claimed claimed -> placeClaimed(plugin, claimed.vault(), targetLoc, database);
-                }, mainThread)
+                    case ClaimResult.Claimed claimed -> placeClaimed(claimed.vault(), targetLoc);
+                }, this.mainThread)
                 .exceptionally(failure -> {
-                    plugin.getLogger().log(Level.SEVERE, "Placing vault " + vaultUuid + " failed.", failure);
+                    this.logger.log(Level.SEVERE, "Placing vault " + vaultUuid + " failed.", failure);
                     return new Result(false, MessageKeys.PLACEMENT_FAILED);
                 })
-                .thenAcceptAsync(reply, mainThread);
+                .thenAcceptAsync(reply, this.mainThread);
     }
 
     /** Main thread. The vault is claimed; it is deleted or released before this future completes. */
-    private @NotNull CompletableFuture<Result> placeClaimed(@NotNull VaultStoragePlugin plugin, @NotNull StoredVault stored,
-                                                           @NotNull Location targetLoc, @NotNull Executor database) {
+    private @NotNull CompletableFuture<Result> placeClaimed(@NotNull StoredVault stored, @NotNull Location targetLoc) {
         UUID vaultUuid = stored.vault().uuid();
         Result placed;
         try {
-            placed = placeAt(stored, targetLoc);
+            placed = this.world.place(stored, targetLoc);
         } catch (RuntimeException ex) {
-            plugin.getLogger().log(Level.SEVERE, "Placing vault " + vaultUuid + " failed; it stays in storage.", ex);
+            this.logger.log(Level.SEVERE, "Placing vault " + vaultUuid + " failed; it stays in storage.", ex);
             placed = new Result(false, MessageKeys.PLACEMENT_FAILED);
         }
         if (!placed.success()) {
             Result refused = placed;
             return CompletableFuture.supplyAsync(() -> {
-                plugin.repository().release(vaultUuid);
+                this.store.release(vaultUuid);
                 return refused;
-            }, database);
+            }, this.database);
         }
-        BoltService bolt = plugin.bolt();
-        if (bolt != null) {
-            try {
-                bolt.createProtection(targetLoc.getBlock(), stored.vault().ownerUuid());
-            } catch (RuntimeException ex) {
-                plugin.getLogger().log(Level.WARNING, "Vault " + vaultUuid
-                        + " was placed but could not be locked for its owner.", ex);
-            }
+        try {
+            this.world.protect(targetLoc, stored.vault().ownerUuid());
+        } catch (RuntimeException ex) {
+            this.logger.log(Level.WARNING, "Vault " + vaultUuid
+                    + " was placed but could not be locked for its owner.", ex);
         }
         Result done = placed;
         return CompletableFuture.supplyAsync(() -> {
             try {
-                plugin.repository().delete(vaultUuid);
+                this.store.delete(vaultUuid);
             } catch (RuntimeException ex) {
                 // The block is in the world. The vault stays claimed, so it cannot be placed again.
-                plugin.getLogger().log(Level.SEVERE, "Vault " + vaultUuid + " was placed at "
-                        + targetLoc.getWorld().getName() + " " + targetLoc.getBlockX() + "," + targetLoc.getBlockY()
-                        + "," + targetLoc.getBlockZ() + " but could not be deleted. Delete it by hand.", ex);
+                this.logger.log(Level.SEVERE, "Vault " + vaultUuid + " was placed at " + describe(targetLoc)
+                        + " but could not be deleted. Delete it by hand.", ex);
             }
             return done;
-        }, database);
+        }, this.database);
     }
 
-    /**
-     * Places the block and fills it. A chest is placed as a single chest so it does not merge
-     * with a neighbour. Each item goes back to the slot it was stored under when that slot
-     * exists and is free; otherwise to the first free slot, and to the ground if there is none.
-     */
-    private @NotNull Result placeAt(@NotNull StoredVault stored, @NotNull Location loc) {
-        World world = loc.getWorld();
-        if (world == null) {
-            return new Result(false, MessageKeys.PLACEMENT_WORLD_UNAVAILABLE);
-        }
-        Block target = world.getBlockAt(loc);
-        if (target.getType() != Material.AIR) {
-            return new Result(false, MessageKeys.PLACEMENT_TARGET_NOT_EMPTY);
-        }
-        Material material = Material.matchMaterial(stored.vault().material());
-        if (material == null || !material.isBlock()) {
-            // Also covers an item-only material name stored by an old version.
-            material = Material.CHEST;
-        }
-        target.setType(material, false);
-
-        String blockData = stored.vault().blockData();
-        if (blockData != null && !blockData.isBlank()) {
-            try {
-                BlockData data = Bukkit.createBlockData(blockData);
-                if (data instanceof Chest chestData) {
-                    chestData.setType(Chest.Type.SINGLE);
-                }
-                target.setBlockData(data, false);
-            } catch (IllegalArgumentException ignored) {
-                // Block data from an older game version: the block keeps its default state.
-            }
-        }
-
-        if (!(target.getState() instanceof Container container)) {
-            return new Result(true, MessageKeys.PLACEMENT_BLOCK_PLACED);
-        }
-        Inventory inventory = container.getInventory();
-        inventory.clear();
-        for (VaultItemEntity row : stored.items()) {
-            ItemStack stack = ItemSerialization.fromBytes(row.item());
-            if (stack == null) {
-                continue;
-            }
-            if (row.slot() >= 0 && row.slot() < inventory.getSize() && inventory.getItem(row.slot()) == null) {
-                inventory.setItem(row.slot(), stack);
-                continue;
-            }
-            for (ItemStack leftover : inventory.addItem(stack).values()) {
-                world.dropItemNaturally(loc, leftover);
-            }
-        }
-        return new Result(true, MessageKeys.PLACEMENT_VAULT_PLACED);
+    private static @NotNull String describe(@NotNull Location location) {
+        String world = location.getWorld() == null ? "an unloaded world" : location.getWorld().getName();
+        return world + " " + location.getBlockX() + "," + location.getBlockY() + "," + location.getBlockZ();
     }
 }

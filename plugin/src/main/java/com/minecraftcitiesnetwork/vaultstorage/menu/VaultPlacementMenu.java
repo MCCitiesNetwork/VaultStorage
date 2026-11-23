@@ -12,6 +12,7 @@ import io.papermc.paper.registry.data.dialog.body.DialogBody;
 import com.minecraftcitiesnetwork.vaultstorage.placement.PlayerPlaceVaultEvent;
 import com.minecraftcitiesnetwork.vaultstorage.menu.AutoDialog;
 import com.minecraftcitiesnetwork.vaultstorage.permission.Permissions;
+import com.minecraftcitiesnetwork.vaultstorage.placement.PlacementRules;
 import com.minecraftcitiesnetwork.vaultstorage.placement.VaultPlacementService;
 import com.minecraftcitiesnetwork.vaultstorage.session.VaultSessionManager;
 import com.minecraftcitiesnetwork.vaultstorage.session.VaultSessionManager.Mode;
@@ -123,15 +124,16 @@ public final class VaultPlacementMenu extends ChildMenuImp {
                 Location targetLoc = target.getLocation();
 
                 // The place permission, and somewhere the player may place: any grant, or the override.
-                if (!actor.hasPermission(Permissions.ACTION_PLACE)) {
-                    actor.sendMessage(plugin.text().of(MessageKeys.PLACEMENT_NO_PERMISSION));
-                    return;
-                }
-                boolean allowed = actor.hasPermission(Permissions.BYPASS_REGION)
-                        || plugin.integrations().mayPlace(actor.getUniqueId(), targetLoc);
-                if (!allowed) {
-                    actor.sendMessage(plugin.text().of(MessageKeys.PLACEMENT_NOT_ALLOWED));
-                    return; // Stay in placement mode
+                switch (mayPlaceAt(actor, targetLoc)) {
+                    case NO_PERMISSION -> {
+                        actor.sendMessage(plugin.text().of(MessageKeys.PLACEMENT_NO_PERMISSION));
+                        return;
+                    }
+                    case NOT_HERE -> {
+                        actor.sendMessage(plugin.text().of(MessageKeys.PLACEMENT_NOT_ALLOWED));
+                        return; // Stay in placement mode
+                    }
+                    case ALLOWED -> { }
                 }
 
                 VaultPlacementService placement = plugin.placementService();
@@ -191,9 +193,7 @@ public final class VaultPlacementMenu extends ChildMenuImp {
                     actor.sendActionBar(plugin.text().of(MessageKeys.PLACEMENT_ACTION_BAR_IDLE));
                     return;
                 }
-                boolean allowed = actor.hasPermission(Permissions.ACTION_PLACE)
-                        && (actor.hasPermission(Permissions.BYPASS_REGION)
-                        || plugin.integrations().mayPlace(actor.getUniqueId(), target.getLocation()));
+                boolean allowed = mayPlaceAt(actor, target.getLocation()) == PlacementRules.Decision.ALLOWED;
                 actor.sendActionBar(plugin.text().of(allowed
                         ? MessageKeys.PLACEMENT_ACTION_BAR_PLACEABLE : MessageKeys.PLACEMENT_ACTION_BAR_NOT_PLACEABLE));
             }
@@ -202,5 +202,11 @@ public final class VaultPlacementMenu extends ChildMenuImp {
 
         session.dynamicListener().start();
         actor.closeDialog();
+    }
+
+    private PlacementRules.@NotNull Decision mayPlaceAt(@NotNull Player actor, @NotNull Location target) {
+        return PlacementRules.decide(actor.hasPermission(Permissions.ACTION_PLACE),
+                actor.hasPermission(Permissions.BYPASS_REGION),
+                () -> plugin.integrations().mayPlace(actor.getUniqueId(), target));
     }
 }
