@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 
 // The dev database from compose.dev.yml, which the test server uses.
 const CONTAINER = 'vaultstorage-dev-mariadb';
@@ -65,3 +65,16 @@ export function sqlFromInput(statement: string): void {
     execFileSync('docker', ['exec', '-i', CONTAINER, 'mariadb', '-uvaultstorage', '-pvaultstorage', 'vault_storage'],
         { input: statement, stdio: ['pipe', 'ignore', 'inherit'] });
 }
+
+/**
+ * Makes every write to the vault tables wait for this many seconds, from a connection of its
+ * own. A capture or a claim started meanwhile hangs in its database step, which gives a test
+ * time to change the world before that step returns.
+ */
+export function holdVaultTables(seconds: number): void {
+    const child = spawn('docker', ['exec', CONTAINER, 'mariadb', '-uroot', '-proot', 'vault_storage', '-e',
+        `LOCK TABLES Vault WRITE, VaultItem WRITE, World WRITE; SELECT SLEEP(${seconds}); UNLOCK TABLES;`],
+        { stdio: 'ignore', detached: true });
+    child.unref();
+}
+

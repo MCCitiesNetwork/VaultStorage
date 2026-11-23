@@ -58,11 +58,16 @@ public final class PlayerNotificationsOwnerNotifier implements OwnerNotifier {
         // Its own key each time: two vaulted containers are two things the owner should read.
         String key = DATA_TYPE + ":" + recipient + ":" + UUID.randomUUID();
         try {
-            this.notifications.enqueueNotification(new TypedNotification<>(key, Instant.now(), null,
+            // Stored, and pushed now to an owner who is online; one who is not gets it when they join.
+            this.notifications.enqueueAndDeliver(new TypedNotification<>(key, Instant.now(), null,
                     new NotificationTarget(List.of(recipient)), DATA_TYPE,
-                    new VaultNotification(MINI_MESSAGE.serialize(title), MINI_MESSAGE.serialize(message)), 0), false);
+                    new VaultNotification(MINI_MESSAGE.serialize(title), MINI_MESSAGE.serialize(message)), 0), false)
+                    .exceptionally(failure -> {
+                        this.logger.log(Level.WARNING, "Could not notify " + recipient + ".", failure);
+                        return null;
+                    });
         } catch (RuntimeException ex) {
-            this.logger.log(Level.WARNING, "Could not enqueue a notification for " + recipient + ".", ex);
+            this.logger.log(Level.WARNING, "Could not notify " + recipient + ".", ex);
         }
     }
 }

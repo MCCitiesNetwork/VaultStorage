@@ -98,7 +98,6 @@ public final class MessageKeys {
     public static final String CAPTURE_ATTACHMENT_REMOVED = "capture.attachment-removed";
     public static final String CAPTURE_EMPTY_CAPTURE_SKIPPED = "capture.empty-capture-skipped";
     public static final String CAPTURE_CAPTURED_OK = "capture.captured-ok";
-    public static final String CAPTURE_NO_BOLT_OWNER = "capture.no-bolt-owner";
     public static final String CAPTURE_ACTION_BAR_IDLE = "capture.action-bar-idle";
     public static final String CAPTURE_ACTION_BAR_VAULTABLE = "capture.action-bar-vaultable";
     public static final String CAPTURE_ACTION_BAR_NOT_VAULTABLE = "capture.action-bar-not-vaultable";

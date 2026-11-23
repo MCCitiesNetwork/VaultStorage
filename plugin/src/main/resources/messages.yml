@@ -148,7 +148,6 @@ capture:
   attachment-removed: 'The sign on it was removed.'
   empty-capture-skipped: 'Protection removed.'
   captured-ok: 'Vault captured.'
-  no-bolt-owner: '<yellow>No Bolt owner found; you will be set as the vault owner.</yellow>'
   action-bar-idle: '<yellow>Capture mode</yellow> - Right-click a block, item frame, or painting. <gray>Left-click to cancel.</gray>'
   # <owner> <admin>
   action-bar-vaultable: '<gray>Owner:</gray> <white><owner></white> <gray>| Vaultable:</gray> <green>yes</green><admin>'

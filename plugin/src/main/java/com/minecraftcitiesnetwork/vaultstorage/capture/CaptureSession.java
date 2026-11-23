@@ -171,9 +171,6 @@ public final class CaptureSession implements Listener {
             }
             return DONE;
         }
-        if (originalOwner == null && decision.hasOverride()) {
-            actor.sendMessage(plugin.text().of(MessageKeys.CAPTURE_NO_BOLT_OWNER));
-        }
         return service.owners().validate(outcome.finalOwner(), actor).thenComposeAsync(owner -> {
             if (owner == null) {
                 ownerUnknown(captureBlock);

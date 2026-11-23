@@ -208,9 +208,6 @@ public final class VaultCaptureService {
             onDoneMain.accept(false);
             return;
         }
-        if (originalOwner == null && decision.hasOverride()) {
-            actor.sendMessage(plugin.text().of(MessageKeys.CAPTURE_NO_BOLT_OWNER));
-        }
         UUID finalOwner = outcome.finalOwner();
 
         // The owner is validated first; the rest runs on the main thread, where the pipeline starts.

@@ -11,6 +11,8 @@ changes hands, and lets the owner place them back.
 ./gradlew :plugin:test          # the host only; the database tests need a running Docker daemon
 ./gradlew :plugin:runServer     # a Paper 26.3 test server with the module jars installed
 ./gradlew :plugin:plugwrightTest   # live-server tests: starts the dev database and a Paper 26.3 server, runs bots
+./gradlew :plugin:plugwrightTestLocal -Pspecs=sweep,scan   # only the spec files whose names contain one of these
+./gradlew :plugin:plugwrightRestartTest   # the live tests that stop and start the server in between
 ```
 
 Java 25, Paper 26.3, Gradle 9.8.2. Every version lives in `gradle/libs.versions.toml`; the
@@ -148,6 +150,9 @@ findings and kept the framework (`ParentMenu`, `ChildMenu`, `AutoDialog`).
 
 ## Rules for menus
 
+- **A dialog's answer comes from the client.** A menu lists only what a player may do, and the
+  code that does it checks again: `VaultInventoryService.openVirtualInventory` checks the
+  action's permission, and `captureDirectAsync` and `captureHanging` check the capture one.
 - **Whoever opens a `LoadingMenu` ends it** on every path: replace it with the next dialog, or
   `closeDialog()` before telling the player what went wrong.
 - **Anything that cannot be undone goes through `ConfirmMenu`.** Cancel is its first button.
@@ -196,7 +201,7 @@ What step 3 delivered (plan: `docs/superpowers/plans/2026-11-12-capture-placemen
 
 `./gradlew :plugin:plugwrightTest` starts MariaDB from `compose.dev.yml` (port 3309), provisions a
 Paper 26.3 server with Bolt, WorldGuard, WorldEdit, LuckPerms, GriefPrevention, ViaVersion and
-ViaBackwards, Realty and the four economy plugins,
+ViaBackwards, Realty, Namebook, PlayerNotifications, Floodgate and the four economy plugins,
 installs the host and module jars, and runs the specs in `plugin/src/test/e2e/tests/`. It is never
 part of `build`. It needs Docker, Node and `gh` signed in to an account that can read the
 Realty and hibernia-economy repositories.
@@ -218,13 +223,15 @@ Realty and hibernia-economy repositories.
   release`; another place with `-PhiberniaEconomyDir=`), otherwise from the `dev-latest`
   release of `ParadauxIO/hibernia-economy`, fetched with `gh`. Treasury will not start without
   all four. Their database is `treasury` on the dev MariaDB.
-- Realty is the real plugin, installed by `installE2eRealty` from the jars the latest
-  successful `main` build of `MCCitiesNetwork/realty` keeps on GitHub Actions, fetched with
-  `gh` (or `-PrealtyJar=<file>`). Its database is `realty` on the dev MariaDB. It needs an
-  economy, so it enables only when the economy plugins are installed.
+- Realty, Namebook and PlayerNotifications are the real plugins, each taken from the jars the
+  latest successful `main` run of its repository's `Build` workflow keeps on GitHub Actions,
+  fetched with `gh` (`jarFromActions` in `plugin/build.gradle.kts`), or from `-PrealtyJar=`,
+  `-PnamebookJar=` or `-PplayerNotificationsJar=`. Each has a database of its own on the dev
+  MariaDB. Realty needs an economy, so it enables only when the economy plugins are installed.
+- Floodgate is downloaded from GeyserMC.
 - Downloads are kept in `plugin/build/e2e-downloads` and reused until GitHub has a newer set.
-- A spec that needs a shop or a region sale starts with `requireChestShop()` or
-  `requireRealty()` (`tests/shops.ts`) and fails when the plugin is missing. No spec passes
+- A spec that needs a shop, a region sale or a notification starts with `requireChestShop()`,
+  `requireRealty()` or `requirePlayerNotifications()` (`tests/shops.ts`) and fails when the plugin is missing. No spec passes
   without running.
 - In `tests/sweep.spec.ts` staff registers a region with `/realty register`, naming themself
   as authority or landlord: Realty's default is a government account the test server lacks.
@@ -234,58 +241,76 @@ Realty and hibernia-economy repositories.
   fires its event, so the sweep sees the previous occupant as an outsider.
 - Add several WorldGuard members with one `/rg addmember`, and wait for the answer that names
   the region: a bot's messages last the whole test, so an earlier region's answer would match.
+- A player who is not an operator is made with `ordinary(server, player, nodes)` in
+  `tests/players.ts`: exactly those permissions, through LuckPerms.
+- `createPlayer({ username })` brings a bot back under a name that left, for "quit and return".
+- The console's answer to a command is the return value of `server.execute`, not a log line.
+  An answer sent after work off the main thread reaches no remote console, so such a command
+  also logs its outcome.
+- The action bar is read with `ActionBars` in `tests/vaults.ts`; turn the bot with
+  `lookAtBlock` first, so the server knows what it looks at.
+- A region that is not a box is drawn with `definePolygon` in `tests/realty.ts`.
+- GriefPrevention allows three players from one address by default and every bot shares one;
+  the test server's config lifts that.
+- To run a few specs: `./gradlew :plugin:plugwrightTestLocal -Pspecs=capture-edges,sweep` runs
+  the spec files whose names contain one of those. `plugwrightTest` takes no filter.
 - A test run starts by emptying `Vault`, `VaultItem` and `PendingSweep` (`resetE2eData`): bots get
   a random four-character name, and a name seen before would bring its old vaults.
+- To make the world change in the middle of a capture or a placement, hold its database step
+  open with `holdVaultTables(seconds)` in `tests/database.ts`, change the world, and wait.
+- The restart test is two spec files and a task, `plugwrightRestartTest`, that runs one, then
+  the other without wiping the server's folder or the database in between. What the halves
+  share is in `tests/restart.ts`: importing a spec file would run its tests.
+- Other dimensions are not flat: `netherPlatform` and `standInNether` in `tests/world.ts`.
 - A vault's row exists a tick before its block is removed. Wait for the message that follows
   the removal, not for the row, before asserting on the block.
 - A bot cannot sneak, so it cannot put a sign on a chest. `shop` in `tests/shops.ts`
   places the sign on stone, turns the stone into the chest, then sends the sign text.
 
-Covered live: `/vault` opening and being refused; capturing a locked chest, finding it in the
-menus and placing it back with items in their slots; a furnace coming back with its input, fuel and
-output where they were; a capture during a database outage leaving
-the chest untouched and working again afterwards; viewing a vault without being able to take from
-it; editing a vault and the change being saved; a second editor being refused until the first
-closes; paging through 45 vaults; an admin searching by owner name, deleting a vault,
-transferring one and opening one by id; scanning a WorldGuard region, vaulting a result and
-seeing it leave the list.
+### What the live suite covers
 
-Also covered live, with players who are not operators (permissions through LuckPerms): a region
-member vaulting a non-member's chest; a non-member, a co-member's chest and a chest outside any
-region all being refused; placement refused on land the owner has no part in and allowed on
-their own GriefPrevention claim.
+One spec file per area, in `plugin/src/test/e2e/tests/`. A new behaviour gets a test in the
+file for its area; a bug found by hand gets a test before its fix.
 
-Also covered live: one half of a double chest being vaulted and the other staying locked for its
-owner; a locked item frame being vaulted with the item it shows. The same frame found by a
-region scan is vaulted from the results, not merely unlocked.
+| Spec | Covers |
+| --- | --- |
+| `plugin` | the plugin enabling; `/vault` opening and being refused; the admin parent permission |
+| `commands` | every branch of `/vault` from a player and from the console: who may run it, bad ids, unknown names, unknown and forbidden actions |
+| `security` | answers a client could forge: an action the player may not use, a nonsense action, a permission lost after the menu opened |
+| `capture-place` | a chest and a furnace captured and placed back slot for slot; a capture during a database outage |
+| `capture-edges` | cancelling; empty, unlocked and non-container blocks; nine container types; enchantments, names and nested contents; a full chest; double chest order; paintings and frames; two players or three clicks at once; quitting in capture mode |
+| `containers` | one half of a double chest; an item frame |
+| `placement-edges` | a target that is not empty; cancelling; facing and not joining a neighbour; the clicked face; the lock going to the owner; the way back afterwards; empty, unknown-block and overfull vaults; two placers at once; a vault being edited |
+| `vault-inventory`, `inventory-edges` | view, edit and copy; putting items in; emptying; an editor who disconnects; delete and transfer while a vault is open |
+| `vault-list`, `menus` | paging; list lines; search by name, owner id and vault id; Back from every screen; the page after a delete; page size on reload; a settings file that does not parse |
+| `admin` | delete with its confirmation, transfer, open by id |
+| `scan`, `scan-edges` | who may scan what; only what the player may vault is listed; the capture permission on a result; the cooldown; region search; overlapping regions at "Here"; paging; filters; teleport; a stale list |
+| `policy`, `rules` | members, owners, outsiders and the override; a player's own container; overlapping, touching, stacked and nested regions; WorldGuard parents; signs; an empty frame; an offline heir; GriefPrevention trust |
+| `shapes` | an L-shaped region in capture, scan, "Here" and the sweep: its bounding box does not count |
+| `chestshop` | a shop captured by its sign; an empty shop; a shop nobody locked |
+| `sweep`, `sweep-edges` | a sale, a transfer, a rental and a replaced tenant through Realty; shops; stacked and overlapping regions; an offline occupant; a buyer who leaves; unloaded chunks; several owners; frames; empty and double chests; the module off, reworded and silent |
+| `notifications` | an online owner told at once, an offline one on return, a displaced occupant told once with a count, all through PlayerNotifications |
+| `outage` | the database down during a placement, a list, an open, an edit being closed and a delete; nothing lost, nothing stuck in use afterwards |
+| `actionbar` | what capture and placement mode say about the block looked at, and why not |
+| `reload` | a reworded message; a file that does not parse |
+| `timing` | the world changing while a capture or a placement is in its database step: a chest gaining, losing an item or being broken, an item frame's item swapped, a block put at the target, repeated clicks |
+| `worlds` | a chest vaulted in the nether and placed in the overworld; an overworld region not applying in the nether; a vault from a world the server no longer has |
+| `names` | Namebook and Floodgate each taking over at start-up; an offline player found by name; names in any case; a Java player not taken for a Bedrock one |
+| `restart-before`, `restart-after` | across a real stop and start of the server: a waiting sweep resumes and runs, a stale claim is released and logged, a stored vault keeps its items. Run by `./gradlew :plugin:plugwrightRestartTest`, not by the ordinary run |
+| `zz-scale` | lists over 5,000 vaults of one owner and 35,000 in the table opening within three seconds; tick time while they do |
 
-Also covered live: the action menu naming the vault's block and position; delete asking first,
-Cancel keeping the vault and Delete removing it.
+Not covered live, and why:
 
-Also covered live: `vaultstorage.admin` alone giving a non-operator the staff commands, and a
-player with only the menu permission being refused `/vault reload`.
+- **A Bedrock player.** A bot cannot join as one, so the chat line a Bedrock player gets in
+  place of the loading dialog, and gamertag lookups, are untested. Floodgate's module is tested
+  with the real plugin present, for Java players.
+- **An edit open when the server stops.** The runner disconnects its bots before it stops the
+  server, and a disconnect saves the edit by the ordinary path.
 
-Also covered live: `/vault reload` picking up a reworded message and refusing a file that does not
-parse.
-
-Also covered live, when a `hibernia-economy` checkout is beside this repository: capturing a
-locked shop by its sign vaults the container, and an empty locked shop loses its lock and its
-sign; in both, ChestShop's registry marks the shop inactive. A stocked shop nobody locked is
-vaulted to the shop's owner, not to the player who clicked.
-
-Also covered live, through Realty itself: a region being bought vaults the previous occupant's
-locked chest for them and tells the buyer once; the buyer's own locked chest stays. The same
-sweep after a title transfer, a rental of a vacant region, and a tenant replaced by staff. The
-sweep vaults the previous occupant's stocked unlocked shop, removes the sign of their empty one
-and leaves the chest, and leaves the buyer's own shop alone.
-
-Also covered live, for regions that share space: where two regions overlap, a member of one
-vaults an outsider's chest and not the other region's member's; a member of a region next
-door, or of the region above, has no say; a member of a city has none over a plot inside it.
-Buying the region above another leaves a chest in the region below, and buying a region that
-overlaps another leaves that region's member's chest.
-
-Shared steps are in `tests/vaults.ts`.
+Helpers: `vaults.ts` (vaults, locks, capture mode, placing, entities, the action bar),
+`world.ts` (clicks, block and item assertions), `players.ts` (exact permissions), `realty.ts`
+(regions changing hands, polygons), `shops.ts` (shops, required plugins), `files.ts` (editing a
+config and reloading), `database.ts`, `dialogs.ts`.
 
 ## Rules for the capture and placement code
 
@@ -320,6 +345,14 @@ Shared steps are in `tests/vaults.ts`.
   The order is: read, store, check it is unchanged, remove.
 - **Placement claims before it places and deletes after.** A vault is never deleted before its
   block exists.
+- **Anything that removes or moves a vault claims it first**, delete included: a vault being
+  edited or placed is "in use" to everyone else.
+- **A claim is given back through `ClaimReleases`**, never `VaultRepository.release` directly: it
+  retries while the database is down, so an outage does not leave a vault in use until a restart.
+- **A sweep captures both halves of a double chest**, the half with items first. Bolt keeps one
+  lock for the pair, so the scan finds it once.
+- **A scan lists what the policy lets the player vault.** The owner filter applies only when
+  someone is looking at one other player's things.
 - **Editing a vault claims it.** Every claim is released: on close, on a failed open, at
   shutdown, and for all vaults at startup.
 - **A module that owns a table** keeps its own migrator and version table, registers its mapper

@@ -90,3 +90,27 @@ export async function expectItemCount(server: ServerWrapper, x: number, y: numbe
     await expect(server).toHaveReceivedMessage(marker);
 }
 
+/** The nether, where the test world is not flat: specs build a platform to work on. */
+export const NETHER = 'minecraft:the_nether';
+export const NETHER_FLOOR = 100;
+
+/** A stone platform with air above it in the nether, kept loaded, around a spot. */
+export async function netherPlatform(server: ServerWrapper, x: number, z: number): Promise<void> {
+    await server.execute(`execute in ${NETHER} run forceload add ${x - 8} ${z - 8} ${x + 8} ${z + 8}`);
+    await server.execute(`execute in ${NETHER} run fill ${x - 8} ${NETHER_FLOOR} ${z - 8} ${x + 8} ${NETHER_FLOOR + 4} ${z + 8} minecraft:air`);
+    await server.execute(`execute in ${NETHER} run fill ${x - 8} ${NETHER_FLOOR - 1} ${z - 8} ${x + 8} ${NETHER_FLOOR - 1} ${z + 8} minecraft:stone`);
+}
+
+/** Puts the player on the nether platform. */
+export async function standInNether(server: ServerWrapper, player: PlayerWrapper, x: number, z: number): Promise<void> {
+    await server.execute(`execute in ${NETHER} run minecraft:tp ${player.username} ${x}.5 ${NETHER_FLOOR} ${z}.5`);
+    // A change of dimension takes longer to reach the bot than a move within one.
+    await sleep(3000);
+}
+
+/** Asserts through the console that a block in the nether is of the given type. */
+export async function expectNetherBlock(server: ServerWrapper, x: number, y: number, z: number, type: string, marker: string): Promise<void> {
+    await server.execute(`execute in ${NETHER} if block ${x} ${y} ${z} minecraft:${type} run say ${marker}`);
+    await expect(server).toHaveReceivedMessage(marker);
+}
+

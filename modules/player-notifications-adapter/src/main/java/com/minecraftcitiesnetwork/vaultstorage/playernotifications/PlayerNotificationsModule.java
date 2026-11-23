@@ -29,6 +29,7 @@ public final class PlayerNotificationsModule extends SimplePluginModule<VaultSto
                 return;
             }
             plugin.integrations().ownerNotifier(notifier);
+            plugin.getLogger().info("Vault owners are told through PlayerNotifications.");
         } catch (LinkageError error) {
             plugin.getLogger().log(Level.SEVERE,
                     "PlayerNotifications is enabled but its classes are not reachable from this module.", error);

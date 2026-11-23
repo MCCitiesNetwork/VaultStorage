@@ -32,6 +32,8 @@ test('a buyer who leaves before the sweep runs does not stop it',
         buyer.bot.quit();
 
         await vaultsOf(owner, 1);
+        // The vault's row exists a tick before the block goes, and nobody is told here.
+        await sleep(1500);
         await expectBlock(server, x + 2, FLOOR, z, 'air', 'swept-with-the-buyer-gone');
     });
 

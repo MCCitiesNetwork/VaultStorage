@@ -28,6 +28,7 @@ public final class NamebookModule extends SimplePluginModule<VaultStoragePlugin>
                 return;
             }
             plugin.integrations().primaryNames(source);
+            plugin.getLogger().info("Player names are read from Namebook.");
         } catch (LinkageError error) {
             plugin.getLogger().log(Level.SEVERE,
                     "Namebook is enabled but its classes are not reachable from this module.", error);

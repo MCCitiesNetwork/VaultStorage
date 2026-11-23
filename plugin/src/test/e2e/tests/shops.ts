@@ -86,3 +86,28 @@ export async function shopIsActive(x: number, z: number): Promise<boolean> {
     return rows[0] === '1';
 }
 
+/** Fails the test when PlayerNotifications is not on the test server. */
+export function requirePlayerNotifications(): void {
+    if (!installedPlugins().some((name) => /^player-notifications-paper-.*\.jar$/.test(name))) {
+        throw new Error('PlayerNotifications is not on the test server. installE2eNotifications in '
+            + 'plugin/build.gradle.kts takes it from GitHub Actions or from -PplayerNotificationsJar; '
+            + 'see its warning in the Gradle output.');
+    }
+}
+
+/** Fails the test when Namebook is not on the test server. */
+export function requireNamebook(): void {
+    if (!installedPlugins().some((name) => /^namebook-paper-.*\.jar$/.test(name))) {
+        throw new Error('Namebook is not on the test server. installE2eNamebook in plugin/build.gradle.kts '
+            + 'takes it from GitHub Actions or from -PnamebookJar; see its warning in the Gradle output.');
+    }
+}
+
+/** Fails the test when Floodgate is not on the test server. */
+export function requireFloodgate(): void {
+    if (!installedPlugins().some((name) => /^floodgate-.*\.jar$/.test(name))) {
+        throw new Error('Floodgate is not on the test server. installE2eFloodgate in plugin/build.gradle.kts '
+            + 'downloads it; see its warning in the Gradle output.');
+    }
+}
+

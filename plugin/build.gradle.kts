@@ -102,6 +102,10 @@ plugwright {
 
     environments {
         create("local", LocalMode) {
+            // The restart specs run only from plugwrightRestartTest; see below.
+            if (!providers.gradleProperty("restartPhase").isPresent) {
+                excludeTests.add("restart:")
+            }
             minecraftVersion.set(libs.versions.minecraft.get())
             // Records agreement to the Minecraft EULA on behalf of whoever runs the tests.
             acceptEula.set(true)
@@ -259,64 +263,157 @@ val installE2eEconomy by tasks.registering {
             File(pluginsDir, "$folder/config.yml").apply { parentFile.mkdirs() }.writeText(config)
         }
 
-        val (created, output) = runCommand("docker", "exec", "vaultstorage-dev-mariadb", "mariadb", "-uroot",
-            "-proot", "-e", "CREATE DATABASE IF NOT EXISTS treasury")
-        check(created == 0) { "Could not create the treasury database in the dev MariaDB: $output" }
+        createDevDatabase("treasury")
     }
 }
 
-// Realty itself, so that a region really changes hands. Its plugin jar is not in any Maven
-// repository: it is taken from -PrealtyJar=<file>, or from the jars the latest successful build
-// of Realty's main branch keeps on GitHub, fetched with `gh`. Realty needs an economy, so it
-// runs after installE2eEconomy and only enables when that installed one.
-val realtyRepository = "MCCitiesNetwork/realty"
+// Realty, Namebook and PlayerNotifications are in no Maven repository. Each repository's Build
+// workflow keeps its jars on GitHub, and the test server takes the plugin jar from the latest
+// successful build of main, fetched with `gh`. -P<name>Jar=<file> uses a jar of your own.
+
+/**
+ * The plugin jar from the latest successful Build of a repository's main branch, or null when
+ * it cannot be had. Kept in build/e2e-downloads under the commit it was built from, so it is
+ * fetched again only when main has moved.
+ *
+ * @param artifact the artifact's name, given the commit
+ * @param pluginJar matches the plugin's jar among the files in the artifact
+ */
+fun jarFromActions(repository: String, cache: File, artifact: (String) -> String, pluginJar: Regex): File? {
+    fun jarIn(folder: File): File? = folder.walkTopDown().firstOrNull { pluginJar.matches(it.name) }
+    val (listed, run) = runCommand("gh", "run", "list", "-R", repository, "--branch", "main",
+        "--workflow", "Build", "--status", "success", "--limit", "1",
+        "--json", "databaseId,headSha", "-q", ".[0] | \"\\(.databaseId) \\(.headSha)\"")
+    val parts = run.trim().split(" ")
+    if (listed != 0 || parts.size != 2) {
+        // Offline, or gh is missing: whatever an earlier run fetched.
+        return jarIn(cache.apply { mkdirs() })
+    }
+    val folder = File(cache, parts[1])
+    if (jarIn(folder) == null) {
+        cache.deleteRecursively()
+        folder.mkdirs()
+        val (downloaded, output) = runCommand("gh", "run", "download", parts[0], "-R", repository,
+            "-n", artifact(parts[1]), "-D", folder.absolutePath)
+        check(downloaded == 0) { "Could not download the jars of $repository: $output" }
+    }
+    return jarIn(folder)
+}
+
+/** Puts the jar in the test server's plugins folder in place of any earlier one. False when there is none. */
+fun installPluginJar(jar: File?, pluginJar: Regex, pluginsDir: File): Boolean {
+    pluginsDir.listFiles { file -> pluginJar.matches(file.name) }?.forEach { it.delete() }
+    if (jar == null || !jar.exists()) {
+        return false
+    }
+    jar.copyTo(File(pluginsDir, jar.name), overwrite = true)
+    return true
+}
+
+/** Each of these plugins keeps its tables in a database of its own on the dev MariaDB. */
+fun createDevDatabase(name: String) {
+    val (created, output) = runCommand("docker", "exec", "vaultstorage-dev-mariadb", "mariadb", "-uroot",
+        "-proot", "-e", "CREATE DATABASE IF NOT EXISTS $name")
+    check(created == 0) { "Could not create the $name database in the dev MariaDB: $output" }
+}
+
+// Realty itself, so that a region really changes hands. It needs an economy, so it runs after
+// installE2eEconomy and only enables when that installed one.
 val realtyJarOverride = providers.gradleProperty("realtyJar").map { rootProject.file(it) }
 
 val installE2eRealty by tasks.registering {
     description = "Installs Realty into the test server."
     mustRunAfter(installE2eEconomy)
     val override = realtyJarOverride
-    val downloadDir = e2eDownloads.map { it.dir("realty").asFile }
+    val cache = e2eDownloads.map { it.dir("realty").asFile }
     val pluginsDir = e2eRunDir.dir("plugins").asFile
     doLast {
         val pluginJar = Regex("realty-paper-\\d.*-all\\.jar")
-        fun jarIn(folder: File): File? = folder.walkTopDown().firstOrNull { pluginJar.matches(it.name) }
-
-        var jar: File? = override.orNull
-        if (jar == null) {
-            val (listed, run) = runCommand("gh", "run", "list", "-R", realtyRepository, "--branch", "main",
-                "--workflow", "Build", "--status", "success", "--limit", "1",
-                "--json", "databaseId,headSha", "-q", ".[0] | \"\\(.databaseId) \\(.headSha)\"")
-            val parts = run.trim().split(" ")
-            if (listed == 0 && parts.size == 2) {
-                val folder = File(downloadDir.get(), parts[1])
-                if (jarIn(folder) == null) {
-                    downloadDir.get().deleteRecursively()
-                    folder.mkdirs()
-                    val (downloaded, output) = runCommand("gh", "run", "download", parts[0], "-R", realtyRepository,
-                        "-n", "jars-${parts[1]}", "-D", folder.absolutePath)
-                    check(downloaded == 0) { "Could not download Realty's jars: $output" }
-                }
-                jar = jarIn(folder)
-            } else {
-                // Offline, or gh is missing: whatever an earlier run fetched.
-                jar = jarIn(downloadDir.get().apply { mkdirs() })
-            }
-        }
-        pluginsDir.listFiles { file -> file.name.startsWith("realty-") && file.name.endsWith(".jar") }
-            ?.forEach { it.delete() }
-        if (jar == null || !jar.exists()) {
-            logger.warn("No Realty jar: none given with -PrealtyJar and none from $realtyRepository."
+        val jar = override.orNull
+            ?: jarFromActions("MCCitiesNetwork/realty", cache.get(), { commit -> "jars-$commit" }, pluginJar)
+        // The stand-in an earlier version of this build installed was named realty-stub.
+        pluginsDir.listFiles { file -> file.name.startsWith("realty-stub") }?.forEach { it.delete() }
+        if (!installPluginJar(jar, pluginJar, pluginsDir)) {
+            logger.warn("No Realty jar: none given with -PrealtyJar and none from GitHub."
                 + " The region-sale specs will fail.")
             return@doLast
         }
-        jar.copyTo(File(pluginsDir, jar.name), overwrite = true)
-        // Realty prepends "jdbc:" itself and creates its own tables, in a database of its own.
+        // Realty prepends "jdbc:" itself and creates its own tables.
         File(pluginsDir, "Realty/database.yml").apply { parentFile.mkdirs() }.writeText(
             "url: 'mariadb://127.0.0.1:3309/realty'\nusername: 'root'\npassword: 'root'\n")
-        val (created, output) = runCommand("docker", "exec", "vaultstorage-dev-mariadb", "mariadb", "-uroot",
-            "-proot", "-e", "CREATE DATABASE IF NOT EXISTS realty")
-        check(created == 0) { "Could not create the realty database in the dev MariaDB: $output" }
+        createDevDatabase("realty")
+    }
+}
+
+// PlayerNotifications, so that an owner is really told.
+val playerNotificationsJarOverride = providers.gradleProperty("playerNotificationsJar").map { rootProject.file(it) }
+
+val installE2eNotifications by tasks.registering {
+    description = "Installs PlayerNotifications into the test server."
+    val override = playerNotificationsJarOverride
+    val cache = e2eDownloads.map { it.dir("player-notifications").asFile }
+    val pluginsDir = e2eRunDir.dir("plugins").asFile
+    doLast {
+        // The plugin's own jar: the artifact also holds the unshaded parts and its modules.
+        val pluginJar = Regex("player-notifications-paper-\\d[^-]*(-SNAPSHOT)?\\.jar")
+        val jar = override.orNull ?: jarFromActions("MCCitiesNetwork/player-notifications", cache.get(),
+            { commit -> "jars-$commit" }, pluginJar)
+        if (!installPluginJar(jar, pluginJar, pluginsDir)) {
+            logger.warn("No PlayerNotifications jar: none given with -PplayerNotificationsJar and none from GitHub."
+                + " The notification specs will fail.")
+            return@doLast
+        }
+        File(pluginsDir, "PlayerNotifications/database.yml").apply { parentFile.mkdirs() }.writeText(
+            "url: mariadb://127.0.0.1:3309/player_notifications\nusername: 'root'\npassword: 'root'\n")
+        createDevDatabase("player_notifications")
+    }
+}
+
+// Namebook, so that names really come from it.
+val namebookJarOverride = providers.gradleProperty("namebookJar").map { rootProject.file(it) }
+
+val installE2eNamebook by tasks.registering {
+    description = "Installs Namebook into the test server."
+    val override = namebookJarOverride
+    val cache = e2eDownloads.map { it.dir("namebook").asFile }
+    val pluginsDir = e2eRunDir.dir("plugins").asFile
+    doLast {
+        val pluginJar = Regex("namebook-paper-\\d[^/]*-all\\.jar")
+        val jar = override.orNull
+            ?: jarFromActions("MCCitiesNetwork/namebook", cache.get(), { "namebook" }, pluginJar)
+        if (!installPluginJar(jar, pluginJar, pluginsDir)) {
+            logger.warn("No Namebook jar: none given with -PnamebookJar and none from GitHub."
+                + " The Namebook spec will fail.")
+            return@doLast
+        }
+        File(pluginsDir, "Namebook/database.yml").apply { parentFile.mkdirs() }.writeText(
+            "url: 'mariadb://127.0.0.1:3309/namebook'\nusername: 'root'\npassword: 'root'\n")
+        createDevDatabase("namebook")
+    }
+}
+
+// Floodgate, so that its module runs against the real plugin. A bot cannot be a Bedrock client,
+// so only what the module does for Java players is tested. Its download has no ".jar" in its
+// address, so it is fetched here and not through plugwright's downloadPlugins.
+val floodgateUrl = "https://download.geysermc.org/v2/projects/floodgate/versions/latest/builds/latest/downloads/spigot"
+
+val installE2eFloodgate by tasks.registering {
+    description = "Installs Floodgate into the test server."
+    val folder = e2eDownloads.map { it.dir("floodgate").asFile }
+    val pluginsDir = e2eRunDir.dir("plugins").asFile
+    val url = floodgateUrl
+    doLast {
+        val cached = File(folder.get().apply { mkdirs() }, "floodgate-spigot.jar")
+        if (!cached.exists()) {
+            try {
+                URI(url).toURL().openStream().use { input -> cached.outputStream().use { input.copyTo(it) } }
+            } catch (failure: java.io.IOException) {
+                cached.delete()
+                logger.warn("Floodgate could not be downloaded (${failure.message}). The Floodgate spec will fail.")
+                return@doLast
+            }
+        }
+        cached.copyTo(File(pluginsDir, cached.name), overwrite = true)
     }
 }
 
@@ -347,19 +444,51 @@ val usePaperStableBuild by tasks.registering {
     }
 }
 
+// `./gradlew :plugin:plugwrightTestLocal -Pspecs=capture-edges,sweep` runs only the spec files
+// whose names contain one of those. The filter is the environment's own task's: plugwrightTest,
+// which runs every environment, takes none.
+// The two restart specs run only from plugwrightRestartTest, one before and one after the
+// server is stopped and started.
+val restartPhase = providers.gradleProperty("restartPhase")
+tasks.withType<me.drownek.plugwright.PlugwrightTestTask>().configureEach {
+    val chosen = restartPhase.map { "restart-$it" }.orElse(providers.gradleProperty("specs"))
+    if (chosen.isPresent) {
+        testFiles.set(chosen)
+    }
+}
+
+val plugwrightRestartTest by tasks.registering {
+    group = "verification"
+    description = "Live tests across a server restart: runs one spec, restarts the server, runs the other."
+    val gradlew = rootProject.file(if (System.getProperty("os.name").startsWith("Windows")) "gradlew.bat" else "gradlew")
+    val root = rootProject.projectDir
+    doLast {
+        for (phase in listOf("before", "after")) {
+            // Each run starts its own server and stops it at the end: two runs are a restart.
+            val exit = ProcessBuilder(gradlew.absolutePath, ":plugin:plugwrightTestLocal", "-PrestartPhase=$phase")
+                .directory(root).inheritIO().start().waitFor()
+            check(exit == 0) { "The \"$phase\" half of the restart tests failed." }
+        }
+    }
+}
+
 // Plugwright registers its tasks late, so they are matched by name instead of tasks.named(...).
 tasks.matching { it.name == "plugwrightProvisionLocal" }.configureEach {
     dependsOn(startE2eDatabase)
-    finalizedBy(usePaperStableBuild, installE2eModules, installE2eEconomy, installE2eRealty)
+    finalizedBy(usePaperStableBuild, installE2eModules, installE2eEconomy, installE2eRealty, installE2eNotifications, installE2eNamebook, installE2eFloodgate)
 }
 tasks.matching { it.name == "plugwrightTestLocal" || it.name == "plugwrightRunServerLocal" }.configureEach {
-    dependsOn(usePaperStableBuild, installE2eModules, installE2eEconomy, installE2eRealty)
+    dependsOn(usePaperStableBuild, installE2eModules, installE2eEconomy, installE2eRealty, installE2eNotifications, installE2eNamebook, installE2eFloodgate)
 }
 // Only a test run starts from empty tables; a server run by hand keeps what is there.
 // `plugwrightTest` runs the environment itself, not through `plugwrightTestLocal`.
 tasks.matching { it.name == "plugwrightTest" || it.name == "plugwrightTestLocal" }.configureEach {
     dependsOn(resetE2eData)
 }
-listOf(usePaperStableBuild, installE2eModules, installE2eEconomy, installE2eRealty).forEach { task ->
+// The second half of the restart tests looks for what the first half left: the database rows,
+// and the world, regions and locks in the server's folder, which every run otherwise wipes.
+resetE2eData.configure { onlyIf { restartPhase.orNull != "after" } }
+tasks.matching { it.name == "plugwrightCleanLocal" }.configureEach { onlyIf { restartPhase.orNull != "after" } }
+listOf(usePaperStableBuild, installE2eModules, installE2eEconomy, installE2eRealty, installE2eNotifications, installE2eNamebook, installE2eFloodgate).forEach { task ->
     task.configure { mustRunAfter(tasks.matching { it.name == "plugwrightProvisionLocal" }) }
 }

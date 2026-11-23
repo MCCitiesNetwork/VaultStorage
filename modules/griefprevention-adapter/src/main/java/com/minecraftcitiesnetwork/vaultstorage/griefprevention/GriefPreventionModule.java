@@ -28,6 +28,7 @@ public final class GriefPreventionModule extends SimplePluginModule<VaultStorage
             PlacementGrant created = GriefPreventionPlacementGrant.create();
             plugin.integrations().addPlacementGrant(created);
             this.grant = created;
+            plugin.getLogger().info("Vaults may be placed on GriefPrevention claims where the player may build.");
         } catch (LinkageError error) {
             plugin.getLogger().log(Level.SEVERE,
                     "GriefPrevention is enabled but its classes are not reachable from this module.", error);

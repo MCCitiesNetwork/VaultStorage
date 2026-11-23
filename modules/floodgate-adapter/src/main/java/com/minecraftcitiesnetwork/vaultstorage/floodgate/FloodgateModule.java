@@ -29,6 +29,7 @@ public final class FloodgateModule extends SimplePluginModule<VaultStoragePlugin
             Predicate<UUID> clientCheck = FloodgateNames.clientCheck();
             plugin.integrations().bedrockNames(names);
             plugin.integrations().bedrockClient(clientCheck);
+            plugin.getLogger().info("Bedrock names and the Bedrock client check come from Floodgate.");
         } catch (LinkageError error) {
             plugin.getLogger().log(Level.SEVERE,
                     "Floodgate is enabled but its classes are not reachable from this module.", error);
