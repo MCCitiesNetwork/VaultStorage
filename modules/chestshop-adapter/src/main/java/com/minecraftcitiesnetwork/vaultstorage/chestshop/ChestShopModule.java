@@ -1,18 +1,22 @@
 package com.minecraftcitiesnetwork.vaultstorage.chestshop;
 
+import com.minecraftcitiesnetwork.vaultstorage.capture.ContainerOwnerSource;
+import com.minecraftcitiesnetwork.vaultstorage.capture.ContainerAttachments;
 import com.minecraftcitiesnetwork.pluginInfrastructure.modules.SimplePluginModule;
 import com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin;
-import com.minecraftcitiesnetwork.vaultstorage.shop.ShopSigns;
-import com.minecraftcitiesnetwork.vaultstorage.shop.ShopDirectory;
 import java.nio.file.Path;
 import java.util.logging.Level;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-/** Recognises and removes ChestShop signs during capture when ChestShop is installed. */
+/**
+ * Everything the plugin does about shops: a shop's signs go with its container, and a shop
+ * container nobody locked belongs to the shop's player.
+ */
 public final class ChestShopModule extends SimplePluginModule<VaultStoragePlugin> {
 
-    private @Nullable ShopSigns signs;
+    private @Nullable ContainerAttachments signs;
+    private @Nullable ContainerOwnerSource owners;
 
     public ChestShopModule() {
     }
@@ -26,17 +30,20 @@ public final class ChestShopModule extends SimplePluginModule<VaultStoragePlugin
         }
         try {
             // Every ChestShop type lives in ChestShopSigns, so this class loads without them.
-            // Both are built before either slot is filled: a failure must leave nothing behind.
-            ShopSigns created = new ChestShopSigns();
-            ShopDirectory directory = null;
+            // Both are built before either is added: a failure must leave nothing behind.
+            ContainerAttachments created = new ChestShopSigns();
+            ContainerOwnerSource treasury = null;
             if (plugin.getServer().getPluginManager().isPluginEnabled("Treasury")) {
-                // Every Treasury type lives in TreasuryShopDirectory, for the same reason.
-                directory = TreasuryShopDirectory.create(plugin.databaseExecutor(), plugin.getLogger());
+                // Every Treasury type lives in TreasuryShopOwners, for the same reason.
+                treasury = TreasuryShopOwners.create(created, plugin.databaseExecutor(), plugin.getLogger());
             }
-            plugin.integrations().addShopSigns(created);
+            plugin.integrations().addAttachments(created);
             this.signs = created;
-            plugin.integrations().shopDirectory(directory);
-            plugin.getLogger().info(directory != null
+            if (treasury != null) {
+                plugin.integrations().addOwnerSource(treasury);
+                this.owners = treasury;
+            }
+            plugin.getLogger().info(treasury != null
                     ? "ChestShop signs are handled, and shop owners are read from Treasury."
                     : "ChestShop signs are handled. Treasury's shop registry is not available, so an"
                     + " unlocked shop container has no owner and cannot be vaulted.");
@@ -48,11 +55,14 @@ public final class ChestShopModule extends SimplePluginModule<VaultStoragePlugin
 
     @Override
     public void shutdown(@NotNull VaultStoragePlugin plugin) {
+        if (this.owners != null) {
+            plugin.integrations().removeOwnerSource(this.owners);
+            this.owners = null;
+        }
         if (this.signs != null) {
-            plugin.integrations().removeShopSigns(this.signs);
+            plugin.integrations().removeAttachments(this.signs);
             this.signs = null;
         }
-        plugin.integrations().shopDirectory(null);
         super.shutdown(plugin);
     }
 }

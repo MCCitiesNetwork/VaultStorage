@@ -372,8 +372,8 @@ Names and shapes that differ from the sections above:
 | `PlacementResult` | `VaultPlacementService.Result(success, messageKey)`; the place permission is checked by the menu |
 | `OwnerNotifier` builds the text; `LoggingOwnerNotifier` | the host's `OwnerNotifications` builds it and `OwnerNotifier.deliver` sends it; with no notifier the host logs |
 | `PlacementGrant.mayPlace(player, Block)` | takes a `Location` |
-| the module fills the `ChestShopService` slot | it adds a `ShopSigns` provider; see the scaffold spec's "As built" |
-| module `realty-autovault` | module `realty` |
+| the module fills the `ChestShopService` slot; `ShopDirectory`, `ShopOwners` and `ShopOwnerLookup` in the host | the host has `ContainerAttachments`, `ContainerOwnerSource` and `ContainerOwnerLookup`; the shop classes are in the module. See the scaffold spec's "As built" |
+| module `realty-autovault` | module `realty-adapter` |
 | sweeps are tested against Realty's events | they are, live, through the real Realty: a sale, a transfer, a rental and a replaced tenant |
 | services take collaborators and two executors | `VaultPlacementService` does; the capture service takes the plugin |
 | the policy "takes region participation as input" | `CaptureRules.decide` does; `VaultCapturePolicy` gathers it |

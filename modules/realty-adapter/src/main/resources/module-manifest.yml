@@ -1,0 +1,5 @@
+module-name: realty-adapter
+entry-class: com.minecraftcitiesnetwork.vaultstorage.realty.RealtyModule
+author: MCCitiesNetwork
+expected-plugin-class: com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin
+reloadable: true

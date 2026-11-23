@@ -418,14 +418,21 @@ Deliberately left unaligned with the playbook:
 - `PaperProfileNameSourceTest` covers the failure cases only. A completed profile needs a
   running server to produce, so the positive case is covered by the live tests that search and
   transfer by player name.
-- **The auto-vault module is `realty`**, not `realty-autovault`: project `:modules:realty`, package
-  `...vaultstorage.realty`, entry class `RealtyModule`, config `modules/realty/config.yml`,
-  version table `vaultstorage_realty_schema_version`. Its classes keep the `AutoVault` name
-  where they are about the feature.
-- **The host has no `chestshop` package and no `NoOpChestShopService`.** The host's concept is
-  shop signs: package `shop`, interface `ShopSigns`. A module adds a provider with
-  `Integrations.addShopSigns`, as a placement grant is added; with none added no block is a
-  shop sign. `ChestShopService.isAvailable()` is gone with the no-op. The module's class is
-  `ChestShopSigns`, in `...vaultstorage.chestshop`.
-- **A module builds everything it supplies before it fills a slot**, so a failed `initialize`
+- **The auto-vault module is `realty-adapter`**, not `realty-autovault`: project
+  `:modules:realty-adapter`, package `...vaultstorage.realty`, entry class `RealtyModule`, config
+  `modules/realty-adapter/config.yml`, version table `vaultstorage_realty_schema_version`. Its
+  classes keep the `AutoVault` name where they are about the feature.
+- **The host has no code about another plugin**, as Realty's and PlayerNotifications' hosts have
+  none. The spec gave the host a `chestshop` package with a `ChestShopService` slot and a no-op
+  default; the host then also grew the shop registry model, the rule for whose a shop is and
+  shop branches in capture. All of that is now in the `chestshop-adapter` module. The host has
+  two hooks a module adds to, as a placement grant is added: `ContainerAttachments` (what another
+  plugin keeps on a container and must go with it) and `ContainerOwnerSource` (whose a container
+  nobody locked is). With nothing added, nothing is attached and such a container is nobody's;
+  there is no no-op class and no `isAvailable()`.
+- **One module does not know another.** The sweep's third pass, in `realty-adapter`, asks the
+  host's hooks for unlocked containers with an owner and does not know they are shops.
+- **A module's wording is its own.** `realty-adapter` has `modules/realty-adapter/messages.yml`;
+  the host's `messages.yml` holds no module's sentence.
+- **A module builds everything it supplies before it adds any of it**, so a failed `initialize`
   leaves nothing of the module in the host.

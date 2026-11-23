@@ -29,11 +29,11 @@ public final class CaptureRules {
     }
 
     /**
-     * Whether the actor may remove a shop sign from a container that cannot be vaulted. Only
-     * the override allows it. A part in the region does not: the sign may be the region
-     * owner's or another member's.
+     * Whether the actor may remove what another plugin has attached to a container that cannot
+     * be vaulted. Only the override allows it. A part in the region does not: the attachment
+     * may be the region owner's or another member's.
      */
-    public static boolean mayRemoveShopSign(boolean hasOverride) {
+    public static boolean mayRemoveAttachments(boolean hasOverride) {
         return hasOverride;
     }
 

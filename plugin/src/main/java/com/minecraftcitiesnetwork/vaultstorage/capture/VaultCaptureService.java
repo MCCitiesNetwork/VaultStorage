@@ -1,11 +1,11 @@
 package com.minecraftcitiesnetwork.vaultstorage.capture;
 
+import org.bukkit.Chunk;
 import org.bukkit.entity.ItemFrame;
 import com.minecraftcitiesnetwork.vaultstorage.config.MessageKeys;
 import com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin;
 import com.minecraftcitiesnetwork.vaultstorage.capture.PlayerVaultEvent;
 import com.minecraftcitiesnetwork.vaultstorage.bolt.BoltService;
-import com.minecraftcitiesnetwork.vaultstorage.shop.ShopSigns;
 import com.minecraftcitiesnetwork.vaultstorage.vault.ItemSerialization;
 import com.minecraftcitiesnetwork.vaultstorage.names.UniqueIdentifierResolver;
 import net.kyori.adventure.text.Component;
@@ -158,14 +158,26 @@ public final class VaultCaptureService {
         session.dynamicListener().start();
     }
 
-    /** Unlocks and removes the given shop signs, through the plugin that keeps them. {@code actor} may be null for automated captures. Must run on the main thread. */
-    void removeShopSigns(@Nullable Player actor, @NotNull List<Block> shopSigns) {
-        ShopSigns signs = plugin.shopSigns();
-        BoltService bolt = plugin.bolt();
-        for (Block signBlock : shopSigns) {
-            unprotect(signBlock);
-            signs.removeShopSign(actor, signBlock);
+    /**
+     * Unlocks and removes what is attached to a container, through the plugin that keeps each.
+     * Main thread.
+     *
+     * @param actor who is removing them, or null for an automated capture
+     */
+    public void removeAttachments(@Nullable Player actor, @NotNull List<Block> attached) {
+        ContainerAttachments attachments = plugin.attachments();
+        for (Block block : attached) {
+            unprotect(block);
+            attachments.remove(actor, block);
         }
+    }
+
+    /**
+     * Keeps a chunk loaded until what comes back is run, once and on the main thread. For work
+     * on a container that has to wait for an answer before it can capture.
+     */
+    public @NotNull Runnable holdChunk(@NotNull Chunk chunk) {
+        return this.chunks.hold(chunk);
     }
 
     /**
@@ -325,10 +337,10 @@ public final class VaultCaptureService {
             }
             plugin.getLogger().info("[VaultCaptureService] Offline vault created: ID=" + vaulted.vault()
                     + " owner=" + finalOwner + " initiator=" + initiatorUuid);
-            // Drop any shop sign left where the container was.
-            List<Block> shopSigns = plugin.shopSigns().findShopSigns(block);
-            if (!shopSigns.isEmpty()) {
-                removeShopSigns(null, shopSigns);
+            // What was attached to the container goes with it.
+            List<Block> attached = plugin.attachments().attachedTo(block);
+            if (!attached.isEmpty()) {
+                removeAttachments(null, attached);
             }
             // The sweep tells the owner once, at its end; no PlayerVaultEvent for an automated capture.
             onVaulted.run();

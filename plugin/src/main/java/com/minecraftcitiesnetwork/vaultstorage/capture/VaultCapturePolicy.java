@@ -1,6 +1,5 @@
 package com.minecraftcitiesnetwork.vaultstorage.capture;
 
-import com.minecraftcitiesnetwork.vaultstorage.shop.ShopOwnerLookup;
 import com.minecraftcitiesnetwork.vaultstorage.region.WorldGuardService;
 import java.util.function.Supplier;
 import java.util.logging.Logger;
@@ -29,15 +28,15 @@ public final class VaultCapturePolicy {
 
     private final @NotNull Supplier<BoltService> bolt;
     private final @NotNull Supplier<WorldGuardService> worldGuard;
-    private final @NotNull Supplier<ShopOwnerLookup> shopOwners;
+    private final @NotNull Supplier<ContainerOwnerLookup> containerOwners;
     private final @NotNull Logger logger;
 
     /** Suppliers, not services: the plugin builds them after this, and reads are at use time. */
     public VaultCapturePolicy(@NotNull Supplier<BoltService> bolt, @NotNull Supplier<WorldGuardService> worldGuard,
-                              @NotNull Supplier<ShopOwnerLookup> shopOwners, @NotNull Logger logger) {
+                              @NotNull Supplier<ContainerOwnerLookup> containerOwners, @NotNull Logger logger) {
         this.bolt = bolt;
         this.worldGuard = worldGuard;
-        this.shopOwners = shopOwners;
+        this.containerOwners = containerOwners;
         this.logger = logger;
     }
 
@@ -102,9 +101,9 @@ public final class VaultCapturePolicy {
             }
         }
         if (originalOwner == null) {
-            // Nobody locked it. If it is a player's shop, it is that player's: the registry was
+            // Nobody locked it. A module may still know whose it is: it was
             // asked when the container was looked at or clicked, and the answer is used here.
-            originalOwner = this.shopOwners.get().known(block);
+            originalOwner = this.containerOwners.get().known(block);
         }
 
         // Log actor UUID for debugging Bedrock player issues
@@ -165,9 +164,9 @@ public final class VaultCapturePolicy {
         return CaptureRegions.at(actor.getUniqueId(), originalOwner, regions);
     }
 
-    /** Whether the actor may remove the shop signs of a container they cannot vault. */
-    public boolean mayRemoveShopSign(@NotNull Player actor) {
-        return CaptureRules.mayRemoveShopSign(actor.hasPermission(Permissions.BYPASS_REGION));
+    /** Whether the actor may remove what is attached to a container they cannot vault. */
+    public boolean mayRemoveAttachments(@NotNull Player actor) {
+        return CaptureRules.mayRemoveAttachments(actor.hasPermission(Permissions.BYPASS_REGION));
     }
 
     /**

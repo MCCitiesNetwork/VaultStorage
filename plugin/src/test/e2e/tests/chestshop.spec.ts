@@ -46,7 +46,7 @@ test('an empty shop container keeps its block and loses its lock and its sign',
         player.chat('/vault capture');
         await expect(player).toHaveReceivedMessage('Capture session started');
         await rightClick(player, shopX, FLOOR, z);
-        await expect(player).toHaveReceivedMessage('ChestShop sign removed.');
+        await expect(player).toHaveReceivedMessage('The sign on it was removed.');
         await expect(player).toHaveReceivedMessage('Protection removed.');
         await expectBlock(server, shopX, FLOOR, z, 'chest', 'empty-shop-chest-stays');
         await expectBlock(server, shopX, FLOOR + 1, z, 'air', 'empty-shop-sign-gone');

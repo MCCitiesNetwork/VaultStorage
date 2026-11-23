@@ -51,17 +51,17 @@ public final class CaptureActionBar {
         if (target == null) {
             return plugin.text().of(MessageKeys.CAPTURE_ACTION_BAR_IDLE);
         }
-        if (plugin.shopSigns().isShopSign(target)) {
+        if (plugin.attachments().isAttachment(target)) {
             Block container = ContainerBlocks.attachedContainer(target);
             if (container != null) target = container;
         }
         var boltSvc = plugin.bolt();
         UUID owner = boltSvc != null ? boltSvc.getOwner(target) : null;
         if (owner == null) {
-            // Asks the shop registry in the background; the bar shows the answer once it is in,
-            // and the policy below then treats an unlocked shop as its player's.
-            plugin.shopOwners().ownerOf(target);
-            owner = plugin.shopOwners().known(target);
+            // Asks the modules in the background; the bar shows the answer once it is in, and
+            // the policy below then uses it.
+            plugin.containerOwners().ownerOf(target);
+            owner = plugin.containerOwners().known(target);
         }
         String ownerName = ownerDisplayNameAsync(owner);
 

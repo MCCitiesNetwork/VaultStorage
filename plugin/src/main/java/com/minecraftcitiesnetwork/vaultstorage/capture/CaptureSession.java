@@ -97,10 +97,10 @@ public final class CaptureSession implements Listener {
             return;
         }
         boolean clickedSign = ContainerBlocks.isSign(block);
-        // A shop container nobody locked belongs to the shop's player. The shop registry is a
-        // database, so the rest of the click waits for its answer; with nothing to ask, it runs now.
-        plugin.shopOwners().ownerOf(captureBlock)
-                .thenCompose(shopOwner -> capture(captureBlock, clickedSign))
+        // A module may know whose a container nobody locked is, and may have to read a database
+        // to say. The rest of the click waits for the answer; with nothing to ask, it runs now.
+        plugin.containerOwners().ownerOf(captureBlock)
+                .thenCompose(owner -> capture(captureBlock, clickedSign))
                 .whenCompleteAsync((done, failure) -> finish(failure), mainThread());
     }
 
@@ -120,14 +120,14 @@ public final class CaptureSession implements Listener {
 
     /**
      * The block a click is about: the container behind a sign, or the block itself. A sign that
-     * is not a shop's loses its own lock on the way. Null when a sign has no container.
+     * is nobody's attachment loses its own lock on the way. Null when a sign has no container.
      */
     private @Nullable Block containerFor(@NotNull Block block) {
         boolean clickedSign = ContainerBlocks.isSign(block);
-        boolean clickedShopSign = clickedSign && plugin.shopSigns().isShopSign(block);
+        boolean clickedAttachment = clickedSign && plugin.attachments().isAttachment(block);
 
-        if (clickedShopSign) {
-            // A shop sign stands for its container and goes when the container does.
+        if (clickedAttachment) {
+            // An attached sign stands for its container and goes when the container does.
             return ContainerBlocks.attachedContainer(block);
         }
         if (clickedSign) {
@@ -153,7 +153,7 @@ public final class CaptureSession implements Listener {
      */
     private @NotNull CompletableFuture<Void> capture(@NotNull Block captureBlock, boolean clickedSign) {
         if (!actor.isOnline() || session.mode() != Mode.CAPTURE) {
-            // They left, or left capture mode, while the shop registry was being read.
+            // They left, or left capture mode, while the owner was being looked up.
             return DONE;
         }
         VaultCapturePolicy.Decision decision = plugin.capturePolicy().evaluate(actor, captureBlock);
@@ -166,7 +166,7 @@ public final class CaptureSession implements Listener {
         if (outcome.empty()) {
             // Without a removed protection, prepare has already said why (the other half goes first).
             if (outcome.protectionRemoved()) {
-                removeShopSigns(captureBlock);
+                removeAttachments(captureBlock);
                 actor.sendMessage(plugin.text().of(MessageKeys.CAPTURE_EMPTY_CAPTURE_SKIPPED));
             }
             return DONE;
@@ -185,26 +185,26 @@ public final class CaptureSession implements Listener {
     }
 
     /**
-     * Tells the actor they may not vault the container. A shop sign on an empty container goes
+     * Tells the actor they may not vault the container. What is attached to an empty container goes
      * first when the actor holds the override: region membership alone does not remove one.
      */
     private void refuse(@NotNull Block captureBlock, boolean clickedSign) {
         if (ContainerBlocks.isEmpty(captureBlock)
-                && plugin.capturePolicy().mayRemoveShopSign(actor) && removeShopSigns(captureBlock)) {
+                && plugin.capturePolicy().mayRemoveAttachments(actor) && removeAttachments(captureBlock)) {
             return;
         }
         actor.sendMessage(plugin.text().of(clickedSign
                 ? MessageKeys.CAPTURE_CONTAINER_NOT_ALLOWED : MessageKeys.CAPTURE_NOT_ALLOWED));
     }
 
-    /** Removes the container's shop signs and says so. False when it has none. */
-    private boolean removeShopSigns(@NotNull Block captureBlock) {
-        List<Block> shopSigns = plugin.shopSigns().findShopSigns(captureBlock);
-        if (shopSigns.isEmpty()) {
+    /** Removes what is attached to the container and says so. False when nothing is. */
+    private boolean removeAttachments(@NotNull Block captureBlock) {
+        List<Block> attached = plugin.attachments().attachedTo(captureBlock);
+        if (attached.isEmpty()) {
             return false;
         }
-        service.removeShopSigns(actor, shopSigns);
-        actor.sendMessage(plugin.text().of(MessageKeys.CAPTURE_CHEST_SHOP_SIGN_REMOVED));
+        service.removeAttachments(actor, attached);
+        actor.sendMessage(plugin.text().of(MessageKeys.CAPTURE_ATTACHMENT_REMOVED));
         return true;
     }
 

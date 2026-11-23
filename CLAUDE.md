@@ -23,8 +23,8 @@ project version lives in `gradle.properties`.
 | `:plugin` | `VaultStorage-<version>.jar` | The host plugin |
 | `:modules:namebook-adapter` | `namebook-adapter-<version>.jar` | Names through Namebook |
 | `:modules:floodgate-adapter` | `floodgate-adapter-<version>.jar` | Bedrock names and the Bedrock client check |
-| `:modules:chestshop-adapter` | `chestshop-adapter-<version>.jar` | ChestShop sign handling; shop owners from Treasury |
-| `:modules:realty` | `realty-<version>.jar` | Auto-vault on a Realty occupant change |
+| `:modules:chestshop-adapter` | `chestshop-adapter-<version>.jar` | Everything about shops: ChestShop's signs, the rule for whose a shop is, shop owners from Treasury |
+| `:modules:realty-adapter` | `realty-adapter-<version>.jar` | Auto-vault on a Realty occupant change |
 | `:modules:griefprevention-adapter` | `griefprevention-adapter-<version>.jar` | Placing vaults on GriefPrevention claims |
 | `:modules:player-notifications-adapter` | `player-notifications-adapter-<version>.jar` | Telling owners about new vaults |
 
@@ -41,13 +41,12 @@ Under `com.minecraftcitiesnetwork.vaultstorage`, grouped by feature:
 | Package | Holds |
 | --- | --- |
 | (root) | `VaultStoragePlugin` (owns and hands out every service), `Integrations` |
-| `capture` | `VaultCaptureService` (prepare, store, offline), `CaptureSession` (a player's capture mode), `CaptureActionBar`, `CaptureOwners`, `ContainerBlocks`, `DoubleChestRule`, `CaptureRules` and `CaptureRegions` (who may vault what), the pipeline, the policy |
+| `capture` | `VaultCaptureService` (prepare, store, offline), `CaptureSession` (a player's capture mode), `CaptureActionBar`, `CaptureOwners`, `ContainerBlocks`, `DoubleChestRule`, `CaptureRules` and `CaptureRegions` (who may vault what), the pipeline, the policy; the two hooks modules add to, `ContainerAttachments` and `ContainerOwnerSource`, and `ContainerOwnerLookup` (asks and remembers) |
 | `placement` | `VaultPlacementService` (the order of a placement), `PlacementStore` and `PlacementWorld` (what it writes to), `PlacementRules` (who may place where) |
 | `vault` | vault types, the vault inventory, item serialization, events |
 | `scan` | region scan service and scanner |
 | `region` | WorldGuard service and region types |
 | `bolt` | Bolt service |
-| `shop` | `ShopSigns` (the signs a shop plugin keeps on containers); `ShopDirectory`, `Shop`, `ShopOwner`; `ShopOwners` (the rule) and `ShopOwnerLookup` (asks and remembers). Names no shop plugin |
 | `names` | `NameSource`, the Paper source, `Names`, `UniqueIdentifierResolver` |
 | `menu` | dialog menus, `AutoDialog`, `ConfirmMenu`, `VaultLabel` |
 | `command` | `VaultCommand` (the Brigadier tree), its sealed outcomes, `VaultActionArgument` |
@@ -67,16 +66,23 @@ findings and kept the framework (`ParentMenu`, `ChildMenu`, `AutoDialog`).
 - **Host code reads `Integrations` at use time, never once at construction.** Modules start
   after the host's services exist and can stop while it runs.
 - **A module's entry class names no type from its optional plugin.** Those types live in one
-  separate class per module (`NamebookNameSource`, `FloodgateNames`, `ChestShopSigns`,
-  `TreasuryShopDirectory`,
+  separate class per module (`NamebookNameSource`, `FloodgateNames`, `ChestShopSigns`, `TreasuryShopOwners`,
   `RealtyOccupantChangeListener` behind `RealtyBinding`). Each module's `*ModuleTest` enforces
   it by scanning the entry class file. If the entry class named such a type, loading the module
   on a server without that plugin would throw out of the host's `onEnable`.
-- **An integration is a host concept, never a plugin's name.** The host has shop signs, name
-  sources, placement grants and an owner notifier; it has no `chestshop` or `realty` package.
-- **A slot that several plugins could fill is a list** (`addPlacementGrant`, `addShopSigns`), and
-  an empty list is the default: no no-op class and no `isAvailable()`. A provider that throws is
-  logged and counted as having nothing to say.
+- **The host has no code about another plugin.** It has hooks named for what the host needs:
+  name sources, the Bedrock check, placement grants, an owner notifier, what is attached to a
+  container (`ContainerAttachments`) and who owns a container nobody locked
+  (`ContainerOwnerSource`). Everything about ChestShop, Treasury, Realty and the rest, including
+  its rules, its wording and its tests, is in that plugin's module. The host's Java does not
+  contain the word "shop".
+- **A hook that several plugins could fill is a list** (`addPlacementGrant`, `addAttachments`,
+  `addOwnerSource`), and an empty list is the default: no no-op class and no `isAvailable()`.
+  A provider that throws is logged and counted as knowing nothing.
+- **One module does not know another.** The realty module's sweep asks the host's hooks for
+  unlocked containers with an owner; it does not know they are shops.
+- **A module's wording is the module's**: its own `messages.yml` in its data folder, bundled
+  under its own name (`realty-messages.yml`). The host's `messages.yml` has no module's sentence.
 - **A module fills its slots last.** It builds everything it supplies first: if `initialize`
   throws, its class loader is closed and `shutdown` is never called, so a slot already filled
   would point at dead classes.
@@ -283,13 +289,15 @@ Shared steps are in `tests/vaults.ts`.
 
 ## Rules for the capture and placement code
 
-- **A container's owner is its Bolt owner; failing that, the player its shop signs belong to**
-  (`ShopOwners.playerOwner`: every sign in the registry, all one player's). A firm's, an admin
-  shop's or an unlisted shop's container has no owner. The registry is a database, so
-  `ShopOwnerLookup.ownerOf` is asked first and `VaultCapturePolicy` uses what it remembered.
-- **The sweep has three passes:** Bolt-locked blocks, locked hanging entities, and shops whose
-  container nobody locked (`AutoVaultService.vaultShops`). A container with a Bolt owner belongs
-  to the first pass only. All three ask the same `SweepFilter`.
+- **A container's owner is its Bolt owner; failing that, whoever a module's `ContainerOwnerSource`
+  names.** The ChestShop module names the player its shop signs belong to
+  (`ShopOwners.playerOwner`, in the module: every sign in the registry, all one player's). A
+  firm's, an admin shop's or an unlisted shop's container has no owner. A source may read a
+  database, so `ContainerOwnerLookup.ownerOf` is asked first and `VaultCapturePolicy` uses what
+  it remembered.
+- **The sweep has three passes:** Bolt-locked blocks, locked hanging entities, and containers
+  nobody locked that a module names an owner for (`AutoVaultService.vaultUnlocked`). A container
+  with a Bolt owner belongs to the first pass only. All three ask the same `SweepFilter`.
 - **Who may vault a container is `CaptureRules.decide`**, a pure function with a test for every
   outcome. `VaultCapturePolicy` only gathers its inputs from Bolt and WorldGuard.
 - **A region counts by its real shape.** Ask `WorldGuardService.getRegionsAt` or `isInside`;
@@ -298,8 +306,8 @@ Shared steps are in `tests/vaults.ts`.
   and not the same box, so two regions with equal bounds are nested in neither).
 - **Turning regions into the rule's input is `CaptureRegions.at`.** `CaptureRegionsTest` covers
   regions that overlap, touch, nest and lie above one another.
-- **Only the override removes a shop sign from a container that cannot be vaulted**
-  (`CaptureRules.mayRemoveShopSign`).
+- **Only the override removes what is attached to a container that cannot be vaulted**
+  (`CaptureRules.mayRemoveAttachments`).
 - **A placement is `VaultPlacementService` over a `PlacementStore` and a `PlacementWorld`**, so
   its order is tested with fakes. Who may place where is `PlacementRules.decide`.
 - **A hanging entity follows the ordering rule too:** stored, then checked to be still there and

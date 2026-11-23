@@ -105,9 +105,9 @@ class CaptureRulesTest {
     }
 
     @Test
-    void onlyTheOverrideRemovesAShopSignFromAContainerThatCannotBeVaulted() {
-        Assertions.assertTrue(CaptureRules.mayRemoveShopSign(true));
-        Assertions.assertFalse(CaptureRules.mayRemoveShopSign(false));
+    void onlyTheOverrideRemovesAnAttachmentFromAContainerThatCannotBeVaulted() {
+        Assertions.assertTrue(CaptureRules.mayRemoveAttachments(true));
+        Assertions.assertFalse(CaptureRules.mayRemoveAttachments(false));
     }
 
     @Test

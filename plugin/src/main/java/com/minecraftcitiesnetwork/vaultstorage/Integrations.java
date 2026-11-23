@@ -1,12 +1,16 @@
 package com.minecraftcitiesnetwork.vaultstorage;
 
+import java.util.function.Supplier;
 import org.bukkit.entity.Player;
 import org.bukkit.block.Block;
 import java.util.ArrayList;
 import java.util.logging.Logger;
 import java.util.logging.Level;
-import com.minecraftcitiesnetwork.vaultstorage.shop.ShopDirectory;
-import com.minecraftcitiesnetwork.vaultstorage.shop.ShopSigns;
+import com.minecraftcitiesnetwork.vaultstorage.capture.ContainerAttachments;
+import com.minecraftcitiesnetwork.vaultstorage.capture.ContainerOwnerSource;
+import com.minecraftcitiesnetwork.vaultstorage.capture.MarkedContainer;
+import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import com.minecraftcitiesnetwork.vaultstorage.names.NameSource;
 import com.minecraftcitiesnetwork.vaultstorage.placement.PlacementGrant;
 import com.minecraftcitiesnetwork.vaultstorage.vault.OwnerNotifier;
@@ -30,11 +34,12 @@ public final class Integrations {
     private volatile @Nullable NameSource primaryNames;
     private volatile @Nullable NameSource bedrockNames;
     private volatile @Nullable Predicate<UUID> bedrockClient;
-    private volatile @Nullable ShopDirectory shopDirectory;
     private volatile @Nullable OwnerNotifier ownerNotifier;
     private final List<PlacementGrant> placementGrants = new CopyOnWriteArrayList<>();
-    private final List<ShopSigns> shopSigns = new CopyOnWriteArrayList<>();
-    private final ShopSigns everyShopSign = new EveryShopSign();
+    private final List<ContainerAttachments> attachments = new CopyOnWriteArrayList<>();
+    private final ContainerAttachments everyAttachment = new EveryAttachment();
+    private final List<ContainerOwnerSource> ownerSources = new CopyOnWriteArrayList<>();
+    private final ContainerOwnerSource everyOwnerSource = new EveryOwnerSource();
     private final @NotNull Logger logger;
 
     public Integrations(@NotNull Logger logger) {
@@ -103,75 +108,120 @@ public final class Integrations {
         return false;
     }
 
-    public void shopDirectory(@Nullable ShopDirectory directory) {
-        this.shopDirectory = directory;
+    public void addAttachments(@NotNull ContainerAttachments provider) {
+        this.attachments.add(provider);
     }
 
-    /** The shop plugin's registry of shops and their owners; null when no module supplies one. */
-    public @Nullable ShopDirectory shopDirectory() {
-        return this.shopDirectory;
+    public void removeAttachments(@NotNull ContainerAttachments provider) {
+        this.attachments.remove(provider);
     }
 
-    public void addShopSigns(@NotNull ShopSigns signs) {
-        this.shopSigns.add(signs);
+    /** What every module knows to be attached to containers. With no module, nothing is. */
+    public @NotNull ContainerAttachments attachments() {
+        return this.everyAttachment;
     }
 
-    public void removeShopSigns(@NotNull ShopSigns signs) {
-        this.shopSigns.remove(signs);
+    public void addOwnerSource(@NotNull ContainerOwnerSource source) {
+        this.ownerSources.add(source);
     }
 
-    /** The shop signs of every module that knows a shop plugin. With none, no block is a shop sign. */
-    public @NotNull ShopSigns shopSigns() {
-        return this.everyShopSign;
+    public void removeOwnerSource(@NotNull ContainerOwnerSource source) {
+        this.ownerSources.remove(source);
     }
 
-    /** Asks each module in turn. One that fails is logged and counts as knowing no sign. */
-    private final class EveryShopSign implements ShopSigns {
+    /** Every module that can say whose an unlocked container is. With none, it is nobody's. */
+    public @NotNull ContainerOwnerSource ownerSources() {
+        return this.everyOwnerSource;
+    }
+
+    private void failed(@NotNull Object provider, @NotNull Throwable failure) {
+        this.logger.log(Level.WARNING, "A module's lookup failed and was counted as knowing nothing: "
+                + provider.getClass().getName(), failure);
+    }
+
+    /** Asks each module in turn. One that fails is logged and counts as knowing nothing. */
+    private final class EveryAttachment implements ContainerAttachments {
 
         @Override
-        public boolean isShopSign(@Nullable Block block) {
-            for (ShopSigns signs : Integrations.this.shopSigns) {
+        public boolean isAttachment(@Nullable Block block) {
+            for (ContainerAttachments provider : Integrations.this.attachments) {
                 try {
-                    if (signs.isShopSign(block)) {
+                    if (provider.isAttachment(block)) {
                         return true;
                     }
                 } catch (RuntimeException ex) {
-                    failed(signs, ex);
+                    failed(provider, ex);
                 }
             }
             return false;
         }
 
         @Override
-        public @NotNull List<Block> findShopSigns(@Nullable Block containerBlock) {
+        public @NotNull List<Block> attachedTo(@Nullable Block container) {
             List<Block> found = new ArrayList<>();
-            for (ShopSigns signs : Integrations.this.shopSigns) {
+            for (ContainerAttachments provider : Integrations.this.attachments) {
                 try {
-                    found.addAll(signs.findShopSigns(containerBlock));
+                    found.addAll(provider.attachedTo(container));
                 } catch (RuntimeException ex) {
-                    failed(signs, ex);
+                    failed(provider, ex);
                 }
             }
             return found;
         }
 
         @Override
-        public boolean removeShopSign(@Nullable Player actor, @Nullable Block signBlock) {
-            for (ShopSigns signs : Integrations.this.shopSigns) {
+        public boolean remove(@Nullable Player actor, @Nullable Block attachment) {
+            for (ContainerAttachments provider : Integrations.this.attachments) {
                 try {
-                    if (signs.isShopSign(signBlock)) {
-                        return signs.removeShopSign(actor, signBlock);
+                    if (provider.isAttachment(attachment)) {
+                        return provider.remove(actor, attachment);
                     }
                 } catch (RuntimeException ex) {
-                    failed(signs, ex);
+                    failed(provider, ex);
                 }
             }
             return false;
         }
+    }
 
-        private void failed(@NotNull ShopSigns signs, @NotNull RuntimeException ex) {
-            Integrations.this.logger.log(Level.WARNING, "A shop sign lookup failed and was counted as no sign: "
-                    + signs.getClass().getName(), ex);
+    /** Asks every module. One that fails is logged and counts as knowing nothing. */
+    private final class EveryOwnerSource implements ContainerOwnerSource {
+
+        /** The first source, in the order they were added, that names a player. */
+        @Override
+        public @NotNull CompletableFuture<Optional<UUID>> ownerOf(@NotNull Block container) {
+            // All are asked now, on the calling thread: a source may read the world to start with.
+            List<CompletableFuture<Optional<UUID>>> answers = new ArrayList<>();
+            for (ContainerOwnerSource source : Integrations.this.ownerSources) {
+                answers.add(guarded(source, () -> source.ownerOf(container), Optional.empty()));
+            }
+            return CompletableFuture.allOf(answers.toArray(CompletableFuture[]::new))
+                    .thenApply(done -> answers.stream().map(CompletableFuture::join)
+                            .filter(Optional::isPresent).findFirst().orElse(Optional.empty()));
+        }
+
+        @Override
+        public @NotNull CompletableFuture<List<MarkedContainer>> ownedIn(@NotNull String world, int chunkX, int chunkZ) {
+            List<CompletableFuture<List<MarkedContainer>>> answers = new ArrayList<>();
+            for (ContainerOwnerSource source : Integrations.this.ownerSources) {
+                answers.add(guarded(source, () -> source.ownedIn(world, chunkX, chunkZ), List.of()));
+            }
+            return CompletableFuture.allOf(answers.toArray(CompletableFuture[]::new))
+                    .thenApply(done -> answers.stream().flatMap(answer -> answer.join().stream()).toList());
+        }
+
+        private <T> @NotNull CompletableFuture<T> guarded(@NotNull ContainerOwnerSource source,
+                                                         @NotNull Supplier<CompletableFuture<T>> call,
+                                                         @NotNull T nothing) {
+            try {
+                return call.get().exceptionally(failure -> {
+                    failed(source, failure);
+                    return nothing;
+                });
+            } catch (RuntimeException ex) {
+                failed(source, ex);
+                return CompletableFuture.completedFuture(nothing);
+            }
         }
     }
 }

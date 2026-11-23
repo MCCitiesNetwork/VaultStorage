@@ -1,12 +1,12 @@
 package com.minecraftcitiesnetwork.vaultstorage;
 
 import java.util.Objects;
-import com.minecraftcitiesnetwork.vaultstorage.shop.ShopOwnerLookup;
+import com.minecraftcitiesnetwork.vaultstorage.capture.ContainerOwnerLookup;
 import org.jetbrains.annotations.NotNull;
 import com.minecraftcitiesnetwork.vaultstorage.capture.VaultCapturePolicy;
 import com.minecraftcitiesnetwork.vaultstorage.config.Text;
 import com.minecraftcitiesnetwork.vaultstorage.bolt.BoltService;
-import com.minecraftcitiesnetwork.vaultstorage.shop.ShopSigns;
+import com.minecraftcitiesnetwork.vaultstorage.capture.ContainerAttachments;
 import com.minecraftcitiesnetwork.vaultstorage.scan.VaultScanService;
 import com.minecraftcitiesnetwork.vaultstorage.region.WorldGuardService;
 import com.minecraftcitiesnetwork.vaultstorage.command.VaultCommand;
@@ -78,8 +78,8 @@ public final class VaultStoragePlugin extends JavaPlugin {
     private final MessageContainer messages = new MessageContainer();
     private final Text text = new Text(this.messages);
     private final VaultCapturePolicy capturePolicy = new VaultCapturePolicy(this::bolt, this::worldGuard,
-            this::shopOwners, getLogger());
-    private ShopOwnerLookup shopOwners;
+            this::containerOwners, getLogger());
+    private ContainerOwnerLookup containerOwners;
     private ModuleLifecycleManager<VaultStoragePlugin> modules;
     private Names names;
     private OwnerNotifications ownerNotifications;
@@ -126,8 +126,8 @@ public final class VaultStoragePlugin extends JavaPlugin {
     /** Messages with their placeholders given as a map. */
     public @NotNull Text text() { return text; }
 
-    /** Whose an unlocked shop container is. */
-    public @NotNull ShopOwnerLookup shopOwners() { return shopOwners; }
+    /** Whose a container nobody locked is, as far as any module can say. */
+    public @NotNull ContainerOwnerLookup containerOwners() { return containerOwners; }
 
     /** Who may vault what. */
     public @NotNull VaultCapturePolicy capturePolicy() { return capturePolicy; }
@@ -194,7 +194,8 @@ public final class VaultStoragePlugin extends JavaPlugin {
 
 
         // Domain services
-        this.shopOwners = new ShopOwnerLookup(this.integrations, getServer().getScheduler().getMainThreadExecutor(this));
+        this.containerOwners = new ContainerOwnerLookup(this.integrations::ownerSources,
+                getServer().getScheduler().getMainThreadExecutor(this));
         this.captureService = new VaultCaptureService(this);
         this.placementService = new VaultPlacementService(this.repository, new BukkitPlacementWorld(this::bolt),
                 this.databaseExecutor, getServer().getScheduler().getMainThreadExecutor(this), getLogger());
@@ -377,9 +378,9 @@ public final class VaultStoragePlugin extends JavaPlugin {
     }
 
 
-    /** The shop signs modules know of; read at use time. */
-    public @NotNull ShopSigns shopSigns() {
-        return this.integrations.shopSigns();
+    /** What modules know to be attached to containers; read at use time. */
+    public @NotNull ContainerAttachments attachments() {
+        return this.integrations.attachments();
     }
 
 }

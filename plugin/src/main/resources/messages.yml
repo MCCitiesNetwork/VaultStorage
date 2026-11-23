@@ -145,7 +145,7 @@ capture:
   sign-not-allowed: '<red>Sign not allowed: region/block rules.</red>'
   container-not-allowed: '<red>Container not allowed: region/block rules.</red>'
   sign-unlocked: 'Sign protection removed.'
-  chest-shop-sign-removed: 'ChestShop sign removed.'
+  attachment-removed: 'The sign on it was removed.'
   empty-capture-skipped: 'Protection removed.'
   captured-ok: 'Vault captured.'
   no-bolt-owner: '<yellow>No Bolt owner found; you will be set as the vault owner.</yellow>'
@@ -216,7 +216,3 @@ notification:
   vault-created: '<gold><sender></gold> created a new vault for you:  <yellow><recipient></yellow> <gray>in region</gray> <yellow><region></yellow>'
   # <count> <region> <sender>
   sweep-vaulted: '<gold><count></gold> of your locked containers in <yellow><region></yellow> were moved to your vault storage when <gold><sender></gold> took over the region.'
-
-# The auto-vault module.
-auto-vault:
-  occupant-notified: '<yellow>Locked containers and items left here by the previous occupant have been cleared into their vault storage.</yellow>'

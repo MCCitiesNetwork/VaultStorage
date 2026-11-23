@@ -95,7 +95,7 @@ public final class MessageKeys {
     public static final String CAPTURE_SIGN_NOT_ALLOWED = "capture.sign-not-allowed";
     public static final String CAPTURE_CONTAINER_NOT_ALLOWED = "capture.container-not-allowed";
     public static final String CAPTURE_SIGN_UNLOCKED = "capture.sign-unlocked";
-    public static final String CAPTURE_CHEST_SHOP_SIGN_REMOVED = "capture.chest-shop-sign-removed";
+    public static final String CAPTURE_ATTACHMENT_REMOVED = "capture.attachment-removed";
     public static final String CAPTURE_EMPTY_CAPTURE_SKIPPED = "capture.empty-capture-skipped";
     public static final String CAPTURE_CAPTURED_OK = "capture.captured-ok";
     public static final String CAPTURE_NO_BOLT_OWNER = "capture.no-bolt-owner";
@@ -162,7 +162,6 @@ public final class MessageKeys {
     public static final String NOTIFICATION_VAULT_CREATED = "notification.vault-created";
     public static final String NOTIFICATION_SWEEP_VAULTED = "notification.sweep-vaulted";
 
-    public static final String AUTO_VAULT_OCCUPANT_NOTIFIED = "auto-vault.occupant-notified";
 
     private MessageKeys() {
     }
