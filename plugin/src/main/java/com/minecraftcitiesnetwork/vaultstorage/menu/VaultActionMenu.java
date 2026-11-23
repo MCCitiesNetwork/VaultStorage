@@ -12,7 +12,6 @@ import java.util.concurrent.Executor;
 import java.util.logging.Level;
 import com.minecraftcitiesnetwork.vaultstorage.vault.VaultAction;
 
-import io.papermc.paper.dialog.Dialog;
 import io.papermc.paper.registry.data.dialog.DialogBase;
 import io.papermc.paper.registry.data.dialog.body.DialogBody;
 import io.papermc.paper.registry.data.dialog.input.DialogInput;
@@ -61,7 +60,7 @@ public final class VaultActionMenu extends ChildMenuImp {
         setDialog(build());
     }
 
-    private @NotNull Dialog build() {
+    private @NotNull AutoDialog build() {
         AutoDialog.Builder builder = dialogBuilder();
         builder.title(plugin.text().of(MessageKeys.ACTION_TITLE));
         builder.canCloseWithEscape(true);
@@ -91,7 +90,7 @@ public final class VaultActionMenu extends ChildMenuImp {
         builder.addInput(DialogInput.singleOption(KEY_ACTION, plugin.text().of(MessageKeys.ACTION_ACTION_LABEL), entries).build());
 
         String defaultValue = firstValue; // fallback when dialog returns null
-        builder.buttonWithPlayer(plugin.text().of(MessageKeys.ACTION_OPEN_BTN), null, java.time.Duration.ofMinutes(5), 1, (actor, response) -> {
+        builder.submitButton(plugin.text().of(MessageKeys.ACTION_OPEN_BTN), null, java.time.Duration.ofMinutes(5), 1, (actor, response) -> {
             String selected = Optional.ofNullable(response.getText(KEY_ACTION)).orElse(defaultValue);
             VaultAction action = parseAction(selected);
             actor.sendMessage(plugin.text().of(MessageKeys.ACTION_LOADING));

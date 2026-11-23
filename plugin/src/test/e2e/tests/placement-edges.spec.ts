@@ -19,7 +19,7 @@ test('a target that is not empty refuses the placement, keeps the vault and retu
 
         await placeFirstVault(owner, dialogs, x + 2, z + 2);
 
-        await expect(owner).toHaveReceivedMessage('Target not empty.');
+        await expect(owner).toHaveReceivedMessage('already a block there');
         await expectBlock(server, x + 2, FLOOR, z + 2, 'stone', 'stone-not-replaced');
         expect(vaultCount(owner)).toBe(1);
         // Back at the vault, to try somewhere else.
@@ -61,7 +61,7 @@ test('a chest comes back facing the way it faced, and does not join a chest besi
         await lock(owner, x + 2, z);
         await captureMode(player);
         await rightClick(player, x + 2, FLOOR, z);
-        await expect(player).toHaveReceivedMessage('Vault captured.');
+        await expect(player).toHaveReceivedMessage('Vaulted.');
 
         // A neighbour facing the same way, which a chest placed by hand would join.
         await server.execute(`setblock ${x + 2} ${FLOOR} ${z + 3} minecraft:chest[facing=east]`);
@@ -127,7 +127,7 @@ test('after a placement the owner is taken back to the list while vaults remain,
         (await dialogTitled(dialogs, 'Vault Placement')).click('Start Placement');
         await sleep(300);
         await rightClick(owner, x + 3, GROUND, z + 2);
-        await expect(owner).toHaveReceivedMessage('You have no more vaults to place.');
+        await expect(owner).toHaveReceivedMessage('That was your last vault.');
         expect(vaultCount(owner)).toBe(0);
     });
 
@@ -183,7 +183,7 @@ test('a vault edited to hold more than its block can take drops the rest at the 
         await lock(owner, x + 2, z);
         await captureMode(player);
         await rightClick(player, x + 2, FLOOR, z);
-        await expect(player).toHaveReceivedMessage('Vault captured.');
+        await expect(player).toHaveReceivedMessage('Vaulted.');
 
         // The edit view has nine slots; a hopper has five. The owner adds a sixth stack.
         const dialogs = new Dialogs(owner);
@@ -244,7 +244,7 @@ test('a vault open for editing cannot be placed until the editor closes it',
         (await dialogTitled(staffDialogs, 'Vault Placement')).click('Start Placement');
         await sleep(300);
         await rightClick(player, x + 2, GROUND, z + 2);
-        await expect(player).toHaveReceivedMessage('Someone else is using that vault.');
+        await expect(player).toHaveReceivedMessage('Someone else has that vault open');
         await expectBlock(server, x + 2, FLOOR, z + 2, 'air', 'not-placed-while-edited');
 
         owner.bot.closeWindow(window);

@@ -3,7 +3,6 @@ package com.minecraftcitiesnetwork.vaultstorage.menu;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.NotNull;
 import com.minecraftcitiesnetwork.vaultstorage.config.MessageKeys;
-import io.papermc.paper.dialog.Dialog;
 import io.papermc.paper.registry.data.dialog.DialogBase;
 import io.papermc.paper.registry.data.dialog.body.DialogBody;
 import com.minecraftcitiesnetwork.vaultstorage.menu.AutoDialog;
@@ -35,7 +34,7 @@ public final class LoadingMenu extends ChildMenuImp {
         setDialog(build());
     }
 
-    private @NotNull Dialog build() {
+    private @NotNull AutoDialog build() {
         AutoDialog.Builder builder = dialogBuilder();
         builder.title(plugin.text().of(MessageKeys.LOADING_TITLE, placeholders));
         builder.canCloseWithEscape(true);

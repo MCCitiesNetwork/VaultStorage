@@ -2,13 +2,11 @@ package com.minecraftcitiesnetwork.vaultstorage.menu;
 
 import org.jetbrains.annotations.NotNull;
 import com.minecraftcitiesnetwork.vaultstorage.config.MessageKeys;
-import io.papermc.paper.dialog.Dialog;
 import io.papermc.paper.registry.data.dialog.DialogBase;
 import io.papermc.paper.registry.data.dialog.body.DialogBody;
 import com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin;
 import com.minecraftcitiesnetwork.vaultstorage.menu.AutoDialog;
 import com.minecraftcitiesnetwork.vaultstorage.permission.Permissions;
-import com.minecraftcitiesnetwork.vaultstorage.capture.VaultCaptureService;
 import org.bukkit.entity.Player;
 
 import java.util.Map;
@@ -48,7 +46,7 @@ public final class VaultCaptureMenu extends ParentMenuImp {
      * Builds the dialog structure and associated actions.
      * @return the constructed dialog instance
      */
-    private @NotNull Dialog build() {
+    private @NotNull AutoDialog build() {
         AutoDialog.Builder builder = dialogBuilder();
         Map<String,String> phSelf = new java.util.HashMap<>();
         phSelf.put("%player%", player().getName());
@@ -61,20 +59,24 @@ public final class VaultCaptureMenu extends ParentMenuImp {
         builder.canCloseWithEscape(true);
         builder.afterAction(DialogBase.DialogAfterAction.CLOSE);
 
-        builder.addBody(DialogBody.plainMessage(plugin.text().of(MessageKeys.CAPTURE_MENU_INSTRUCTION, phSelf)));
-        builder.addBody(DialogBody.plainMessage(plugin.text().of(MessageKeys.CAPTURE_MENU_CANCEL_HINT, phSelf)));
-
-        // Start capture mode now delegates fully to VaultCaptureService
-        builder.button(plugin.text().of(MessageKeys.CAPTURE_MENU_START_BTN, phSelf), ctx -> {
-            Player actor = ctx.player();
-            if (!actor.hasPermission(Permissions.ACTION_CAPTURE)) {
-                actor.sendMessage(plugin.text().of(MessageKeys.CAPTURE_NO_PERMISSION));
-                return;
-            }
-            VaultCaptureService svc = plugin.captureService();
-            svc.startCaptureSession(actor); // centralized session (action bar + listener)
-            actor.closeDialog();
-        });
+        // A player who may not vault containers is here for their own vaults: they are told so,
+        // and are not offered a button that would only refuse them.
+        if (player().hasPermission(Permissions.ACTION_CAPTURE)) {
+            builder.addBody(DialogBody.plainMessage(plugin.text().of(MessageKeys.CAPTURE_MENU_INSTRUCTION, phSelf)));
+            builder.addBody(DialogBody.plainMessage(plugin.text().of(MessageKeys.CAPTURE_MENU_CANCEL_HINT, phSelf)));
+            builder.button(plugin.text().of(MessageKeys.CAPTURE_MENU_START_BTN, phSelf), ctx -> {
+                Player actor = ctx.player();
+                // Checked again at the click: the menu may be older than the permission.
+                if (!actor.hasPermission(Permissions.ACTION_CAPTURE)) {
+                    actor.sendMessage(plugin.text().of(MessageKeys.CAPTURE_NO_PERMISSION));
+                    return;
+                }
+                plugin.captureService().startCaptureSession(actor);
+                actor.closeDialog();
+            });
+        } else {
+            builder.addBody(DialogBody.plainMessage(plugin.text().of(MessageKeys.CAPTURE_MENU_INSTRUCTION_OWNER, phSelf)));
+        }
 
         builder.button(plugin.text().of(MessageKeys.CAPTURE_MENU_OPEN_SCAN_BTN, phSelf), ctx -> new VaultScanMenu(ctx.player(), this, uiContext).open());
         builder.button(plugin.text().of(MessageKeys.CAPTURE_MENU_BROWSE_BTN, phSelf), ctx -> new VaultListMenu(ctx.player(), this, uiContext, "").open());

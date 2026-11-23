@@ -6,7 +6,6 @@ import org.bukkit.entity.Hanging;
 import java.util.Comparator;
 import com.minecraftcitiesnetwork.vaultstorage.permission.Permissions;
 import com.minecraftcitiesnetwork.vaultstorage.config.MessageKeys;
-import io.papermc.paper.dialog.Dialog;
 import io.papermc.paper.registry.data.dialog.DialogBase;
 import io.papermc.paper.registry.data.dialog.body.DialogBody;
 import io.papermc.paper.registry.data.dialog.input.DialogInput;
@@ -148,7 +147,7 @@ public final class VaultScanMenu extends ChildMenuImp {
         return true;
     }
 
-    private @NotNull Dialog build() {
+    private @NotNull AutoDialog build() {
         AutoDialog.Builder builder = dialogBuilder();
         Map<String,String> placeholdersSelf = Map.of("%player%", player().getName());
         builder.title(plugin.text().of(MessageKeys.SCAN_TITLE, placeholdersSelf));
@@ -159,7 +158,7 @@ public final class VaultScanMenu extends ChildMenuImp {
             // Browse/search root: only Search input/button and Here. No region listing here.
             builder.addBody(DialogBody.plainMessage(plugin.text().of(MessageKeys.SCAN_SEARCH_LABEL)));
             builder.addInput(DialogInput.text("QUERY", plugin.text().of(MessageKeys.SCAN_SEARCH_LABEL)).labelVisible(true).build());
-            builder.buttonWithPlayer(plugin.text().of(MessageKeys.SCAN_SEARCH_BTN), null, Duration.ofMinutes(5), 1, (player, response) -> {
+            builder.submitButton(plugin.text().of(MessageKeys.SCAN_SEARCH_BTN), null, Duration.ofMinutes(5), 1, (player, response) -> {
                 String q = Optional.ofNullable(response.getText("QUERY")).orElse("").trim();
                 // VaultRegionListMenu does not accept uiContext; use its (player, parent, query, page) constructor
                 new VaultRegionListMenu(player, parentMenu(), q, 0).open();

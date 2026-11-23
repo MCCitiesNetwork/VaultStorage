@@ -26,10 +26,10 @@ test('capturing a shop by its sign vaults the container and removes the sign',
         expect(await shopIsActive(shopX, z)).toBe(true);
 
         player.chat('/vault capture');
-        await expect(player).toHaveReceivedMessage('Capture session started');
+        await expect(player).toHaveReceivedMessage('Capture mode is on');
         // The click is on the sign; the capture goes to the container under it.
         await rightClick(player, shopX, FLOOR + 1, z);
-        await expect(player).toHaveReceivedMessage('Vault captured.');
+        await expect(player).toHaveReceivedMessage('Vaulted.');
         await expectBlock(server, shopX, FLOOR, z, 'air', 'shop-chest-gone');
         await expectBlock(server, shopX, FLOOR + 1, z, 'air', 'shop-sign-gone');
         // ChestShop was told: a shop left in its registry would still be offered to buyers.
@@ -44,10 +44,10 @@ test('an empty shop container keeps its block and loses its lock and its sign',
         await shop(server, owner, shopX, z, false, true);
 
         player.chat('/vault capture');
-        await expect(player).toHaveReceivedMessage('Capture session started');
+        await expect(player).toHaveReceivedMessage('Capture mode is on');
         await rightClick(player, shopX, FLOOR, z);
         await expect(player).toHaveReceivedMessage('The sign on it was removed.');
-        await expect(player).toHaveReceivedMessage('Protection removed.');
+        await expect(player).toHaveReceivedMessage('only unlocked');
         await expectBlock(server, shopX, FLOOR, z, 'chest', 'empty-shop-chest-stays');
         await expectBlock(server, shopX, FLOOR + 1, z, 'air', 'empty-shop-sign-gone');
         expect(await shopIsActive(shopX, z)).toBe(false);
@@ -63,9 +63,9 @@ test('a shop container nobody locked is vaulted to the player the shop belongs t
         expect(await shopIsActive(shopX, z)).toBe(true);
 
         player.chat('/vault capture');
-        await expect(player).toHaveReceivedMessage('Capture session started');
+        await expect(player).toHaveReceivedMessage('Capture mode is on');
         await rightClick(player, shopX, FLOOR, z);
-        await expect(player).toHaveReceivedMessage('Vault captured.');
+        await expect(player).toHaveReceivedMessage('Vaulted.');
         await expectBlock(server, shopX, FLOOR, z, 'air', 'unlocked-shop-chest-gone');
         // The owner comes from Treasury's shop registry: no lock says whose the chest is, and
         // the vault must not go to whoever clicked.

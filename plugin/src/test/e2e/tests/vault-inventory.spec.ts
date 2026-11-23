@@ -60,7 +60,7 @@ test('a vault being edited cannot be opened for editing by someone else',
         const window = await openWindow(owner);
 
         (await adminVaultActions(player, staffDialogs, owner.username)).click('Open Inventory', { ACTION: 'edit' });
-        await expect(player).toHaveReceivedMessage('Someone else is using that vault.');
+        await expect(player).toHaveReceivedMessage('Someone else has that vault open');
 
         // Once the owner closes it, the vault is free again.
         owner.bot.closeWindow(window);

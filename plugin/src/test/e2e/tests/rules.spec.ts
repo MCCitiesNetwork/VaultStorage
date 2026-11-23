@@ -27,14 +27,14 @@ async function scene(server: ServerWrapper, staff: PlayerWrapper, owner: PlayerW
 async function expectRefused(server: ServerWrapper, actor: PlayerWrapper, x: number, z: number, marker: string) {
     await captureMode(actor);
     await rightClick(actor, x, FLOOR, z);
-    await expect(actor).toHaveReceivedMessage('Not allowed');
+    await expect(actor).toHaveReceivedMessage('You may not vault that');
     await expectBlock(server, x, FLOOR, z, 'chest', marker);
 }
 
 async function expectVaulted(server: ServerWrapper, actor: PlayerWrapper, x: number, z: number, marker: string) {
     await captureMode(actor);
     await rightClick(actor, x, FLOOR, z);
-    await expect(actor).toHaveReceivedMessage('Vault captured.');
+    await expect(actor).toHaveReceivedMessage('Vaulted.');
     await expectBlock(server, x, FLOOR, z, 'air', marker);
 }
 
@@ -165,8 +165,8 @@ test('a locked plain sign on a locked chest loses its lock, and the chest behind
         await captureMode(player);
         await rightClick(player, x + 2, FLOOR, z + 1);
 
-        await expect(player).toHaveReceivedMessage('Sign protection removed.');
-        await expect(player).toHaveReceivedMessage('Vault captured.');
+        await expect(player).toHaveReceivedMessage('The sign was unlocked.');
+        await expect(player).toHaveReceivedMessage('Vaulted.');
         await expectBlock(server, x + 2, FLOOR, z, 'air', 'chest-behind-the-sign-vaulted');
         await expectVaults(owner, 1);
     });
@@ -206,7 +206,7 @@ test('an empty locked item frame only loses its lock',
         await captureMode(player);
         clickEntity(player, await entityIdAt(player, 'item_frame', x + 2, z));
 
-        await expect(player).toHaveReceivedMessage('Protection removed.');
+        await expect(player).toHaveReceivedMessage('only unlocked');
         await server.execute(`execute if entity @e[type=minecraft:item_frame,x=${x + 2},y=${FLOOR},z=${z},distance=..2] run say empty-frame-stays`);
         await expect(server).toHaveReceivedMessage('empty-frame-stays');
         expect(vaultCount(owner)).toBe(0);
@@ -240,7 +240,7 @@ test('a vault is placed on a claim its owner is trusted on, and not on a strange
         await lockedChest(server, owner, x + 2, z);
         await captureMode(player);
         await rightClick(player, x + 2, FLOOR, z);
-        await expect(player).toHaveReceivedMessage('Vault captured.');
+        await expect(player).toHaveReceivedMessage('Vaulted.');
         // The claimant claims the land around all three of them.
         await server.execute(`acb ${claimant.username} 5000`);
         await claimant.giveItem('golden_shovel');
@@ -250,7 +250,7 @@ test('a vault is placed on a claim its owner is trusted on, and not on a strange
         const dialogs = new Dialogs(owner);
 
         await placeFirstVault(owner, dialogs, x + 1, z + 3);
-        await expect(owner).toHaveReceivedMessage('must be a region member');
+        await expect(owner).toHaveReceivedMessage('Place it on land you own');
         await expectBlock(server, x + 1, FLOOR, z + 3, 'air', 'not-placed-on-a-strangers-claim');
 
         claimant.chat(`/trust ${owner.username}`);

@@ -36,7 +36,7 @@ test('restart: before the server stops, a vault is stored, a claim is left behin
         await lockedChest(server, editor, x + 2, z + 3);
         await captureMode(staff);
         await rightClick(staff, x + 2, FLOOR, z + 3);
-        await expect(staff).toHaveReceivedMessage('Vault captured.');
+        await expect(staff).toHaveReceivedMessage('Vaulted.');
         await expectVaults(editor, 1);
 
         // 2. A second vault left claimed, as a crash in the middle of an edit leaves it.

@@ -28,7 +28,7 @@ test('with Floodgate installed, its module supplies the Bedrock check and says s
     async () => {
         requireFloodgate();
         const log = serverLog();
-        expect(log).toContain('Bedrock names and the Bedrock client check come from Floodgate.');
+        expect(log).toContain('Bedrock names and the Bedrock client check come from Floodgate');
         expect(log).not.toContain('Floodgate is not installed');
         expect(log).not.toContain('Floodgate is enabled but');
     });
@@ -39,10 +39,10 @@ test('a Java player is not taken for a Bedrock one: they get the dialog menus',
         await operators(server, player);
         const dialogs = new Dialogs(player);
         player.chat('/vault');
-        (await dialogTitled(dialogs, 'Vault Capture')).click('Browse Vaults');
+        (await dialogTitled(dialogs, 'Vault Storage')).click('Browse Vaults');
         // The loading screen is a dialog too; a Bedrock player would get a chat line in its place.
         await dialogTitled(dialogs, 'Browse Vaults');
-        await expect(player).not.toHaveReceivedMessage('Loading Menu...', { timeout: 1000 });
+        await expect(player).not.toHaveReceivedMessage('Loading, one moment...', { timeout: 1000 });
     });
 
 test('a player who has left is still found by name: the list shows it and an admin search finds their vaults',
@@ -57,7 +57,7 @@ test('a player who has left is still found by name: the list shows it and an adm
         const dialogs = new Dialogs(player);
 
         player.chat('/vault admin');
-        (await dialogTitled(dialogs, 'Vault Capture')).click('Browse Vaults');
+        (await dialogTitled(dialogs, 'Vault Storage')).click('Browse Vaults');
         (await dialogTitled(dialogs, 'Browse Vaults')).click('Search', { QUERY: name });
         const found = await dialogTitled(dialogs, 'Browse Vaults');
 

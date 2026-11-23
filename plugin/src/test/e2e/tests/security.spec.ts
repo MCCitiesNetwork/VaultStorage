@@ -102,7 +102,7 @@ test('a player who loses the place permission after opening the menu cannot plac
         const spot = owner.bot.entity.position;
         await rightClick(owner, Math.floor(spot.x) + 1, -61, Math.floor(spot.z) + 3);
 
-        await expect(owner).toHaveReceivedMessage('You don\'t have permission to place vaults.');
+        await expect(owner).toHaveReceivedMessage('You are not allowed to place vaults.');
         const ownerUuid = owner.bot.player.uuid;
         expect(query(`SELECT COUNT(*) FROM Vault WHERE ownerUuid = '${ownerUuid}'`)).toEqual(['1']);
     });

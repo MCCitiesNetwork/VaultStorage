@@ -15,7 +15,7 @@ public interface Menu {
 
     @NotNull Player player();
 
-    void setDialog(@NotNull Dialog dialog);
+    void setDialog(@NotNull AutoDialog dialog);
 
     AutoDialog.@NotNull Builder dialogBuilder();
 

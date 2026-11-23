@@ -11,7 +11,7 @@ test('an owner with more vaults than fit on a page pages through them', async ({
     const dialogs = new Dialogs(player);
 
     player.chat('/vault');
-    (await dialogTitled(dialogs, 'Vault Capture')).click('Browse Vaults');
+    (await dialogTitled(dialogs, 'Vault Storage')).click('Browse Vaults');
     const first = await dialogTitled(dialogs, 'Browse Vaults');
     expect(first.body).toContain('Page 1 / 3 (45 vaults)');
     first.button('Vault #1');
@@ -41,7 +41,7 @@ test('an admin searches the list by owner name', async ({ player, createPlayer, 
     const dialogs = new Dialogs(player);
 
     player.chat('/vault admin');
-    (await dialogTitled(dialogs, 'Vault Capture')).click('Browse Vaults');
+    (await dialogTitled(dialogs, 'Vault Storage')).click('Browse Vaults');
     (await dialogTitled(dialogs, 'Browse Vaults')).click('Search', { QUERY: owner.username });
     const found = await dialogTitled(dialogs, 'Browse Vaults');
     expect(found.body).toContain('(3 vaults)');

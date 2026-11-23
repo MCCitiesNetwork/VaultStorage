@@ -2,7 +2,6 @@ package com.minecraftcitiesnetwork.vaultstorage.menu;
 
 import org.jetbrains.annotations.Nullable;
 import com.minecraftcitiesnetwork.vaultstorage.config.MessageKeys;
-import io.papermc.paper.dialog.Dialog;
 import io.papermc.paper.registry.data.dialog.DialogBase;
 import io.papermc.paper.registry.data.dialog.body.DialogBody;
 import com.minecraftcitiesnetwork.vaultstorage.region.VaultRegion;
@@ -61,7 +60,7 @@ public final class VaultRegionListMenu extends ChildMenuImp {
         setDialog(build());
     }
 
-    private @NotNull Dialog build() {
+    private @NotNull AutoDialog build() {
         AutoDialog.Builder builder = dialogBuilder();
         Map<String,String> phTitle = Map.of("%player%", player().getName(), "%query%", query == null ? "" : query);
         builder.title(plugin.text().of(MessageKeys.REGIONS_TITLE, phTitle));

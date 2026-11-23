@@ -27,12 +27,12 @@ test('an owner who is online is told at once that their chest was vaulted, and b
 
         await captureMode(player);
         await rightClick(player, x + 2, FLOOR, z);
-        await expect(player).toHaveReceivedMessage('Vault captured.');
+        await expect(player).toHaveReceivedMessage('Vaulted.');
 
-        await expect(owner).toHaveReceivedMessage('created a new vault for you');
+        await expect(owner).toHaveReceivedMessage('into your vault storage');
         await expect(owner).toHaveReceivedMessage(player.username);
         // The staff member who vaulted it is not told anything of the kind.
-        await expect(player).not.toHaveReceivedMessage('created a new vault for you', { timeout: 1000 });
+        await expect(player).not.toHaveReceivedMessage('into your vault storage', { timeout: 1000 });
     });
 
 test('an owner who is offline is told when they come back',
@@ -51,12 +51,12 @@ test('an owner who is offline is told when they come back',
 
         await captureMode(player);
         await rightClick(player, x + 2, FLOOR, z);
-        await expect(player).toHaveReceivedMessage('Vault captured.');
+        await expect(player).toHaveReceivedMessage('Vaulted.');
         await sleep(1500);
         expect(stored(uuid)).toBeGreaterThan(0);
 
         const back = await createPlayer({ username: name });
-        await expect(back).toHaveReceivedMessage('created a new vault for you', { timeout: 15000 });
+        await expect(back).toHaveReceivedMessage('into your vault storage', { timeout: 15000 });
     });
 
 test('a previous occupant is told once how many of their containers a sweep vaulted, and where',

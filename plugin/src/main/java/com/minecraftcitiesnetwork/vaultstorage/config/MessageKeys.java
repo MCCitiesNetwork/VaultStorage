@@ -74,6 +74,7 @@ public final class MessageKeys {
 
     public static final String CAPTURE_MENU_TITLE = "capture-menu.title";
     public static final String CAPTURE_MENU_INSTRUCTION = "capture-menu.instruction";
+    public static final String CAPTURE_MENU_INSTRUCTION_OWNER = "capture-menu.instruction-owner";
     public static final String CAPTURE_MENU_CANCEL_HINT = "capture-menu.cancel-hint";
     public static final String CAPTURE_MENU_START_BTN = "capture-menu.start-btn";
     public static final String CAPTURE_MENU_BROWSE_BTN = "capture-menu.browse-btn";

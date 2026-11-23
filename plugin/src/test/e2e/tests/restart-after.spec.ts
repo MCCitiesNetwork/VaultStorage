@@ -54,7 +54,7 @@ test('restart: a vault stored before the server stopped still holds its items in
         const dialogs = new Dialogs(editor);
 
         editor.chat('/vault');
-        (await dialogTitled(dialogs, 'Vault Capture')).click('Browse Vaults');
+        (await dialogTitled(dialogs, 'Vault Storage')).click('Browse Vaults');
         const list = await dialogTitled(dialogs, 'Browse Vaults');
         list.click(list.buttons.find((button) => button.label.includes('2 items'))!.label);
         (await dialogTitled(dialogs, 'Vault Action')).click('Open Inventory', { ACTION: 'view' });

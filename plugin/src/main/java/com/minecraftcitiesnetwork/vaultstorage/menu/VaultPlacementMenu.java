@@ -6,7 +6,6 @@ import com.minecraftcitiesnetwork.vaultstorage.config.MessageKeys;
 import com.minecraftcitiesnetwork.vaultstorage.database.VaultFilter;
 import java.util.concurrent.CompletableFuture;
 import java.util.logging.Level;
-import io.papermc.paper.dialog.Dialog;
 import io.papermc.paper.registry.data.dialog.DialogBase;
 import io.papermc.paper.registry.data.dialog.body.DialogBody;
 import com.minecraftcitiesnetwork.vaultstorage.placement.PlayerPlaceVaultEvent;
@@ -59,7 +58,7 @@ public final class VaultPlacementMenu extends ChildMenuImp {
         setDialog(build());
     }
 
-    private @NotNull Dialog build() {
+    private @NotNull AutoDialog build() {
         AutoDialog.Builder builder = dialogBuilder();
         builder.title(plugin.text().of(MessageKeys.PLACEMENT_TITLE, Map.of("%player%", player().getName())));
         builder.canCloseWithEscape(true);

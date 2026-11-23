@@ -25,7 +25,7 @@ test('a left-click ends capture mode, and a click after that vaults nothing',
 
         await captureMode(player);
         await leftClick(player, x + 1, FLOOR - 1, z);
-        await expect(player).toHaveReceivedMessage('Capture cancelled.');
+        await expect(player).toHaveReceivedMessage('Capture mode is off.');
 
         await rightClick(player, x + 2, FLOOR, z);
         await sleep(1500);
@@ -63,14 +63,14 @@ test('an empty locked chest only loses its lock, and is then nobody\'s to vault'
 
         await captureMode(player);
         await rightClick(player, x + 2, FLOOR, z);
-        await expect(player).toHaveReceivedMessage('Protection removed.');
+        await expect(player).toHaveReceivedMessage('only unlocked');
         await expectBlock(server, x + 2, FLOOR, z, 'chest', 'empty-chest-stays');
         expect(vaultCount(owner)).toBe(0);
 
         // Now stocked, and still unlocked: it has no owner, so not even staff can vault it.
         await server.execute(`minecraft:item replace block ${x + 2} ${FLOOR} ${z} container.0 with minecraft:diamond 3`);
         await rightClick(player, x + 2, FLOOR, z);
-        await expect(player).toHaveReceivedMessage('Not allowed');
+        await expect(player).toHaveReceivedMessage('You may not vault that');
         await expectBlock(server, x + 2, FLOOR, z, 'chest', 'unlocked-chest-stays');
         expect(vaultCount(owner)).toBe(0);
         expect(vaultCount(player)).toBe(0);
@@ -85,7 +85,7 @@ test('a locked block that holds nothing, such as an anvil, only loses its lock',
 
         await captureMode(player);
         await rightClick(player, x + 2, FLOOR, z);
-        await expect(player).toHaveReceivedMessage('Protection removed.');
+        await expect(player).toHaveReceivedMessage('only unlocked');
         await expectBlock(server, x + 2, FLOOR, z, 'anvil', 'anvil-stays');
         expect(vaultCount(owner)).toBe(0);
     });
@@ -98,7 +98,7 @@ test('a click on a block that is not locked and not a container is refused and c
 
         await captureMode(player);
         await rightClick(player, x + 2, FLOOR, z);
-        await expect(player).toHaveReceivedMessage('Not allowed');
+        await expect(player).toHaveReceivedMessage('You may not vault that');
         await expectBlock(server, x + 2, FLOOR, z, 'stone', 'stone-stays');
     });
 
@@ -115,7 +115,7 @@ for (const kind of ['barrel', 'trapped_chest', 'hopper', 'dropper', 'dispenser',
 
             await captureMode(player);
             await rightClick(player, x + 2, FLOOR, z);
-            await expect(player).toHaveReceivedMessage('Vault captured.');
+            await expect(player).toHaveReceivedMessage('Vaulted.');
             await expectBlock(server, x + 2, FLOOR, z, 'air', `${kind}-gone`);
             await expectVaults(owner, 1);
 
@@ -140,7 +140,7 @@ test('items keep their enchantments, their names and what is inside them',
 
         await captureMode(player);
         await rightClick(player, x + 2, FLOOR, z);
-        await expect(player).toHaveReceivedMessage('Vault captured.');
+        await expect(player).toHaveReceivedMessage('Vaulted.');
         await expectVaults(owner, 1);
 
         await placeFirstVault(owner, new Dialogs(owner), x + 2, z + 2);
@@ -169,7 +169,7 @@ test('a chest filled to its last slot comes back with every slot filled',
 
         await captureMode(player);
         await rightClick(player, x + 2, FLOOR, z);
-        await expect(player).toHaveReceivedMessage('Vault captured.');
+        await expect(player).toHaveReceivedMessage('Vaulted.');
         await expectVaults(owner, 1);
         expect(vaultItemCount(owner)).toBe(27);
 
@@ -196,17 +196,17 @@ test('the empty half of a double chest is not vaulted before the half with items
 
         await captureMode(player);
         await rightClick(player, x + 2, FLOOR, z);
-        await expect(player).toHaveReceivedMessage('You should vault the non-empty side first.');
+        await expect(player).toHaveReceivedMessage('Vault the half with items in it first.');
         await expectBlock(server, x + 2, FLOOR, z, 'chest', 'empty-half-stays');
         await expectBlock(server, x + 3, FLOOR, z, 'chest', 'full-half-stays');
         expect(vaultCount(owner)).toBe(0);
 
         // The half with items goes; the empty half is then an empty chest and only loses its lock.
         await rightClick(player, x + 3, FLOOR, z);
-        await expect(player).toHaveReceivedMessage('Vault captured.');
+        await expect(player).toHaveReceivedMessage('Vaulted.');
         await expectBlock(server, x + 3, FLOOR, z, 'air', 'full-half-gone');
         await rightClick(player, x + 2, FLOOR, z);
-        await expect(player).toHaveReceivedMessage('Protection removed.');
+        await expect(player).toHaveReceivedMessage('only unlocked');
         await expectBlock(server, x + 2, FLOOR, z, 'chest', 'empty-half-left-as-a-chest');
         await expectVaults(owner, 1);
     });
@@ -226,7 +226,7 @@ test('a locked painting is vaulted as a painting, and removed',
 
         await captureMode(player);
         clickEntity(player, await entityIdAt(player, 'painting', x + 2, z));
-        await expect(player).toHaveReceivedMessage('Vault captured.');
+        await expect(player).toHaveReceivedMessage('Vaulted.');
         await server.execute(`execute unless entity @e[type=minecraft:painting,x=${x + 2},y=${FLOOR},z=${z},distance=..2] run say painting-is-gone`);
         await expect(server).toHaveReceivedMessage('painting-is-gone');
         await expectVaults(owner, 1);

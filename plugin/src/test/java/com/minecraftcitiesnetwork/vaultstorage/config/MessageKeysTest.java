@@ -49,7 +49,8 @@ class MessageKeysTest {
                 TestMessages.shipped().messageFor(MessageKeys.COMMAND_TRANSFER_UNKNOWN_PLAYER,
                         Text.resolvers(Map.of("player", "<click:run_command:/op me>x"))));
 
-        Assertions.assertEquals("Could not resolve player: <click:run_command:/op me>x", rendered);
+        // The markup the player typed is shown as they typed it, whatever the sentence around it says.
+        Assertions.assertTrue(rendered.contains("<click:run_command:/op me>x"), rendered);
     }
 
     @Test

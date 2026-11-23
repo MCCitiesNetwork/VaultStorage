@@ -38,7 +38,7 @@ test('an owner with 5,000 vaults opens their list, pages through it and reaches 
         seedMany(`'${player.bot.player.uuid}'`, 5000);
         const dialogs = new Dialogs(player);
         player.chat('/vault');
-        const menu = await dialogTitled(dialogs, 'Vault Capture');
+        const menu = await dialogTitled(dialogs, 'Vault Storage');
 
         let list: any;
         expect(await timed(async () => {
@@ -68,7 +68,7 @@ test('with 30,000 vaults of other owners in the table, an owner\'s list and an a
 
         const ownerDialogs = new Dialogs(owner);
         owner.chat('/vault');
-        const menu = await dialogTitled(ownerDialogs, 'Vault Capture');
+        const menu = await dialogTitled(ownerDialogs, 'Vault Storage');
         let list: any;
         expect(await timed(async () => {
             menu.click('Browse Vaults');
@@ -78,7 +78,7 @@ test('with 30,000 vaults of other owners in the table, an owner\'s list and an a
 
         const dialogs = new Dialogs(player);
         player.chat('/vault admin');
-        const adminMenu = await dialogTitled(dialogs, 'Vault Capture');
+        const adminMenu = await dialogTitled(dialogs, 'Vault Storage');
         let all: any;
         expect(await timed(async () => {
             adminMenu.click('Browse Vaults');
@@ -97,7 +97,7 @@ test('the server keeps ticking on time while lists over a large table are opened
         const dialogs = new Dialogs(player);
         for (let round = 0; round < 5; round++) {
             player.chat('/vault admin');
-            (await dialogTitled(dialogs, 'Vault Capture')).click('Browse Vaults');
+            (await dialogTitled(dialogs, 'Vault Storage')).click('Browse Vaults');
             await dialogTitled(dialogs, 'Browse Vaults');
         }
         // Paper's own measure: milliseconds a tick took, lately. A tick has 50.

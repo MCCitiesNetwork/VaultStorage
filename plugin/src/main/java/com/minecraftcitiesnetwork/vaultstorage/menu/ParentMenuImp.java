@@ -18,7 +18,7 @@ public abstract class ParentMenuImp implements ParentMenu {
     protected final @NotNull VaultStoragePlugin plugin;
     protected final Player player;
     private final String id;
-    private @Nullable Dialog dialog;
+    private @Nullable AutoDialog built;
 
     protected ParentMenuImp(@NotNull VaultStoragePlugin plugin, @NotNull Player player, @NotNull String id) {
         this.plugin = plugin;
@@ -34,19 +34,25 @@ public abstract class ParentMenuImp implements ParentMenu {
 
     @Override
     public @NotNull Dialog dialog() {
-        return Objects.requireNonNull(dialog, "the menu's constructor sets its dialog");
+        return Objects.requireNonNull(built, "the menu's constructor sets its dialog").dialog();
     }
 
     @Override
     public void open() {
-        if (dialog != null) player.showDialog(dialog);
+        if (built == null) {
+            return;
+        }
+        // A module may draw the menu its own way for this player; otherwise it is the dialog.
+        if (!plugin.integrations().showMenu(player, built.view())) {
+            player.showDialog(built.dialog());
+        }
     }
 
     @Override
     public @NotNull Player player() { return player; }
 
     @Override
-    public void setDialog(@NotNull Dialog dialog) { this.dialog = dialog; }
+    public void setDialog(@NotNull AutoDialog dialog) { this.built = dialog; }
 
     @Override
     public AutoDialog.@NotNull Builder dialogBuilder() { return AutoDialog.builder(this); }

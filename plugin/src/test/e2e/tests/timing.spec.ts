@@ -45,7 +45,7 @@ test('a chest that gains an item while its capture is being saved is left alone,
 
         // Unchanged this time, the same click vaults it, emeralds and all.
         await rightClick(player, x + 2, FLOOR, z);
-        await expect(player).toHaveReceivedMessage('Vault captured.');
+        await expect(player).toHaveReceivedMessage('Vaulted.');
         expect(vaultItemCount(owner)).toBe(3);
     });
 
@@ -103,7 +103,7 @@ test('further clicks on a chest whose capture is still being saved do nothing',
             await sleep(400);
         }
 
-        await expect(player).toHaveReceivedMessage('Vault captured.', { timeout: 15000 });
+        await expect(player).toHaveReceivedMessage('Vaulted.', { timeout: 15000 });
         await sleep(1500);
         await expectBlock(server, x + 2, FLOOR, z, 'air', 'slow-capture-finished');
         expect(vaultCount(owner)).toBe(1);
@@ -149,7 +149,7 @@ test('a block put at the target while a placement is being claimed refuses the p
         await sleep(1000);
         await server.execute(`setblock ${x + 2} ${FLOOR} ${z + 2} minecraft:stone`);
 
-        await expect(owner).toHaveReceivedMessage('Target not empty.', { timeout: 15000 });
+        await expect(owner).toHaveReceivedMessage('already a block there', { timeout: 15000 });
         await expectBlock(server, x + 2, FLOOR, z + 2, 'stone', 'late-stone-not-replaced');
         expect(vaultCount(owner)).toBe(1);
         // Released, not left in use: it goes down somewhere else straight away.
@@ -166,7 +166,7 @@ test('a list opened while the database is slow shows a loading screen and then t
         await vaultFor(server, player, owner);
         const dialogs = new Dialogs(owner);
         owner.chat('/vault');
-        const menu = await dialogTitled(dialogs, 'Vault Capture');
+        const menu = await dialogTitled(dialogs, 'Vault Storage');
 
         holdVaultTables(3);
         await sleep(500);

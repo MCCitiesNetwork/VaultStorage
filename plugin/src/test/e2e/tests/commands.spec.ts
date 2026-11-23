@@ -18,7 +18,7 @@ test('the console is told that /vault and its menus are for players',
     { requires: { consoleOutput: 'full' } }, async ({ server }) => {
         // The console's answer comes back as the command's reply, not through the log.
         for (const line of ['vault', 'vault menu', 'vault admin', 'vault capture']) {
-            expect(await server.execute(line)).toContain('Only players can use this.');
+            expect(await server.execute(line)).toContain('Only a player in the game can use this.');
         }
     });
 
@@ -43,7 +43,7 @@ test('a transfer to a name nobody has is refused and the vault keeps its owner',
         const vault = seededVault(player.bot.player.uuid);
 
         player.chat(`/vault transfer ${vault} nobody_by_this_nam`);
-        await expect(player).toHaveReceivedMessage('Could not resolve player: nobody_by_this_nam');
+        await expect(player).toHaveReceivedMessage('No player called nobody_by_this_nam');
         expect(query(`SELECT ownerUuid FROM Vault WHERE uuid = '${vault}'`)).toEqual([player.bot.player.uuid]);
     });
 
@@ -81,8 +81,8 @@ test('/vault menu <player> needs its own permission, and then lists that player\
         await ordinary(server, player, [MENU, 'vaultstorage.command.vault.others']);
         const dialogs = new Dialogs(player);
         player.chat(`/vault menu ${other.username}`);
-        await expect(player).toHaveReceivedMessage('Resolving player...');
-        (await dialogTitled(dialogs, 'Vault Capture')).click('Browse Vaults');
+        await expect(player).toHaveReceivedMessage('Looking up that player...');
+        (await dialogTitled(dialogs, 'Vault Storage')).click('Browse Vaults');
         const list = await dialogTitled(dialogs, 'Browse Vaults');
         expect(list.body).toContain('(2 vaults)');
         expect(list.buttons.filter((button) => button.label.includes(`${other.username}'s Vault #`)).length).toBe(2);
@@ -96,11 +96,11 @@ test('/vault menu with the sender\'s own name is their own menu, and an unknown 
         const dialogs = new Dialogs(player);
 
         player.chat(`/vault menu ${player.username}`);
-        (await dialogTitled(dialogs, 'Vault Capture')).click('Browse Vaults');
+        (await dialogTitled(dialogs, 'Vault Storage')).click('Browse Vaults');
         expect((await dialogTitled(dialogs, 'Browse Vaults')).body).toContain('(1 vaults)');
 
         player.chat('/vault menu nobody_by_this_nam');
-        await expect(player).toHaveReceivedMessage('Player not found.');
+        await expect(player).toHaveReceivedMessage('No player by that name');
     });
 
 test('/vault open is refused for someone else\'s vault without the others permission',
@@ -110,7 +110,7 @@ test('/vault open is refused for someone else\'s vault without the others permis
 
         await ordinary(server, player, [MENU, 'vaultstorage.command.open']);
         player.chat(`/vault open ${vault}`);
-        await expect(player).toHaveReceivedMessage('You don\'t have access to that vault.');
+        await expect(player).toHaveReceivedMessage('That vault is not yours.');
         expect((player.bot as any).currentWindow).toBeNull();
 
         await ordinary(server, player, [MENU, 'vaultstorage.command.open', 'vaultstorage.command.open.others']);
@@ -124,7 +124,7 @@ test('/vault open refuses an unknown action and an action the player may not use
         await ordinary(server, player, [MENU, 'vaultstorage.command.open']);
 
         player.chat(`/vault open ${vault} steal`);
-        await expect(player).toHaveReceivedMessage('Unknown action. Use view|copy|edit.');
+        await expect(player).toHaveReceivedMessage('Unknown action. Use view, copy or edit.');
 
         // Edit and copy are staff actions by default; view is everyone's.
         player.chat(`/vault open ${vault} edit`);
@@ -141,7 +141,7 @@ test('/vault open of a vault that does not exist says so, whoever asks',
     async ({ player, server }) => {
         await ordinary(server, player, [MENU, 'vaultstorage.command.open', 'vaultstorage.command.open.others']);
         player.chat(`/vault open ${NO_SUCH_VAULT}`);
-        await expect(player).toHaveReceivedMessage('Vault not found.');
+        await expect(player).toHaveReceivedMessage('That vault no longer exists');
     });
 
 test('/vault capture and /vault admin are not offered without their permissions',
@@ -154,11 +154,14 @@ test('/vault capture and /vault admin are not offered without their permissions'
         }
     });
 
-test('the menu\'s Start Capture is refused to a player without the capture permission',
+test('a player without the capture permission is told the menu is for their own vaults, and offered no Start Capture',
     async ({ player, server }) => {
         await ordinary(server, player, [MENU]);
         const dialogs = new Dialogs(player);
         player.chat('/vault');
-        (await dialogTitled(dialogs, 'Vault Capture')).click('Start Capture');
-        await expect(player).toHaveReceivedMessage('You don\'t have permission to capture blocks.');
+        const menu = await dialogTitled(dialogs, 'Vault Storage');
+
+        expect(menu.buttons.some((button) => button.label.includes('Start Capture'))).toBe(false);
+        expect(menu.body).toContain('Containers of yours that were vaulted are kept here');
+        menu.button('Browse Vaults');
     });

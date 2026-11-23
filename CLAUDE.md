@@ -24,7 +24,7 @@ project version lives in `gradle.properties`.
 | --- | --- | --- |
 | `:plugin` | `VaultStorage-<version>.jar` | The host plugin |
 | `:modules:namebook-adapter` | `namebook-adapter-<version>.jar` | Names through Namebook |
-| `:modules:floodgate-adapter` | `floodgate-adapter-<version>.jar` | Bedrock names and the Bedrock client check |
+| `:modules:floodgate-adapter` | `floodgate-adapter-<version>.jar` | Bedrock names, the Bedrock client check, and the menus as Bedrock forms |
 | `:modules:chestshop-adapter` | `chestshop-adapter-<version>.jar` | Everything about shops: ChestShop's signs, the rule for whose a shop is, shop owners from Treasury |
 | `:modules:realty-adapter` | `realty-adapter-<version>.jar` | Auto-vault on a Realty occupant change |
 | `:modules:griefprevention-adapter` | `griefprevention-adapter-<version>.jar` | Placing vaults on GriefPrevention claims |
@@ -50,7 +50,7 @@ Under `com.minecraftcitiesnetwork.vaultstorage`, grouped by feature:
 | `region` | WorldGuard service and region types |
 | `bolt` | Bolt service |
 | `names` | `NameSource`, the Paper source, `Names`, `UniqueIdentifierResolver` |
-| `menu` | dialog menus, `AutoDialog`, `ConfirmMenu`, `VaultLabel` |
+| `menu` | dialog menus, `AutoDialog`, `MenuView` and `MenuRenderer` (a menu described apart from how it is drawn), `ConfirmMenu`, `VaultLabel` |
 | `command` | `VaultCommand` (the Brigadier tree), its sealed outcomes, `VaultActionArgument` |
 | `permission` | `Permissions`, one constant per node |
 | `session` | per-player session state |
@@ -73,13 +73,14 @@ findings and kept the framework (`ParentMenu`, `ChildMenu`, `AutoDialog`).
   it by scanning the entry class file. If the entry class named such a type, loading the module
   on a server without that plugin would throw out of the host's `onEnable`.
 - **The host has no code about another plugin.** It has hooks named for what the host needs:
-  name sources, the Bedrock check, placement grants, an owner notifier, what is attached to a
+  name sources, the Bedrock check, placement grants, an owner notifier, another way to draw a
+  menu (`MenuRenderer`), what is attached to a
   container (`ContainerAttachments`) and who owns a container nobody locked
   (`ContainerOwnerSource`). Everything about ChestShop, Treasury, Realty and the rest, including
   its rules, its wording and its tests, is in that plugin's module. The host's Java does not
   contain the word "shop".
 - **A hook that several plugins could fill is a list** (`addPlacementGrant`, `addAttachments`,
-  `addOwnerSource`), and an empty list is the default: no no-op class and no `isAvailable()`.
+  `addOwnerSource`, `addMenuRenderer`), and an empty list is the default: no no-op class and no `isAvailable()`.
   A provider that throws is logged and counted as knowing nothing.
 - **One module does not know another.** The realty module's sweep asks the host's hooks for
   unlocked containers with an owner; it does not know they are shops.
@@ -150,6 +151,14 @@ findings and kept the framework (`ParentMenu`, `ChildMenu`, `AutoDialog`).
 
 ## Rules for menus
 
+- **A menu is built once and can be drawn two ways.** `AutoDialog.Builder.build()` gives the
+  Paper dialog and the same menu as a `MenuView`: title, body lines, inputs, buttons.
+  `ParentMenuImp.open` asks `Integrations.showMenu` first, and shows the dialog if no module
+  drew it. The Floodgate module draws it as Bedrock forms (`BedrockForms`, laid out by
+  `FormPlan`): a form of buttons, and the inputs asked for when a button that reads them is
+  pressed, because Bedrock has no form with both.
+- **A button that reads the menu's inputs is added with `submitButton`**, any other with
+  `button` or `buttonWithPlayer`. Only a submit button makes a Bedrock player fill the inputs in.
 - **A dialog's answer comes from the client.** A menu lists only what a player may do, and the
   code that does it checks again: `VaultInventoryService.openVirtualInventory` checks the
   action's permission, and `captureDirectAsync` and `captureHanging` check the capture one.
@@ -301,9 +310,10 @@ file for its area; a bug found by hand gets a test before its fix.
 
 Not covered live, and why:
 
-- **A Bedrock player.** A bot cannot join as one, so the chat line a Bedrock player gets in
-  place of the loading dialog, and gamertag lookups, are untested. Floodgate's module is tested
-  with the real plugin present, for Java players.
+- **A Bedrock player.** A bot cannot join as one, so the forms a Bedrock player gets, the chat
+  line in place of the loading dialog, and gamertag lookups are untested live. `FormPlanTest`
+  covers how a menu is laid out as forms. To look at them by hand, run the test server with
+  Geyser and join from a Bedrock client: `./gradlew :plugin:plugwrightRunServerLocal -PwithGeyser`.
 - **An edit open when the server stops.** The runner disconnects its bots before it stops the
   server, and a disconnect saves the edit by the ordinary path.
 

@@ -19,7 +19,7 @@ test('a placement while the database is down places nothing and keeps the vault'
         stopDatabase();
         try {
             await rightClick(owner, x + 2, GROUND, z + 2);
-            await expect(owner).toHaveReceivedMessage('could not be placed. Nothing was lost.', { timeout: 25000 });
+            await expect(owner).toHaveReceivedMessage('could not be placed. Nothing was lost', { timeout: 25000 });
             await expectBlock(server, x + 2, FLOOR, z + 2, 'air', 'nothing-placed-during-outage');
         } finally {
             startDatabase();
@@ -41,7 +41,7 @@ test('the vault list while the database is down says it could not be loaded, and
         await vaultFor(server, player, owner);
         const dialogs = new Dialogs(owner);
         owner.chat('/vault');
-        const menu = await dialogTitled(dialogs, 'Vault Capture');
+        const menu = await dialogTitled(dialogs, 'Vault Storage');
 
         stopDatabase();
         try {
@@ -52,7 +52,7 @@ test('the vault list while the database is down says it could not be loaded, and
         }
 
         owner.chat('/vault');
-        (await dialogTitled(dialogs, 'Vault Capture')).click('Browse Vaults');
+        (await dialogTitled(dialogs, 'Vault Storage')).click('Browse Vaults');
         expect((await dialogTitled(dialogs, 'Browse Vaults')).body).toContain('(1 vaults)');
     });
 
@@ -84,7 +84,7 @@ test('an edit closed while the database is down is reported, and the vault can b
         stopDatabase();
         try {
             owner.bot.closeWindow(window);
-            await expect(owner).toHaveReceivedMessage('The vault could not be saved. Tell staff.', { timeout: 25000 });
+            await expect(owner).toHaveReceivedMessage('could not be saved. Tell staff', { timeout: 25000 });
             await expect(server).toHaveReceivedMessage('could not be saved after', { timeout: 5000 });
         } finally {
             startDatabase();
@@ -111,7 +111,7 @@ test('an admin delete while the database is down deletes nothing and says it fai
         stopDatabase();
         try {
             confirm.click('Delete');
-            await expect(player).toHaveReceivedMessage('Vault deletion failed.', { timeout: 25000 });
+            await expect(player).toHaveReceivedMessage('The vault was not deleted.', { timeout: 25000 });
         } finally {
             startDatabase();
         }

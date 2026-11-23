@@ -46,16 +46,16 @@ export async function vaultFor(server: ServerWrapper, staff: PlayerWrapper, owne
     await standAt(server, owner, x, z + 1);
     await lockedChest(server, owner, x + 2, z);
     staff.chat('/vault capture');
-    await expect(staff).toHaveReceivedMessage('Capture session started');
+    await expect(staff).toHaveReceivedMessage('Capture mode is on');
     await rightClick(staff, x + 2, FLOOR, z);
-    await expect(staff).toHaveReceivedMessage('Vault captured.');
+    await expect(staff).toHaveReceivedMessage('Vaulted.');
     return { x, z };
 }
 
 /** Walks the owner's own menu to the action screen of their first vault. */
 export async function ownVaultActions(player: PlayerWrapper, dialogs: Dialogs): Promise<Dialog> {
     player.chat('/vault');
-    (await dialogTitled(dialogs, 'Vault Capture')).click('Browse Vaults');
+    (await dialogTitled(dialogs, 'Vault Storage')).click('Browse Vaults');
     const list = await dialogTitled(dialogs, 'Browse Vaults');
     list.click(list.button('Vault #').label);
     return dialogTitled(dialogs, 'Vault Action');
@@ -64,7 +64,7 @@ export async function ownVaultActions(player: PlayerWrapper, dialogs: Dialogs): 
 /** Walks the admin menu to the action screen of the vault belonging to this owner. */
 export async function adminVaultActions(admin: PlayerWrapper, dialogs: Dialogs, ownerName: string): Promise<Dialog> {
     admin.chat('/vault admin');
-    (await dialogTitled(dialogs, 'Vault Capture')).click('Browse Vaults');
+    (await dialogTitled(dialogs, 'Vault Storage')).click('Browse Vaults');
     // The admin list holds every vault the dev database has collected, so search for the owner.
     (await dialogTitled(dialogs, 'Browse Vaults')).click('Search', { QUERY: ownerName });
     const list = await dialogTitled(dialogs, 'Browse Vaults');
@@ -92,7 +92,7 @@ export async function lock(owner: PlayerWrapper, x: number, z: number, y: number
 /** Puts the player in capture mode. */
 export async function captureMode(player: PlayerWrapper): Promise<void> {
     player.chat('/vault capture');
-    await expect(player).toHaveReceivedMessage('Capture session started');
+    await expect(player).toHaveReceivedMessage('Capture mode is on');
 }
 
 /** How many vaults the player owns. */

@@ -1,6 +1,5 @@
 package com.minecraftcitiesnetwork.vaultstorage.menu;
 
-import io.papermc.paper.dialog.Dialog;
 import io.papermc.paper.registry.data.dialog.DialogBase;
 import io.papermc.paper.registry.data.dialog.body.DialogBody;
 import java.util.function.Consumer;
@@ -31,7 +30,7 @@ public final class ConfirmMenu extends ChildMenuImp {
         setDialog(build());
     }
 
-    private @NotNull Dialog build() {
+    private @NotNull AutoDialog build() {
         AutoDialog.Builder builder = dialogBuilder();
         builder.title(this.title);
         builder.canCloseWithEscape(true);

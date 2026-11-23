@@ -39,7 +39,7 @@ test('a region scan lists a locked chest, vaults it, and drops it from the resul
 
         const dialogs = new Dialogs(player);
         player.chat('/vault admin');
-        (await dialogTitled(dialogs, 'Vault Capture')).click('Scan Region');
+        (await dialogTitled(dialogs, 'Vault Storage')).click('Scan Region');
         (await dialogTitled(dialogs, 'Vault Scan')).click('Here');
 
         const results = await scanResults(dialogs);
@@ -48,7 +48,7 @@ test('a region scan lists a locked chest, vaults it, and drops it from the resul
         expect(results.body).toContain(`(${x + 2}, ${FLOOR}, ${z})`);
         results.click('(vault) - 1');
 
-        await expect(player).toHaveReceivedMessage('Vault captured.');
+        await expect(player).toHaveReceivedMessage('Vaulted.');
         await expectBlock(server, x + 2, FLOOR, z, 'air', 'scanned-chest-gone');
         const after = await scanResults(dialogs);
         expect(after.body).toContain('(0 results)');
@@ -89,7 +89,7 @@ test('a locked item frame found by a scan is vaulted with what it displays, not 
 
         const dialogs = new Dialogs(player);
         player.chat('/vault admin');
-        (await dialogTitled(dialogs, 'Vault Capture')).click('Scan Region');
+        (await dialogTitled(dialogs, 'Vault Storage')).click('Scan Region');
         (await dialogTitled(dialogs, 'Vault Scan')).click('Here');
         // The filter button steps through block, non-container, container and entity.
         let results = await scanResults(dialogs);
@@ -100,7 +100,7 @@ test('a locked item frame found by a scan is vaulted with what it displays, not 
         expect(results.body).toContain('Item Frame');
         results.click('(vault) - 1');
 
-        await expect(player).toHaveReceivedMessage('Vault captured.');
+        await expect(player).toHaveReceivedMessage('Vaulted.');
         await server.execute(`execute unless entity @e[type=minecraft:item_frame,x=${frameX},y=${FLOOR},z=${z},distance=..2] run say scanned-frame-gone`);
         await expect(server).toHaveReceivedMessage('scanned-frame-gone');
         // The frame and the diamond it showed are in the owner's vault.

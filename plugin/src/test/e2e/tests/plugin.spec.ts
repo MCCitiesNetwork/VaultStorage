@@ -9,7 +9,7 @@ test('/vault opens the capture menu for an operator', async ({ player, server })
     const dialogs = new Dialogs(player);
     player.chat('/vault');
     const menu = await dialogs.next();
-    expect(menu.title).toBe('Vault Capture');
+    expect(menu.title).toBe('Vault Storage');
     menu.button('Start Capture');
     menu.button('Scan Region');
     menu.button('Browse Vaults');
@@ -27,7 +27,7 @@ test('vaultstorage.admin alone gives a player who is not an operator the staff c
     await sleep(700);
     const dialogs = new Dialogs(player);
     player.chat('/vault admin');
-    expect((await dialogs.next()).title).toBe('Vault Capture');
+    expect((await dialogs.next()).title).toBe('Vault Storage');
     player.chat('/vault reload');
     await expect(player).toHaveReceivedMessage('VaultStorage reloaded.');
 });
@@ -38,7 +38,7 @@ test('a player with only the menu permission is not offered the staff commands',
     await sleep(700);
     const dialogs = new Dialogs(player);
     player.chat('/vault');
-    expect((await dialogs.next()).title).toBe('Vault Capture');
+    expect((await dialogs.next()).title).toBe('Vault Storage');
     for (const refused of ['/vault reload']) {
         player.chat(refused);
         // The root is known to this player, so the client's answer names the argument, not the command.

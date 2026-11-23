@@ -116,10 +116,10 @@ test('a sweep unlocks an empty locked chest and leaves it standing',
         await server.execute(`minecraft:item replace block ${x + 2} ${FLOOR} ${z} container.0 with minecraft:diamond 1`);
         await server.execute(`op ${buyer.username}`);
         buyer.chat('/vault capture');
-        await expect(buyer).toHaveReceivedMessage('Capture session started');
+        await expect(buyer).toHaveReceivedMessage('Capture mode is on');
         const { rightClick } = await import('./world.js');
         await rightClick(buyer, x + 2, FLOOR, z);
-        await expect(buyer).toHaveReceivedMessage('Not allowed');
+        await expect(buyer).toHaveReceivedMessage('You may not vault that');
     });
 
 test('a sweep vaults both halves of a previous occupant\'s double chest',
@@ -162,6 +162,8 @@ test('with the module turned off in its config, a sale vaults nothing; turned on
         // On again: handing the region on now sweeps it.
         player.chat(`/realty transfer ${player.username} ${region}`);
         await vaultsOf(owner, 1);
+        // The vault's row exists a tick before the block goes, and nobody is told here.
+        await sleep(1500);
         await expectBlock(server, x + 2, FLOOR, z, 'air', 'module-on-chest-swept');
     });
 

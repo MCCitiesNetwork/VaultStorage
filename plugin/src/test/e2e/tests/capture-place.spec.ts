@@ -22,15 +22,15 @@ test('a locked chest is captured into a vault and placed back with its items in 
 
         // Capture: the operator vaults the owner's chest.
         player.chat('/vault capture');
-        await expect(player).toHaveReceivedMessage('Capture session started');
+        await expect(player).toHaveReceivedMessage('Capture mode is on');
         await rightClick(player, chestX, FLOOR, z);
-        await expect(player).toHaveReceivedMessage('Vault captured.');
+        await expect(player).toHaveReceivedMessage('Vaulted.');
         await expectBlock(server, chestX, FLOOR, z, 'air', 'chest-is-gone');
 
         // Placement: the owner finds the vault in the menu and places it two blocks away.
         const dialogs = new Dialogs(owner);
         owner.chat('/vault');
-        (await dialogTitled(dialogs, 'Vault Capture')).click('Browse Vaults');
+        (await dialogTitled(dialogs, 'Vault Storage')).click('Browse Vaults');
         const list = await dialogTitled(dialogs, 'Browse Vaults');
         list.click(list.button('Vault #').label);
         (await dialogTitled(dialogs, 'Vault Action')).click('Place Block');
@@ -47,7 +47,7 @@ test('a locked chest is captured into a vault and placed back with its items in 
 
         // The vault is gone once placed: the list is empty.
         owner.chat('/vault');
-        (await dialogTitled(dialogs, 'Vault Capture')).click('Browse Vaults');
+        (await dialogTitled(dialogs, 'Vault Storage')).click('Browse Vaults');
         const after = await dialogTitled(dialogs, 'Browse Vaults');
         expect(after.body).toContain('No vaults found.');
     });
@@ -75,14 +75,14 @@ test('a furnace comes back with its input, fuel and output where they were',
         await sleep(500);
 
         player.chat('/vault capture');
-        await expect(player).toHaveReceivedMessage('Capture session started');
+        await expect(player).toHaveReceivedMessage('Capture mode is on');
         await rightClick(player, furnaceX, FLOOR, z);
-        await expect(player).toHaveReceivedMessage('Vault captured.');
+        await expect(player).toHaveReceivedMessage('Vaulted.');
         await expectBlock(server, furnaceX, FLOOR, z, 'air', 'furnace-is-gone');
 
         const dialogs = new Dialogs(owner);
         owner.chat('/vault');
-        (await dialogTitled(dialogs, 'Vault Capture')).click('Browse Vaults');
+        (await dialogTitled(dialogs, 'Vault Storage')).click('Browse Vaults');
         const list = await dialogTitled(dialogs, 'Browse Vaults');
         expect(list.button('Vault #').label).toContain('Furnace');
         list.click(list.button('Vault #').label);
@@ -110,7 +110,7 @@ test('a capture while the database is down leaves the chest and its items in pla
         await lockedChest(server, owner, chestX, z);
 
         player.chat('/vault capture');
-        await expect(player).toHaveReceivedMessage('Capture session started');
+        await expect(player).toHaveReceivedMessage('Capture mode is on');
         stopDatabase();
         try {
             await rightClick(player, chestX, FLOOR, z);
@@ -124,6 +124,6 @@ test('a capture while the database is down leaves the chest and its items in pla
 
         // The session is still usable, and with the database back the same click now works.
         await rightClick(player, chestX, FLOOR, z);
-        await expect(player).toHaveReceivedMessage('Vault captured.');
+        await expect(player).toHaveReceivedMessage('Vaulted.');
         await expectBlock(server, chestX, FLOOR, z, 'air', 'chest-gone-after-recovery');
     });

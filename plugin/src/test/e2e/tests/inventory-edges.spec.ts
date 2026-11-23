@@ -70,7 +70,7 @@ test('a vault emptied by its owner stays in the list as an empty vault',
         expect(vaultCount(owner)).toBe(1);
         expect(vaultItemCount(owner)).toBe(0);
         owner.chat('/vault');
-        (await dialogTitled(dialogs, 'Vault Capture')).click('Browse Vaults');
+        (await dialogTitled(dialogs, 'Vault Storage')).click('Browse Vaults');
         const list = await dialogTitled(dialogs, 'Browse Vaults');
         expect(list.button('Vault #').label).toContain('empty');
     });
@@ -113,7 +113,7 @@ test('a vault that is open for editing is not deleted from under its editor',
 
         (await adminVaultActions(player, staffDialogs, owner.username)).click('Delete Vault');
         (await dialogTitled(staffDialogs, 'Delete this vault?')).click('Delete');
-        await expect(player).toHaveReceivedMessage('Someone else is using that vault.');
+        await expect(player).toHaveReceivedMessage('Someone else has that vault open');
         expect(vaultCount(owner)).toBe(1);
 
         owner.bot.closeWindow(window);

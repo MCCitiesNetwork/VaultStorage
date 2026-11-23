@@ -37,11 +37,11 @@ test('a member of an L-shaped region vaults a chest in it, and not one in the co
 
         await captureMode(member);
         await rightClick(member, chests.cornerX, FLOOR, chests.cornerZ);
-        await expect(member).toHaveReceivedMessage('Not allowed');
+        await expect(member).toHaveReceivedMessage('You may not vault that');
         await expectBlock(server, chests.cornerX, FLOOR, chests.cornerZ, 'chest', 'corner-chest-left');
 
         await rightClick(member, chests.insideX, FLOOR, chests.insideZ);
-        await expect(member).toHaveReceivedMessage('Vault captured.');
+        await expect(member).toHaveReceivedMessage('Vaulted.');
         await expectBlock(server, chests.insideX, FLOOR, chests.insideZ, 'air', 'chest-in-the-ell-vaulted');
     });
 
@@ -58,7 +58,7 @@ test('a scan of an L-shaped region lists what is in it, and not what is only in 
         const dialogs = new Dialogs(player);
 
         player.chat('/vault admin');
-        (await dialogTitled(dialogs, 'Vault Capture')).click('Scan Region');
+        (await dialogTitled(dialogs, 'Vault Storage')).click('Scan Region');
         (await dialogTitled(dialogs, 'Vault Scan')).click('Here');
         let results;
         for (let attempt = 0; attempt < 6; attempt++) {
@@ -84,10 +84,10 @@ test('"Here" in the corner an L-shaped region leaves out finds no region',
         const dialogs = new Dialogs(player);
 
         player.chat('/vault admin');
-        (await dialogTitled(dialogs, 'Vault Capture')).click('Scan Region');
+        (await dialogTitled(dialogs, 'Vault Storage')).click('Scan Region');
         (await dialogTitled(dialogs, 'Vault Scan')).click('Here');
 
-        await expect(player).toHaveReceivedMessage('No region at your location.');
+        await expect(player).toHaveReceivedMessage('You are not standing in a region.');
     });
 
 test('buying an L-shaped region vaults what is in it and leaves what is in the corner',

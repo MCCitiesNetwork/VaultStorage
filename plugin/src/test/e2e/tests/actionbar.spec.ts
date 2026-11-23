@@ -98,9 +98,9 @@ test('placement mode says whether the block looked at can be placed on',
         await sleep(300);
 
         await lookAtBlock(owner, x + 2, GROUND, z + 1);
-        expect(await bars.next('Placeable:')).toContain('Placeable: yes');
+        expect(await bars.next('place it here')).toContain('You can place it here.');
 
         // An ordinary player on land that is nobody's may not place there.
         await ordinary(server, owner, [MENU]);
-        expect(await bars.next('Placeable: no')).toContain('Placeable: no');
+        expect(await bars.next('Not here.')).toContain('Not here.');
     });

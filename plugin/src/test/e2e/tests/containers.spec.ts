@@ -37,16 +37,16 @@ test('one half of a double chest is vaulted and the other half stays locked for 
         await sleep(500);
 
         player.chat('/vault capture');
-        await expect(player).toHaveReceivedMessage('Capture session started');
+        await expect(player).toHaveReceivedMessage('Capture mode is on');
         await rightClick(player, leftX, FLOOR, z);
-        await expect(player).toHaveReceivedMessage('Vault captured.');
+        await expect(player).toHaveReceivedMessage('Vaulted.');
         await expectBlock(server, leftX, FLOOR, z, 'air', 'first-half-gone');
         await expectBlock(server, rightX, FLOOR, z, 'chest', 'second-half-stays');
 
         // The second half can only be captured if it still has a lock owner: the capture of the
         // first half re-protected it for the same owner.
         await rightClick(player, rightX, FLOOR, z);
-        // 'Vault captured.' is already in the log from the first half, so wait for the save instead.
+        // 'Vaulted.' is already in the log from the first half, so wait for the save instead.
         await sleep(1500);
         await expectBlock(server, rightX, FLOOR, z, 'air', 'second-half-gone');
         const ownerUuid = owner.bot.player.uuid;
@@ -80,9 +80,9 @@ test('a locked item frame is vaulted with what it displays, and removed',
         await sleep(700);
 
         player.chat('/vault capture');
-        await expect(player).toHaveReceivedMessage('Capture session started');
+        await expect(player).toHaveReceivedMessage('Capture mode is on');
         clickEntity(player, await frameId(player));
-        await expect(player).toHaveReceivedMessage('Vault captured.');
+        await expect(player).toHaveReceivedMessage('Vaulted.');
 
         await server.execute(`execute unless entity @e[type=minecraft:item_frame,x=${frameX},y=${FLOOR},z=${z},distance=..2] run say frame-is-gone`);
         await expect(server).toHaveReceivedMessage('frame-is-gone');

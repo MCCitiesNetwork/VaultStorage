@@ -34,13 +34,13 @@ test('a chest vaulted in the nether is listed with that world, and can be placed
 
         await captureMode(player);
         await rightClick(player, x + 2, NETHER_FLOOR, z);
-        await expect(player).toHaveReceivedMessage('Vault captured.');
+        await expect(player).toHaveReceivedMessage('Vaulted.');
         await expectNetherBlock(server, x + 2, NETHER_FLOOR, z, 'air', 'nether-chest-gone');
         await expectVaults(owner, 1);
 
         const dialogs = new Dialogs(owner);
         owner.chat('/vault');
-        (await dialogTitled(dialogs, 'Vault Capture')).click('Browse Vaults');
+        (await dialogTitled(dialogs, 'Vault Storage')).click('Browse Vaults');
         const label = (await dialogTitled(dialogs, 'Browse Vaults')).button('Vault #').label;
         expect(label).toContain(`at world_nether ${x + 2}, ${NETHER_FLOOR}, ${z}`);
 
@@ -71,7 +71,7 @@ test('a region in the overworld gives its members no say over a chest at the sam
         await captureMode(member);
         await rightClick(member, x + 2, NETHER_FLOOR, z);
 
-        await expect(member).toHaveReceivedMessage('Not allowed');
+        await expect(member).toHaveReceivedMessage('You may not vault that');
         await expectNetherBlock(server, x + 2, NETHER_FLOOR, z, 'chest', 'nether-chest-outside-the-overworld-region');
         expect(vaultCount(owner)).toBe(0);
     });
@@ -86,7 +86,7 @@ test('a vault from a world the server no longer has is listed by that world\'s i
         const dialogs = new Dialogs(player);
 
         player.chat('/vault');
-        (await dialogTitled(dialogs, 'Vault Capture')).click('Browse Vaults');
+        (await dialogTitled(dialogs, 'Vault Storage')).click('Browse Vaults');
         expect((await dialogTitled(dialogs, 'Browse Vaults')).button('Vault #').label).toContain('at 99999999 ');
 
         await placeFirstVault(player, dialogs, x + 2, z + 2);

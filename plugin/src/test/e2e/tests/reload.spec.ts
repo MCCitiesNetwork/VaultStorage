@@ -28,7 +28,7 @@ test('a reload picks up reworded messages and refuses a broken file', async ({ p
     const shipped = fs.readFileSync(file, 'utf8');
     const dialogs = new Dialogs(player);
     try {
-        fs.writeFileSync(file, shipped.replace('Vault Capture</bold>', 'Reworded Menu</bold>'));
+        fs.writeFileSync(file, shipped.replace('Vault Storage</bold>', 'Reworded Menu</bold>'));
         player.chat('/vault reload');
         await expect(player).toHaveReceivedMessage('VaultStorage reloaded.');
         player.chat('/vault');

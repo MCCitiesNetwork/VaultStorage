@@ -39,7 +39,7 @@ async function scanResults(dialogs: Dialogs): Promise<Dialog> {
 /** Opens the scan menu's first screen. */
 async function scanMenu(player: PlayerWrapper, dialogs: Dialogs, admin: boolean): Promise<Dialog> {
     player.chat(admin ? '/vault admin' : '/vault');
-    (await dialogTitled(dialogs, 'Vault Capture')).click('Scan Region');
+    (await dialogTitled(dialogs, 'Vault Storage')).click('Scan Region');
     return dialogTitled(dialogs, 'Vault Scan');
 }
 
@@ -57,7 +57,7 @@ test('"Here" outside every region says there is no region',
         await operators(server, player);
         await standAt(server, player, x, z);
         (await scanMenu(player, new Dialogs(player), true)).click('Here');
-        await expect(player).toHaveReceivedMessage('No region at your location.');
+        await expect(player).toHaveReceivedMessage('You are not standing in a region.');
     });
 
 test('a player may scan a region they belong to, and not one they do not',
@@ -72,7 +72,7 @@ test('a player may scan a region they belong to, and not one they do not',
         await ordinary(server, stranger, [MENU]);
 
         (await scanMenu(stranger, new Dialogs(stranger), false)).click('Here');
-        await expect(stranger).toHaveReceivedMessage('You can only scan regions you own or are a member of.');
+        await expect(stranger).toHaveReceivedMessage('You can only scan a region you own or are a member of.');
 
         const memberDialogs = new Dialogs(member);
         (await scanMenu(member, memberDialogs, false)).click('Here');
@@ -114,7 +114,7 @@ test('a scan result cannot be vaulted by a player without the capture permission
 
         results.click('(vault) - 1');
 
-        await expect(member).toHaveReceivedMessage('You don\'t have permission to capture blocks.');
+        await expect(member).toHaveReceivedMessage('You are not allowed to vault containers.');
         const { expectBlock } = await import('./world.js');
         await expectBlock(server, x + 2, FLOOR, z, 'chest', 'scan-button-without-permission-left-it');
     });
@@ -132,7 +132,7 @@ test('a member with the capture permission vaults a non-member\'s chest from the
 
         (await scanResults(dialogs)).click('(vault) - 1');
 
-        await expect(member).toHaveReceivedMessage('Vault captured.');
+        await expect(member).toHaveReceivedMessage('Vaulted.');
         const { expectBlock } = await import('./world.js');
         await expectBlock(server, x + 2, FLOOR, z, 'air', 'member-vaulted-from-scan');
     });
@@ -150,7 +150,7 @@ test('a second scan straight after the first is refused until the cooldown has p
         await scanResults(dialogs);
         (await scanMenu(member, dialogs, false)).click('Here');
 
-        await expect(member).toHaveReceivedMessage('before scanning again');
+        await expect(member).toHaveReceivedMessage('You can scan again in');
     });
 
 test('staff are not held by the scan cooldown',
@@ -326,13 +326,13 @@ test('a chest vaulted by someone else since the scan is no longer vaulted from t
 
         // Someone else vaults it by hand while the list is on screen.
         second.chat('/vault capture');
-        await expect(second).toHaveReceivedMessage('Capture session started');
+        await expect(second).toHaveReceivedMessage('Capture mode is on');
         const { rightClick } = await import('./world.js');
         await rightClick(second, x + 2, FLOOR, z);
-        await expect(second).toHaveReceivedMessage('Vault captured.');
+        await expect(second).toHaveReceivedMessage('Vaulted.');
 
         results.click('(vault) - 1');
-        await expect(player).toHaveReceivedMessage('Not allowed');
+        await expect(player).toHaveReceivedMessage('You may not vault that');
         const after = await scanResults(dialogs);
         expect(after.body).toContain('(0 results)');
     });

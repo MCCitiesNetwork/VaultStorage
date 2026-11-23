@@ -89,7 +89,7 @@ public final class VaultListMenu extends ChildMenuImp {
     @Override
     public @NotNull Dialog dialog() { return super.dialog(); }
 
-    private @NotNull Dialog build(@NotNull Loaded page) {
+    private @NotNull AutoDialog build(@NotNull Loaded page) {
         AutoDialog.Builder builder = dialogBuilder();
         Map<String, String> phQuery = Map.of("%query%", this.query);
         builder.title(plugin.text().of(MessageKeys.LIST_TITLE, phQuery));
@@ -103,7 +103,7 @@ public final class VaultListMenu extends ChildMenuImp {
                     .maxLength(255)
                     .labelVisible(true)
                     .build());
-            builder.buttonWithPlayer(plugin.text().of(MessageKeys.LIST_SEARCH_BTN, phQuery), null, Duration.ofMinutes(5), 1,
+            builder.submitButton(plugin.text().of(MessageKeys.LIST_SEARCH_BTN, phQuery), null, Duration.ofMinutes(5), 1,
                     (player, response) -> {
                         String typed = Optional.ofNullable(response.getText("QUERY")).orElse("").trim();
                         new VaultListMenu(player, parent, this.uiContext, typed).open();

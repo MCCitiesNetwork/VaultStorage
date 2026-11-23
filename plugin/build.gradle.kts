@@ -417,6 +417,31 @@ val installE2eFloodgate by tasks.registering {
     }
 }
 
+// Geyser, only when asked for with -PwithGeyser: it lets a real Bedrock client join the test
+// server, to look at the forms by hand. No bot can be a Bedrock client, so no spec needs it.
+//   ./gradlew :plugin:plugwrightRunServerLocal -PwithGeyser
+val geyserUrl = "https://download.geysermc.org/v2/projects/geyser/versions/latest/builds/latest/downloads/spigot"
+
+val installE2eGeyser by tasks.registering {
+    description = "Installs Geyser into the test server, when run with -PwithGeyser."
+    val wanted = providers.gradleProperty("withGeyser").isPresent
+    val folder = e2eDownloads.map { it.dir("geyser").asFile }
+    val pluginsDir = e2eRunDir.dir("plugins").asFile
+    val url = geyserUrl
+    doLast {
+        val installed = File(pluginsDir, "Geyser-Spigot.jar")
+        if (!wanted) {
+            installed.delete()
+            return@doLast
+        }
+        val cached = File(folder.get().apply { mkdirs() }, "Geyser-Spigot.jar")
+        if (!cached.exists()) {
+            URI(url).toURL().openStream().use { input -> cached.outputStream().use { input.copyTo(it) } }
+        }
+        cached.copyTo(installed, overwrite = true)
+    }
+}
+
 // plugwright 3.0.0 installs Paper 26.3 build 3, an alpha whose spawn finder crashes the server
 // when several bots join at once. Swap in a stable build after plugwright provisions the server
 // and before any test runs. Remove this once plugwright installs the latest stable build.
@@ -475,10 +500,10 @@ val plugwrightRestartTest by tasks.registering {
 // Plugwright registers its tasks late, so they are matched by name instead of tasks.named(...).
 tasks.matching { it.name == "plugwrightProvisionLocal" }.configureEach {
     dependsOn(startE2eDatabase)
-    finalizedBy(usePaperStableBuild, installE2eModules, installE2eEconomy, installE2eRealty, installE2eNotifications, installE2eNamebook, installE2eFloodgate)
+    finalizedBy(usePaperStableBuild, installE2eModules, installE2eEconomy, installE2eRealty, installE2eNotifications, installE2eNamebook, installE2eFloodgate, installE2eGeyser)
 }
 tasks.matching { it.name == "plugwrightTestLocal" || it.name == "plugwrightRunServerLocal" }.configureEach {
-    dependsOn(usePaperStableBuild, installE2eModules, installE2eEconomy, installE2eRealty, installE2eNotifications, installE2eNamebook, installE2eFloodgate)
+    dependsOn(usePaperStableBuild, installE2eModules, installE2eEconomy, installE2eRealty, installE2eNotifications, installE2eNamebook, installE2eFloodgate, installE2eGeyser)
 }
 // Only a test run starts from empty tables; a server run by hand keeps what is there.
 // `plugwrightTest` runs the environment itself, not through `plugwrightTestLocal`.
@@ -489,6 +514,6 @@ tasks.matching { it.name == "plugwrightTest" || it.name == "plugwrightTestLocal"
 // and the world, regions and locks in the server's folder, which every run otherwise wipes.
 resetE2eData.configure { onlyIf { restartPhase.orNull != "after" } }
 tasks.matching { it.name == "plugwrightCleanLocal" }.configureEach { onlyIf { restartPhase.orNull != "after" } }
-listOf(usePaperStableBuild, installE2eModules, installE2eEconomy, installE2eRealty, installE2eNotifications, installE2eNamebook, installE2eFloodgate).forEach { task ->
+listOf(usePaperStableBuild, installE2eModules, installE2eEconomy, installE2eRealty, installE2eNotifications, installE2eNamebook, installE2eFloodgate, installE2eGeyser).forEach { task ->
     task.configure { mustRunAfter(tasks.matching { it.name == "plugwrightProvisionLocal" }) }
 }

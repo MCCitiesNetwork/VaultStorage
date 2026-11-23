@@ -47,18 +47,18 @@ async function regionAround(staff: PlayerWrapper, x: number, z: number, members:
 /** The actor right-clicks the chest in capture mode and is refused; the chest stays. */
 async function expectRefused(server: ServerWrapper, actor: PlayerWrapper, x: number, z: number, marker: string): Promise<void> {
     actor.chat('/vault capture');
-    await expect(actor).toHaveReceivedMessage('Capture session started');
+    await expect(actor).toHaveReceivedMessage('Capture mode is on');
     await rightClick(actor, x, FLOOR, z);
-    await expect(actor).toHaveReceivedMessage('Not allowed');
+    await expect(actor).toHaveReceivedMessage('You may not vault that');
     await expectBlock(server, x, FLOOR, z, 'chest', marker);
 }
 
 /** The actor right-clicks the chest in capture mode and it is vaulted. */
 async function expectVaulted(server: ServerWrapper, actor: PlayerWrapper, x: number, z: number, marker: string): Promise<void> {
     actor.chat('/vault capture');
-    await expect(actor).toHaveReceivedMessage('Capture session started');
+    await expect(actor).toHaveReceivedMessage('Capture mode is on');
     await rightClick(actor, x, FLOOR, z);
-    await expect(actor).toHaveReceivedMessage('Vault captured.');
+    await expect(actor).toHaveReceivedMessage('Vaulted.');
     await expectBlock(server, x, FLOOR, z, 'air', marker);
 }
 
@@ -84,9 +84,9 @@ test('a region member vaults the chest of someone who is not a member',
         await regionAround(player, x, z, [member]);
 
         member.chat('/vault capture');
-        await expect(member).toHaveReceivedMessage('Capture session started');
+        await expect(member).toHaveReceivedMessage('Capture mode is on');
         await rightClick(member, chestX, FLOOR, z);
-        await expect(member).toHaveReceivedMessage('Vault captured.');
+        await expect(member).toHaveReceivedMessage('Vaulted.');
         await expectBlock(server, chestX, FLOOR, z, 'air', 'member-vaulted-it');
     });
 
@@ -97,9 +97,9 @@ test('a player who is not a member of the region cannot vault someone else\'s ch
         await regionAround(player, x, z, []);
 
         stranger.chat('/vault capture');
-        await expect(stranger).toHaveReceivedMessage('Capture session started');
+        await expect(stranger).toHaveReceivedMessage('Capture mode is on');
         await rightClick(stranger, chestX, FLOOR, z);
-        await expect(stranger).toHaveReceivedMessage('Not allowed');
+        await expect(stranger).toHaveReceivedMessage('You may not vault that');
         await expectBlock(server, chestX, FLOOR, z, 'chest', 'stranger-left-it');
     });
 
@@ -110,9 +110,9 @@ test('a member cannot vault the chest of another member',
         await regionAround(player, x, z, [member, owner]);
 
         member.chat('/vault capture');
-        await expect(member).toHaveReceivedMessage('Capture session started');
+        await expect(member).toHaveReceivedMessage('Capture mode is on');
         await rightClick(member, chestX, FLOOR, z);
-        await expect(member).toHaveReceivedMessage('Not allowed');
+        await expect(member).toHaveReceivedMessage('You may not vault that');
         await expectBlock(server, chestX, FLOOR, z, 'chest', 'co-member-left-it');
     });
 
@@ -122,9 +122,9 @@ test('a chest outside any region cannot be vaulted by a player without the overr
         const { z, chestX } = await scene(server, player, owner, wanderer);
 
         wanderer.chat('/vault capture');
-        await expect(wanderer).toHaveReceivedMessage('Capture session started');
+        await expect(wanderer).toHaveReceivedMessage('Capture mode is on');
         await rightClick(wanderer, chestX, FLOOR, z);
-        await expect(wanderer).toHaveReceivedMessage('Not allowed');
+        await expect(wanderer).toHaveReceivedMessage('You may not vault that');
         await expectBlock(server, chestX, FLOOR, z, 'chest', 'wilderness-left-it');
     });
 
@@ -209,9 +209,9 @@ test('a vault is placed only where its owner belongs to the region, or on their 
         await standAt(server, owner, x, z + 1);
         await lockedChest(server, owner, x + 2, z);
         player.chat('/vault capture');
-        await expect(player).toHaveReceivedMessage('Capture session started');
+        await expect(player).toHaveReceivedMessage('Capture mode is on');
         await rightClick(player, x + 2, FLOOR, z);
-        await expect(player).toHaveReceivedMessage('Vault captured.');
+        await expect(player).toHaveReceivedMessage('Vaulted.');
 
         // The owner is now an ordinary player with no region and no claim.
         await server.execute(`deop ${owner.username}`);
@@ -221,7 +221,7 @@ test('a vault is placed only where its owner belongs to the region, or on their 
         (await ownVaultActions(owner, dialogs)).click('Place Block');
         (await dialogTitled(dialogs, 'Vault Placement')).click('Start Placement');
         await rightClick(owner, x, GROUND, z + 3);
-        await expect(owner).toHaveReceivedMessage('must be a region member');
+        await expect(owner).toHaveReceivedMessage('Place it on land you own');
         await expectBlock(server, x, FLOOR, z + 3, 'air', 'not-placed-on-wild-land');
 
         // A GriefPrevention claim of their own is somewhere they may place. Placement mode is

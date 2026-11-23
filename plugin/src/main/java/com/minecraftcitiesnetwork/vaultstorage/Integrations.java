@@ -1,5 +1,7 @@
 package com.minecraftcitiesnetwork.vaultstorage;
 
+import com.minecraftcitiesnetwork.vaultstorage.menu.MenuView;
+import com.minecraftcitiesnetwork.vaultstorage.menu.MenuRenderer;
 import java.util.function.Supplier;
 import org.bukkit.entity.Player;
 import org.bukkit.block.Block;
@@ -36,6 +38,7 @@ public final class Integrations {
     private volatile @Nullable Predicate<UUID> bedrockClient;
     private volatile @Nullable OwnerNotifier ownerNotifier;
     private final List<PlacementGrant> placementGrants = new CopyOnWriteArrayList<>();
+    private final List<MenuRenderer> menuRenderers = new CopyOnWriteArrayList<>();
     private final List<ContainerAttachments> attachments = new CopyOnWriteArrayList<>();
     private final ContainerAttachments everyAttachment = new EveryAttachment();
     private final List<ContainerOwnerSource> ownerSources = new CopyOnWriteArrayList<>();
@@ -103,6 +106,31 @@ public final class Integrations {
                 // Counts as "this grant does not apply": a broken module must not open land up.
                 this.logger.log(Level.WARNING, "A placement grant failed and was counted as a refusal: "
                         + grant.getClass().getName(), ex);
+            }
+        }
+        return false;
+    }
+
+    public void addMenuRenderer(@NotNull MenuRenderer renderer) {
+        this.menuRenderers.add(renderer);
+    }
+
+    public void removeMenuRenderer(@NotNull MenuRenderer renderer) {
+        this.menuRenderers.remove(renderer);
+    }
+
+    /**
+     * Lets a module draw the menu its own way. False when none did, and the menu is shown as a
+     * dialog; a renderer that fails counts as not having drawn it.
+     */
+    public boolean showMenu(@NotNull Player player, @NotNull MenuView view) {
+        for (MenuRenderer renderer : this.menuRenderers) {
+            try {
+                if (renderer.show(player, view)) {
+                    return true;
+                }
+            } catch (RuntimeException ex) {
+                failed(renderer, ex);
             }
         }
         return false;

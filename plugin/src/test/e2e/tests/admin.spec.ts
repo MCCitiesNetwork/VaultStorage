@@ -42,7 +42,7 @@ test('an admin transfers a vault to another player by name', async ({ player, cr
     expect(query(`SELECT ownerUuid FROM Vault WHERE uuid = '${vault}'`)).toEqual([to.bot.player.uuid]);
 
     player.chat(`/vault transfer 00000000-0000-0000-0000-00000000dead ${to.username}`);
-    await expect(player).toHaveReceivedMessage('Vault not found');
+    await expect(player).toHaveReceivedMessage('No vault has the id');
 });
 
 test('a vault is opened by id by its owner', async ({ player, server }) => {
@@ -54,5 +54,5 @@ test('a vault is opened by id by its owner', async ({ player, server }) => {
     await openWindow(player);
 
     player.chat('/vault open 00000000-0000-0000-0000-00000000dead view');
-    await expect(player).toHaveReceivedMessage('Vault not found.');
+    await expect(player).toHaveReceivedMessage('That vault no longer exists');
 });
