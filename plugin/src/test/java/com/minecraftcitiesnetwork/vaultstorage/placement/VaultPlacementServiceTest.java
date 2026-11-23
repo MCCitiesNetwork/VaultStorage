@@ -1,6 +1,7 @@
 package com.minecraftcitiesnetwork.vaultstorage.placement;
 
 import com.minecraftcitiesnetwork.vaultstorage.config.MessageKeys;
+import com.minecraftcitiesnetwork.vaultstorage.database.Claim;
 import com.minecraftcitiesnetwork.vaultstorage.database.ClaimResult;
 import com.minecraftcitiesnetwork.vaultstorage.database.DeleteResult;
 import com.minecraftcitiesnetwork.vaultstorage.database.StoredVault;
@@ -46,17 +47,17 @@ class VaultPlacementServiceTest {
             this.log.add("claim");
             Instant now = Instant.EPOCH;
             return new ClaimResult.Claimed(new StoredVault(new VaultEntity(vault, OWNER, UUID.randomUUID(), 0, 64, 0,
-                    "CHEST", null, null, now, now), List.of()));
+                    "CHEST", null, now, now), List.of()), new Claim(vault, UUID.randomUUID()));
         }
 
         @Override
-        public void release(@NotNull UUID vault) {
+        public void release(@NotNull Claim claim) {
             this.claimed = false;
             this.log.add("release");
         }
 
         @Override
-        public @NotNull DeleteResult delete(@NotNull UUID vault) {
+        public @NotNull DeleteResult delete(@NotNull Claim claim) {
             if (this.deleteFails) {
                 throw new IllegalStateException("database is down");
             }

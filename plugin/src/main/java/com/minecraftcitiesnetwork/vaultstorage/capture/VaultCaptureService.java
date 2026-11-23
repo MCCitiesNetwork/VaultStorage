@@ -4,27 +4,20 @@ import org.bukkit.Chunk;
 import org.bukkit.entity.ItemFrame;
 import com.minecraftcitiesnetwork.vaultstorage.config.MessageKeys;
 import com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin;
-import com.minecraftcitiesnetwork.vaultstorage.vault.ItemSerialization;
 import com.minecraftcitiesnetwork.vaultstorage.names.UniqueIdentifierResolver;
 import net.kyori.adventure.text.Component;
-import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.block.Container;
 import org.bukkit.entity.Hanging;
 import org.bukkit.entity.Player;
-import org.bukkit.inventory.ItemStack;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.logging.Level;
-import com.minecraftcitiesnetwork.vaultstorage.database.AppendResult;
-import com.minecraftcitiesnetwork.vaultstorage.database.NewVault;
-import com.minecraftcitiesnetwork.vaultstorage.database.VaultItem;
 import java.util.function.Consumer;
 import com.minecraftcitiesnetwork.vaultstorage.permission.Permissions;
 import com.minecraftcitiesnetwork.vaultstorage.session.VaultSessionManager;
@@ -114,11 +107,34 @@ public final class VaultCaptureService {
      */
     @NotNull CompletableFuture<CaptureResult> storeThenRemove(@NotNull Block block, @NotNull UUID owner,
                                                                     @NotNull List<Block> otherHalves) {
-        CapturePipeline<Block> pipeline = new CapturePipeline<>(plugin.repository(),
+        CapturePipeline<Block> pipeline = new CapturePipeline<>(CaptureStore.inNewVault(plugin.repository()),
                 new BukkitContainerAccess(plugin.bolt(), owner, otherHalves, plugin.getLogger()),
                 plugin.databaseExecutor(), plugin.mainThread(),
                 plugin.getLogger());
         return pipeline.capture(block, owner);
+    }
+
+    /**
+     * Tells the actor how a capture went. One that stored a vault is also told to its owner and
+     * to listeners. Main thread.
+     *
+     * @param at the container, or the block a hanging entity was on
+     * @return whether a vault was stored
+     */
+    boolean report(@NotNull Player actor, @NotNull CaptureResult result, @NotNull Block at, @NotNull UUID owner) {
+        switch (result) {
+            case CaptureResult.Vaulted vaulted -> {
+                actor.sendMessage(plugin.text().of(MessageKeys.CAPTURE_CAPTURED_OK));
+                mailOwner(at, actor.getUniqueId(), owner);
+                new PlayerVaultEvent(actor, vaulted.vault(), owner, at.getLocation()).callEvent();
+                return true;
+            }
+            case CaptureResult.ChangedMeanwhile changed ->
+                    actor.sendMessage(plugin.text().of(MessageKeys.CAPTURE_CHANGED_MEANWHILE));
+            case CaptureResult.Failed failed ->
+                    actor.sendMessage(plugin.text().of(MessageKeys.CAPTURE_SAVE_FAILED));
+        }
+        return false;
     }
 
     /** Tells the owner their container was vaulted. A failed notification changes nothing else. */
@@ -215,24 +231,8 @@ public final class VaultCaptureService {
                 return;
             }
 
-            storeThenRemove(block, validatedOwner, outcome.reProtectedHalves()).thenAccept(result -> {
-                switch (result) {
-                    case CaptureResult.Vaulted vaulted -> {
-                        actor.sendMessage(plugin.text().of(MessageKeys.CAPTURE_CAPTURED_OK));
-                        mailOwner(block, actor.getUniqueId(), validatedOwner);
-                        new PlayerVaultEvent(actor, vaulted.vault(), validatedOwner, block.getLocation()).callEvent();
-                        onDoneMain.accept(true);
-                    }
-                    case CaptureResult.ChangedMeanwhile changed -> {
-                        actor.sendMessage(plugin.text().of(MessageKeys.CAPTURE_CHANGED_MEANWHILE));
-                        onDoneMain.accept(false);
-                    }
-                    case CaptureResult.Failed failed -> {
-                        actor.sendMessage(plugin.text().of(MessageKeys.CAPTURE_SAVE_FAILED));
-                        onDoneMain.accept(false);
-                    }
-                }
-            });
+            storeThenRemove(block, validatedOwner, outcome.reProtectedHalves())
+                    .thenAccept(result -> onDoneMain.accept(report(actor, result, block, validatedOwner)));
         }, plugin.mainThread())
                 .exceptionally(failure -> {
                     // The caller is waiting behind a loading dialog; it must always hear back.
@@ -268,8 +268,7 @@ public final class VaultCaptureService {
             actor.sendMessage(this.plugin.text().of(MessageKeys.CAPTURE_EMPTY_CAPTURE_SKIPPED));
             return CompletableFuture.completedFuture(false);
         }
-        List<ItemStack> stacks = HangingVaultSupport.itemStacksFrom(hang);
-        if (stacks.isEmpty()) {
+        if (!HangingVaultSupport.isSupported(hang)) {
             return CompletableFuture.completedFuture(false);
         }
         Executor mainThread = this.plugin.mainThread();
@@ -279,19 +278,7 @@ public final class VaultCaptureService {
                         actor.sendMessage(this.plugin.text().of(MessageKeys.CAPTURE_OWNER_UNKNOWN));
                         return CompletableFuture.completedFuture(false);
                     }
-                    // Stored first, removed after: a failed save leaves the entity where it is.
-                    return CompletableFuture
-                            .supplyAsync(() -> persistHangingStacks(stacks, owner, supporting), this.plugin.databaseExecutor())
-                            .thenApplyAsync(stored -> {
-                                if (!removeIfUnchanged(hang, stacks, stored)) {
-                                    actor.sendMessage(this.plugin.text().of(MessageKeys.CAPTURE_CHANGED_MEANWHILE));
-                                    return false;
-                                }
-                                actor.sendMessage(this.plugin.text().of(MessageKeys.CAPTURE_CAPTURED_OK));
-                                mailOwner(supporting, actor.getUniqueId(), owner);
-                                new PlayerVaultEvent(actor, stored.vault(), owner, supporting.getLocation()).callEvent();
-                                return true;
-                            }, mainThread);
+                    return storeThenRemove(hang, owner).thenApply(result -> report(actor, result, supporting, owner));
                 }, mainThread)
                 .exceptionally(failure -> {
                     this.plugin.getLogger().log(Level.SEVERE, "Hanging capture failed for " + actor.getName()
@@ -299,6 +286,18 @@ public final class VaultCaptureService {
                     mainThread.execute(() -> actor.sendMessage(this.plugin.text().of(MessageKeys.CAPTURE_SAVE_FAILED)));
                     return false;
                 });
+    }
+
+    /**
+     * Stores an item frame or painting for {@code owner}, in a vault of theirs with room, then
+     * removes it from the world. Call on the main thread; the future completes there and never
+     * exceptionally.
+     */
+    private @NotNull CompletableFuture<CaptureResult> storeThenRemove(@NotNull Hanging hang, @NotNull UUID owner) {
+        return new CapturePipeline<>(
+                CaptureStore.inVaultWithRoom(plugin.repository(), HangingVaultSupport.MAX_VAULT_SLOTS),
+                new HangingAccess(), plugin.databaseExecutor(), plugin.mainThread(), plugin.getLogger())
+                .capture(hang, owner);
     }
 
     /**
@@ -356,68 +355,21 @@ public final class VaultCaptureService {
      */
     public @NotNull CompletableFuture<Boolean> captureHangingOfflineAsync(@NotNull Hanging hang, @NotNull UUID boltOwner,
                                            @NotNull UUID initiatorUuid, @NotNull Runnable onVaulted) {
-        List<ItemStack> stacks = HangingVaultSupport.itemStacksFrom(hang);
-        if (stacks.isEmpty()) {
+        if (!HangingVaultSupport.isSupported(hang)) {
             return CompletableFuture.completedFuture(false);
         }
-
-        Block supporting = HangingVaultSupport.resolveSupportingBlock(hang);
-        Executor mainThread = plugin.mainThread();
         // Held until the entity is dealt with. The sweep only loaded this chunk for a moment, and
         // an entity in an unloaded chunk can be neither checked nor removed.
         Runnable release = this.chunks.hold(hang.getLocation().getChunk());
-        return CompletableFuture
-                .supplyAsync(() -> persistHangingStacks(stacks, boltOwner, supporting), plugin.databaseExecutor())
-                .thenApplyAsync(stored -> {
-                    if (!removeIfUnchanged(hang, stacks, stored)) {
+        return storeThenRemove(hang, boltOwner).whenComplete((result, failure) -> release.run())
+                .thenApply(result -> {
+                    // A capture that did not go through is logged by the pipeline; the entity
+                    // stays for the next sweep.
+                    if (!(result instanceof CaptureResult.Vaulted)) {
                         return false;
                     }
                     onVaulted.run();
                     return true;
-                }, mainThread)
-                .exceptionally(failure -> {
-                    plugin.getLogger().log(Level.SEVERE, "Offline hanging capture failed at "
-                            + supporting.getWorld().getName() + " " + supporting.getX() + "," + supporting.getY() + ","
-                            + supporting.getZ() + "; the entity was left in place.", failure);
-                    return false;
-                })
-                .whenCompleteAsync((done, failure) -> release.run(), mainThread);
-    }
-
-    /**
-     * The check and the removal of the ordering rule, for a hanging entity. Main thread. If the
-     * entity has gone, or shows something else than what was stored, the stored copy is taken
-     * back and nothing is removed: otherwise its items would exist twice.
-     */
-    private boolean removeIfUnchanged(@NotNull Hanging hang, @NotNull List<ItemStack> stored, @NotNull AppendResult where) {
-        if (hang.isValid() && HangingVaultSupport.itemStacksFrom(hang).equals(stored)) {
-            hang.remove();
-            return true;
-        }
-        CompletableFuture.runAsync(() -> this.plugin.repository().undoAppend(where), this.plugin.databaseExecutor())
-                .exceptionally(failure -> {
-                    this.plugin.getLogger().log(Level.SEVERE, "A hanging entity changed while it was being stored, and"
-                            + " the stored copy in vault " + where.vault() + " could not be taken back.", failure);
-                    return null;
                 });
-        return false;
-    }
-
-    /**
-     * Stores hanging stacks at the end of the owner's oldest vault with room, or in a new vault
-     * anchored at {@code supporting}. One transaction, with the chosen vault locked, so two
-     * captures for one owner cannot take the same slots. Blocks on the database.
-     */
-    @NotNull AppendResult persistHangingStacks(@NotNull List<ItemStack> stacks, @NotNull UUID boltOwner,
-                                               @NotNull Block supporting) {
-        List<VaultItem> items = new ArrayList<>(stacks.size());
-        for (int offset = 0; offset < stacks.size(); offset++) {
-            ItemStack stack = stacks.get(offset);
-            items.add(new VaultItem(offset, stack.getAmount(), ItemSerialization.toBytes(stack)));
-        }
-        // The stored material must be a block: placement uses Block#setType.
-        NewVault ifNoneFits = new NewVault(supporting.getWorld().getUID(), supporting.getWorld().getName(),
-                supporting.getX(), supporting.getY(), supporting.getZ(), boltOwner, Material.CHEST.name(), null);
-        return plugin.repository().appendItems(boltOwner, items, HangingVaultSupport.MAX_VAULT_SLOTS, ifNoneFits);
     }
 }

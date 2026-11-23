@@ -42,7 +42,7 @@ test('restart: before the server stops, a vault is stored, a claim is left behin
         // 2. A second vault left claimed, as a crash in the middle of an edit leaves it.
         seedVaults(editor.bot.player.uuid, 1);
         const [claimed] = query(`SELECT uuid FROM Vault WHERE ownerUuid = '${editor.bot.player.uuid}' AND material = 'CHEST' ORDER BY createdTime LIMIT 1`);
-        sql(`UPDATE Vault SET status = 'CLAIMED' WHERE uuid = '${claimed}'`);
+        sql(`UPDATE Vault SET claimToken = UUID() WHERE uuid = '${claimed}'`);
 
         // 3. A region sold with a sweep that will not have run by the time the server stops.
         await lockedChest(server, owner, x + 2, z);

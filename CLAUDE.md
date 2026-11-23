@@ -43,7 +43,7 @@ Under `com.minecraftcitiesnetwork.vaultstorage`, grouped by feature:
 | Package | Holds |
 | --- | --- |
 | (root) | `VaultStoragePlugin` (owns and hands out every service), `Integrations` |
-| `capture` | `VaultCaptureService` (prepare, store, offline), `CaptureSession` (a player's capture mode), `CaptureActionBar`, `CaptureOwners`, `ContainerBlocks`, `DoubleChestRule`, `CaptureRules` and `CaptureRegions` (who may vault what), the pipeline, the policy; the two hooks modules add to, `ContainerAttachments` and `ContainerOwnerSource`, and `ContainerOwnerLookup` (asks and remembers) |
+| `capture` | `VaultCaptureService` (prepare, store, offline), `CaptureSession` (a player's capture mode), `CaptureActionBar`, `CaptureOwners`, `ContainerBlocks`, `DoubleChestRule`, `CaptureRules` and `CaptureRegions` (who may vault what), the pipeline with its `CaptureStore` and `ContainerAccess`, the policy; the two hooks modules add to, `ContainerAttachments` and `ContainerOwnerSource`, and `ContainerOwnerLookup` (asks and remembers) |
 | `placement` | `VaultPlacementService` (the order of a placement), `PlacementStore` and `PlacementWorld` (what it writes to), `PlacementRules` (who may place where) |
 | `vault` | vault types, the vault inventory, item serialization, events |
 | `scan` | region scan service and scanner |
@@ -354,18 +354,26 @@ config and reloading), `database.ts`, `dialogs.ts`.
   (`CaptureRules.mayRemoveAttachments`).
 - **A placement is `VaultPlacementService` over a `PlacementStore` and a `PlacementWorld`**, so
   its order is tested with fakes. Who may place where is `PlacementRules.decide`.
-- **A hanging entity follows the ordering rule too:** stored, then checked to be still there and
-  unchanged, then removed. If the check fails the store is undone with `undoAppend`.
+- **A hanging entity goes through `CapturePipeline` too**, as `HangingAccess`. What differs is
+  where it is stored, a `CaptureStore`: a container gets a vault of its own (`inNewVault`), an
+  item frame or painting goes into the owner's oldest vault with room (`inVaultWithRoom`). Each
+  store knows how to take back what it stored.
 - **A chunk is held with `ChunkHolds` from store to remove** when nothing else keeps it loaded.
   It counts holders: a plugin chunk ticket is one per chunk.
 - **What a capture does with a block is `DoubleChestRule.decide`**: unprotect it, refuse because
   the other half must go first, or capture. It names no Bukkit type and has its own test.
-- **Nothing removes a container except `CapturePipeline`**, through `BukkitContainerAccess.remove`.
-  The order is: read, store, check it is unchanged, remove.
+- **Nothing removes a container or a hanging entity except `CapturePipeline`**, through its
+  `ContainerAccess.remove`. The order is: read, store, check it is unchanged, remove.
 - **Placement claims before it places and deletes after.** A vault is never deleted before its
   block exists.
 - **Anything that removes or moves a vault claims it first**, delete included: a vault being
   edited or placed is "in use" to everyone else.
+- **A claim is a `Claim`: the vault and a token** stored on its row (`claimToken`). A vault is
+  in use exactly while that column is not null; there is no `status` column. Only the
+  claim it was taken with releases a vault, saves an edit to it or deletes it, so a path that
+  never got the claim, or that held it before a restart, cannot touch someone else's. Whoever
+  claims keeps the `Claim` it was given. `VaultRepository.delete(UUID)` is for a capture taking
+  back a vault it has just stored, which nobody can have claimed.
 - **A claim is given back through `ClaimReleases`**, never `VaultRepository.release` directly: it
   retries while the database is down, so an outage does not leave a vault in use until a restart.
 - **A sweep captures both halves of a double chest**, the half with items first. Bolt keeps one

@@ -20,8 +20,14 @@ public interface VaultMapper {
 
     int touch(@NotNull UUID uuid, @NotNull Instant updatedTime);
 
+    /** As {@link #touch}, for a vault held with this token only. */
+    int touchHeld(@NotNull UUID uuid, @NotNull UUID token, @NotNull Instant updatedTime);
+
     /** @return the number of rows deleted: 0 means there was no such vault */
     int delete(@NotNull UUID uuid);
+
+    /** As {@link #delete}, for a vault held with this token only. */
+    int deleteHeld(@NotNull UUID uuid, @NotNull UUID token);
 
     int count(@Nullable UUID ownerUuid, @Nullable UUID worldUuid);
 
@@ -29,9 +35,10 @@ public interface VaultMapper {
     @NotNull List<VaultSummary> selectPage(@Nullable UUID ownerUuid, @Nullable UUID worldUuid, int offset, int limit);
 
     /** @return 1 when the vault was free and is now claimed, 0 otherwise */
-    int claim(@NotNull UUID uuid);
+    int claim(@NotNull UUID uuid, @NotNull UUID token);
 
-    int release(@NotNull UUID uuid);
+    /** @return 1 when the vault was held with this token and is now free, 0 otherwise */
+    int release(@NotNull UUID uuid, @NotNull UUID token);
 
     @NotNull List<UUID> selectClaimed();
 

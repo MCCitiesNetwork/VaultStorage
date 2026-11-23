@@ -16,7 +16,7 @@ import org.jetbrains.annotations.NotNull;
  * <p>Every method blocks on the database and must be called off the main thread. Outcomes a
  * caller must handle are result types; only a broken database is an exception.
  */
-public final class VaultRepository implements VaultStore, PlacementStore {
+public final class VaultRepository implements PlacementStore {
 
     private final @NotNull VaultDatabase database;
     private final @NotNull Clock clock;
@@ -48,12 +48,11 @@ public final class VaultRepository implements VaultStore, PlacementStore {
         Instant now = now();
         wrapper.worlds().upsert(vault.worldUuid(), vault.worldName());
         wrapper.vaults().insert(new VaultEntity(uuid, vault.ownerUuid(), vault.worldUuid(), vault.x(), vault.y(),
-                vault.z(), vault.material(), vault.blockData(), null, now, now));
+                vault.z(), vault.material(), vault.blockData(), now, now));
         return uuid;
     }
 
     /** Creates a vault and its items together: either all of it is stored or none of it. */
-    @Override
     public @NotNull UUID create(@NotNull NewVault vault, @NotNull List<VaultItem> items) {
         try (SqlSessionWrapper wrapper = this.database.openSession()) {
             UUID uuid = insertVault(wrapper, vault);
@@ -105,11 +104,29 @@ public final class VaultRepository implements VaultStore, PlacementStore {
         }
     }
 
-    /** Deletes a vault; its items go with it. */
-    @Override
+    /**
+     * Deletes a vault nobody can have claimed; its items go with it. For a capture taking back
+     * the vault it has just stored. A vault a player can reach is deleted with its {@link Claim}.
+     */
     public @NotNull DeleteResult delete(@NotNull UUID vault) {
         try (SqlSessionWrapper wrapper = this.database.openSession(true)) {
             return wrapper.vaults().delete(vault) > 0 ? new DeleteResult.Deleted() : new DeleteResult.NoSuchVault();
+        }
+    }
+
+    /** Deletes the vault this claim holds; its items go with it. Deletes nothing it does not hold. */
+    @Override
+    public @NotNull DeleteResult delete(@NotNull Claim claim) {
+        try (SqlSessionWrapper wrapper = this.database.openSession()) {
+            DeleteResult result;
+            if (wrapper.vaults().deleteHeld(claim.vault(), claim.token()) > 0) {
+                result = new DeleteResult.Deleted();
+            } else {
+                result = wrapper.vaults().selectByUuid(claim.vault()) == null
+                        ? new DeleteResult.NoSuchVault() : new DeleteResult.NotHeld();
+            }
+            wrapper.session().commit();
+            return result;
         }
     }
 
@@ -127,11 +144,16 @@ public final class VaultRepository implements VaultStore, PlacementStore {
     }
 
 
-    /** Swaps a vault's whole contents in one transaction. */
-    public @NotNull ReplaceResult replaceItems(@NotNull UUID vault, @NotNull List<VaultItem> items) {
+    /**
+     * Swaps the whole contents of the vault this claim holds, in one transaction. Writes
+     * nothing to a vault it does not hold: that one is someone else's by now.
+     */
+    public @NotNull ReplaceResult replaceItems(@NotNull Claim claim, @NotNull List<VaultItem> items) {
+        UUID vault = claim.vault();
         try (SqlSessionWrapper wrapper = this.database.openSession()) {
-            if (wrapper.vaults().touch(vault, now()) == 0) {
-                return new ReplaceResult.NoSuchVault();
+            if (wrapper.vaults().touchHeld(vault, claim.token(), now()) == 0) {
+                return wrapper.vaults().selectByUuid(vault) == null
+                        ? new ReplaceResult.NoSuchVault() : new ReplaceResult.NotHeld();
             }
             wrapper.items().deleteByVault(vault);
             if (!items.isEmpty()) {
@@ -197,13 +219,15 @@ public final class VaultRepository implements VaultStore, PlacementStore {
     }
 
     /**
-     * Takes a vault for one actor, to place or edit it. A compare-and-set in the database: of
-     * two callers, exactly one gets {@link ClaimResult.Claimed}.
+     * Takes a vault for one actor, to place, edit or delete it. A compare-and-set in the
+     * database: of two callers, exactly one gets {@link ClaimResult.Claimed}, with the claim
+     * that releases it.
      */
     @Override
     public @NotNull ClaimResult claim(@NotNull UUID vault) {
         try (SqlSessionWrapper wrapper = this.database.openSession()) {
-            if (wrapper.vaults().claim(vault) == 0) {
+            Claim claim = new Claim(vault, UUID.randomUUID());
+            if (wrapper.vaults().claim(vault, claim.token()) == 0) {
                 return wrapper.vaults().selectByUuid(vault) == null
                         ? new ClaimResult.NoSuchVault() : new ClaimResult.AlreadyClaimed();
             }
@@ -213,15 +237,18 @@ public final class VaultRepository implements VaultStore, PlacementStore {
             }
             StoredVault stored = new StoredVault(entity, wrapper.items().selectByVault(vault));
             wrapper.session().commit();
-            return new ClaimResult.Claimed(stored);
+            return new ClaimResult.Claimed(stored, claim);
         }
     }
 
-    /** Gives a claimed vault back. Does nothing if the vault is gone. */
+    /**
+     * Gives a claimed vault back. Does nothing if the vault is gone or is no longer held with
+     * this claim: it was released at a restart and may be someone else's by now.
+     */
     @Override
-    public void release(@NotNull UUID vault) {
+    public void release(@NotNull Claim claim) {
         try (SqlSessionWrapper wrapper = this.database.openSession(true)) {
-            wrapper.vaults().release(vault);
+            wrapper.vaults().release(claim.vault(), claim.token());
         }
     }
 

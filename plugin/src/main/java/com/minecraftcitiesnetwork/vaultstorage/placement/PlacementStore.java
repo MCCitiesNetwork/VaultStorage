@@ -1,5 +1,6 @@
 package com.minecraftcitiesnetwork.vaultstorage.placement;
 
+import com.minecraftcitiesnetwork.vaultstorage.database.Claim;
 import com.minecraftcitiesnetwork.vaultstorage.database.ClaimResult;
 import com.minecraftcitiesnetwork.vaultstorage.database.DeleteResult;
 import java.util.UUID;
@@ -11,7 +12,9 @@ public interface PlacementStore {
     /** Of two callers, exactly one gets the vault. */
     @NotNull ClaimResult claim(@NotNull UUID vault);
 
-    void release(@NotNull UUID vault);
+    /** Gives the vault back. Only the claim it was taken with does. */
+    void release(@NotNull Claim claim);
 
-    @NotNull DeleteResult delete(@NotNull UUID vault);
+    /** Deletes the vault the claim holds, and nothing else. */
+    @NotNull DeleteResult delete(@NotNull Claim claim);
 }

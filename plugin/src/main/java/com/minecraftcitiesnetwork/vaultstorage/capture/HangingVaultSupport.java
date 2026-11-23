@@ -14,7 +14,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Helpers for hanging capture: supporting block resolution, stacks to store, and merge target selection.
+ * Helpers for hanging capture: which entities can be vaulted, the block one hangs on, and the stacks to store.
  */
 public final class HangingVaultSupport {
 
@@ -24,6 +24,11 @@ public final class HangingVaultSupport {
     public static final int MAX_VAULT_SLOTS = 27;
 
     private HangingVaultSupport() {}
+
+    /** Whether the entity is one that can be vaulted: an item frame or a painting. */
+    public static boolean isSupported(@NotNull Hanging hanging) {
+        return hanging instanceof ItemFrame || hanging instanceof Painting;
+    }
 
     /**
      * Block the hanging is attached to (Bolt and WorldGuard context for policy).
@@ -58,9 +63,8 @@ public final class HangingVaultSupport {
         if (hanging instanceof ItemFrame frame) {
             Material mat = frame instanceof GlowItemFrame ? Material.GLOW_ITEM_FRAME : Material.ITEM_FRAME;
             out.add(new ItemStack(mat, 1));
-            ItemStack inner = frame.getItem();
-            if (inner != null && inner.getType() != Material.AIR && inner.getAmount() > 0) {
-                out.add(inner.clone());
+            if (!isItemFrameDisplayEmpty(frame)) {
+                out.add(frame.getItem().clone());
             }
             return out;
         }

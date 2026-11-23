@@ -1,7 +1,5 @@
 package com.minecraftcitiesnetwork.vaultstorage.capture;
 
-import com.minecraftcitiesnetwork.vaultstorage.database.NewVault;
-import com.minecraftcitiesnetwork.vaultstorage.database.VaultStore;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
@@ -11,13 +9,14 @@ import java.util.logging.Logger;
 import org.jetbrains.annotations.NotNull;
 
 /**
- * Moves a container's items into a vault without ever having them in neither place.
+ * Moves what a container or a hanging entity holds into a vault without ever having it in
+ * neither place. Every capture goes through here.
  *
  * <ol>
- *   <li>Main thread: read the container. Change nothing.</li>
- *   <li>Database: store the vault and its items in one transaction.</li>
- *   <li>Main thread: if the container still holds what was read, empty and remove it.</li>
- *   <li>Database: if it changed instead, delete the vault that was just stored.</li>
+ *   <li>Main thread: read the target. Change nothing.</li>
+ *   <li>Database: store its items in one transaction.</li>
+ *   <li>Main thread: if the target still holds what was read, remove it.</li>
+ *   <li>Database: if it changed instead, take back what was just stored.</li>
  * </ol>
  *
  * <p>A failure at any step leaves the items somewhere. The price is that a crash between steps
@@ -25,13 +24,13 @@ import org.jetbrains.annotations.NotNull;
  */
 public final class CapturePipeline<T> {
 
-    private final @NotNull VaultStore store;
+    private final @NotNull CaptureStore store;
     private final @NotNull ContainerAccess<T> access;
     private final @NotNull Executor database;
     private final @NotNull Executor main;
     private final @NotNull Logger logger;
 
-    public CapturePipeline(@NotNull VaultStore store, @NotNull ContainerAccess<T> access,
+    public CapturePipeline(@NotNull CaptureStore store, @NotNull ContainerAccess<T> access,
                            @NotNull Executor database, @NotNull Executor main, @NotNull Logger logger) {
         this.store = store;
         this.access = access;
@@ -49,19 +48,17 @@ public final class CapturePipeline<T> {
         try {
             snapshot = this.access.snapshot(target);
         } catch (RuntimeException ex) {
-            this.logger.log(Level.SEVERE, "Could not read a container for capture.", ex);
+            this.logger.log(Level.SEVERE, "Could not read what was to be captured.", ex);
             return CompletableFuture.completedFuture(new CaptureResult.Failed(ex));
         }
-        NewVault vault = new NewVault(snapshot.worldUuid(), snapshot.worldName(), snapshot.x(), snapshot.y(),
-                snapshot.z(), owner, snapshot.material(), snapshot.blockData());
         return CompletableFuture
-                .supplyAsync(() -> this.store.create(vault, snapshot.items()), this.database)
-                .thenComposeAsync(created -> finish(target, snapshot, created), this.main)
+                .supplyAsync(() -> this.store.store(snapshot, owner), this.database)
+                .thenComposeAsync(stored -> finish(target, snapshot, stored), this.main)
                 .exceptionally(failure -> {
                     Throwable cause = failure instanceof CompletionException && failure.getCause() != null
                             ? failure.getCause() : failure;
                     this.logger.log(Level.SEVERE, "Capture failed at " + describe(snapshot)
-                            + "; the container was left in place.", cause);
+                            + "; nothing was removed from the world.", cause);
                     return new CaptureResult.Failed(cause);
                 })
                 // Whatever thread the last step ran on, the caller hears on the main thread.
@@ -69,19 +66,19 @@ public final class CapturePipeline<T> {
     }
 
     private @NotNull CompletableFuture<CaptureResult> finish(@NotNull T target, @NotNull ContainerSnapshot snapshot,
-                                                             @NotNull UUID created) {
+                                                             CaptureStore.@NotNull Stored stored) {
         if (this.access.stillMatches(target, snapshot)) {
             this.access.remove(target);
-            return CompletableFuture.completedFuture(new CaptureResult.Vaulted(created));
+            return CompletableFuture.completedFuture(new CaptureResult.Vaulted(stored.vault()));
         }
-        // The container changed while it was being saved: the stored copy is stale, so it goes.
+        // The target changed while it was being saved: the stored copy is stale, so it goes.
         return CompletableFuture.supplyAsync(() -> {
             try {
-                this.store.delete(created);
+                stored.undo().run();
                 return new CaptureResult.ChangedMeanwhile();
             } catch (RuntimeException ex) {
-                this.logger.log(Level.SEVERE, "Vault " + created + " holds a stale copy of the container at "
-                        + describe(snapshot) + " and could not be deleted. Delete it by hand.", ex);
+                this.logger.log(Level.SEVERE, "Vault " + stored.vault() + " holds a stale copy of what is at "
+                        + describe(snapshot) + ", which could not be taken back. Remove it by hand.", ex);
                 return new CaptureResult.Failed(ex);
             }
         }, this.database);

@@ -19,7 +19,8 @@ public final class VaultStorageSchemaMigrator extends SchemaMigrator {
             new MigrationStep(1, "legacy baseline", "V1__legacy_baseline.sql"),
             new MigrationStep(2, "playbook structure", "V2__playbook_structure.sql"),
             new MigrationStep(3, "playbook data", "V3__playbook_data.sql"),
-            new MigrationStep(4, "playbook finalise", "V4__playbook_finalise.sql")
+            new MigrationStep(4, "playbook finalise", "V4__playbook_finalise.sql"),
+            new MigrationStep(5, "claim token", "V5__claim_token.sql")
     );
 
     /** Applies every migration the database has not had yet. */

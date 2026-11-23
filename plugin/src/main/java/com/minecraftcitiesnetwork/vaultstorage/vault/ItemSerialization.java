@@ -1,5 +1,6 @@
 package com.minecraftcitiesnetwork.vaultstorage.vault;
 
+import com.minecraftcitiesnetwork.vaultstorage.database.VaultItem;
 import org.jetbrains.annotations.Nullable;
 import org.bukkit.inventory.ItemStack;
 import org.jetbrains.annotations.NotNull;
@@ -9,6 +10,11 @@ import org.jetbrains.annotations.NotNull;
  */
 public final class ItemSerialization {
     private ItemSerialization() {}
+
+    /** The stack as it is stored, for this slot. */
+    public static @NotNull VaultItem toVaultItem(int slot, @NotNull ItemStack stack) {
+        return new VaultItem(slot, stack.getAmount(), toBytes(stack));
+    }
 
     /**
      * Serialize an ItemStack to bytes.

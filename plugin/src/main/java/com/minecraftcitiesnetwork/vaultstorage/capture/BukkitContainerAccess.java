@@ -4,7 +4,6 @@ import com.minecraftcitiesnetwork.vaultstorage.bolt.BoltService;
 import com.minecraftcitiesnetwork.vaultstorage.database.VaultItem;
 import com.minecraftcitiesnetwork.vaultstorage.vault.ItemSerialization;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 import java.util.logging.Level;
@@ -54,7 +53,7 @@ public final class BukkitContainerAccess implements ContainerAccess<Block> {
             if (stack == null || stack.getType() == Material.AIR || stack.getAmount() <= 0) {
                 continue;
             }
-            items.add(new VaultItem(slot, stack.getAmount(), ItemSerialization.toBytes(stack)));
+            items.add(ItemSerialization.toVaultItem(slot, stack));
         }
         return items;
     }
@@ -71,19 +70,7 @@ public final class BukkitContainerAccess implements ContainerAccess<Block> {
         if (!block.getType().name().equals(snapshot.material()) || !(block.getState() instanceof Container)) {
             return false;
         }
-        List<VaultItem> now = itemsOf(block);
-        if (now.size() != snapshot.items().size()) {
-            return false;
-        }
-        for (int i = 0; i < now.size(); i++) {
-            VaultItem current = now.get(i);
-            VaultItem saved = snapshot.items().get(i);
-            if (current.slot() != saved.slot() || current.amount() != saved.amount()
-                    || !Arrays.equals(current.item(), saved.item())) {
-                return false;
-            }
-        }
-        return true;
+        return snapshot.holds(itemsOf(block));
     }
 
     @Override

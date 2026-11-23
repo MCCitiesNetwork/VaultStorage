@@ -3,6 +3,7 @@ package com.minecraftcitiesnetwork.vaultstorage.menu;
 import com.minecraftcitiesnetwork.pluginInfrastructure.configurate.MessageContainer;
 import com.minecraftcitiesnetwork.vaultstorage.command.VaultActionArgument;
 import com.minecraftcitiesnetwork.vaultstorage.config.MessageKeys;
+import com.minecraftcitiesnetwork.vaultstorage.database.Claim;
 import com.minecraftcitiesnetwork.vaultstorage.database.ClaimResult;
 import com.minecraftcitiesnetwork.vaultstorage.database.DeleteResult;
 import com.minecraftcitiesnetwork.vaultstorage.permission.Permissions;
@@ -112,7 +113,7 @@ public final class VaultActionMenu extends ChildMenuImp {
                     case ClaimResult.Claimed claimed -> {
                         // The event is synchronous, so it is fired here, on the main thread.
                         new PlayerDeleteVaultEvent(actor, claimed.vault().vault()).callEvent();
-                        yield CompletableFuture.supplyAsync(this::deleteClaimed, plugin.databaseExecutor());
+                        yield CompletableFuture.supplyAsync(() -> deleteClaimed(claimed.claim()), plugin.databaseExecutor());
                     }
                 }, mainThread)
                 .exceptionally(failure -> {
@@ -130,12 +131,12 @@ public final class VaultActionMenu extends ChildMenuImp {
     }
 
     /** Database thread. The vault is claimed by this delete; a failed delete gives it back. */
-    private @NotNull Deletion deleteClaimed() {
+    private @NotNull Deletion deleteClaimed(@NotNull Claim claim) {
         try {
-            return plugin.repository().delete(vaultId) instanceof DeleteResult.Deleted ? Deletion.DELETED : Deletion.FAILED;
+            return plugin.repository().delete(claim) instanceof DeleteResult.Deleted ? Deletion.DELETED : Deletion.FAILED;
         } catch (RuntimeException ex) {
             plugin.getLogger().log(Level.SEVERE, "Could not delete vault " + vaultId + ".", ex);
-            plugin.claimReleases().release(vaultId);
+            plugin.claimReleases().release(claim);
             return Deletion.FAILED;
         }
     }

@@ -11,19 +11,20 @@ import org.junit.jupiter.api.Test;
 
 class ClaimReleasesTest {
 
-    private static final UUID VAULT = UUID.fromString("00000000-0000-0000-0000-000000000001");
+    private static final Claim CLAIM = new Claim(UUID.fromString("00000000-0000-0000-0000-000000000001"),
+            UUID.fromString("00000000-0000-0000-0000-000000000002"));
 
     /** A database that is down for a number of calls, then answers. */
     private static final class Database {
         int failuresLeft;
-        final List<UUID> released = new ArrayList<>();
+        final List<Claim> released = new ArrayList<>();
 
-        void release(UUID vault) {
+        void release(Claim claim) {
             if (this.failuresLeft > 0) {
                 this.failuresLeft--;
                 throw new IllegalStateException("database is down");
             }
-            this.released.add(vault);
+            this.released.add(claim);
         }
     }
 
@@ -34,9 +35,9 @@ class ClaimReleasesTest {
 
     @Test
     void aReleaseThatWorksIsDoneAtOnceAndNotRepeated() {
-        this.releases.release(VAULT);
+        this.releases.release(CLAIM);
 
-        Assertions.assertEquals(List.of(VAULT), this.database.released);
+        Assertions.assertEquals(List.of(CLAIM), this.database.released);
         Assertions.assertTrue(this.waiting.isEmpty());
     }
 
@@ -44,13 +45,13 @@ class ClaimReleasesTest {
     void aReleaseThatFailsIsTriedAgainUntilTheDatabaseAnswers() {
         this.database.failuresLeft = 3;
 
-        this.releases.release(VAULT);
+        this.releases.release(CLAIM);
         Assertions.assertEquals(List.of(), this.database.released);
         while (!this.waiting.isEmpty()) {
             this.waiting.poll().run();
         }
 
-        Assertions.assertEquals(List.of(VAULT), this.database.released);
+        Assertions.assertEquals(List.of(CLAIM), this.database.released);
         Assertions.assertEquals(0, this.database.failuresLeft);
     }
 
@@ -58,7 +59,7 @@ class ClaimReleasesTest {
     void aFailedReleaseDoesNotThrowAtItsCaller() {
         this.database.failuresLeft = 1;
 
-        Assertions.assertDoesNotThrow(() -> this.releases.release(VAULT));
+        Assertions.assertDoesNotThrow(() -> this.releases.release(CLAIM));
         Assertions.assertEquals(1, this.waiting.size());
     }
 
@@ -70,7 +71,7 @@ class ClaimReleasesTest {
             throw new java.util.concurrent.RejectedExecutionException("executor stopped");
         }, Logger.getAnonymousLogger());
 
-        Assertions.assertDoesNotThrow(() -> stopping.release(VAULT));
+        Assertions.assertDoesNotThrow(() -> stopping.release(CLAIM));
         Assertions.assertEquals(List.of(), down.released);
     }
 }

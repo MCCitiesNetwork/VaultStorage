@@ -3,6 +3,7 @@ package com.minecraftcitiesnetwork.vaultstorage;
 import java.util.UUID;
 import com.minecraftcitiesnetwork.vaultstorage.placement.PlacementStore;
 import com.minecraftcitiesnetwork.vaultstorage.database.DeleteResult;
+import com.minecraftcitiesnetwork.vaultstorage.database.Claim;
 import com.minecraftcitiesnetwork.vaultstorage.database.ClaimResult;
 import com.minecraftcitiesnetwork.vaultstorage.database.ClaimReleases;
 import java.util.Objects;
@@ -222,13 +223,13 @@ public final class VaultStoragePlugin extends JavaPlugin {
             }
 
             @Override
-            public void release(@NotNull UUID vault) {
-                VaultStoragePlugin.this.claimReleases.release(vault);
+            public void release(@NotNull Claim claim) {
+                VaultStoragePlugin.this.claimReleases.release(claim);
             }
 
             @Override
-            public @NotNull DeleteResult delete(@NotNull UUID vault) {
-                return VaultStoragePlugin.this.repository.delete(vault);
+            public @NotNull DeleteResult delete(@NotNull Claim claim) {
+                return VaultStoragePlugin.this.repository.delete(claim);
             }
         };
         this.placementService = new VaultPlacementService(placementStore, new BukkitPlacementWorld(this::bolt),

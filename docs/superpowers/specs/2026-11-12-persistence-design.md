@@ -291,6 +291,8 @@ existing vault opens with its items.
 
 ## As built
 
+- `status` is gone (V5). A vault is claimed while `claimToken` is not null, and a release names the token, so only the holder of a claim releases it.
+
 - **V3 converts timestamps with `FROM_UNIXTIME` after `SET time_zone = '+00:00'`**, not with
   `TIMESTAMPADD`. Pinning the session zone makes the two equivalent, and `MigrationTest` pins
   the result.

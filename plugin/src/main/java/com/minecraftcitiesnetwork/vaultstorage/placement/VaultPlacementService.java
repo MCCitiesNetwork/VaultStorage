@@ -1,7 +1,9 @@
 package com.minecraftcitiesnetwork.vaultstorage.placement;
 
 import com.minecraftcitiesnetwork.vaultstorage.config.MessageKeys;
+import com.minecraftcitiesnetwork.vaultstorage.database.Claim;
 import com.minecraftcitiesnetwork.vaultstorage.database.ClaimResult;
+import com.minecraftcitiesnetwork.vaultstorage.database.DeleteResult;
 import com.minecraftcitiesnetwork.vaultstorage.database.StoredVault;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -62,7 +64,7 @@ public final class VaultPlacementService {
                             CompletableFuture.completedFuture(new Result(false, MessageKeys.INVENTORY_NOT_FOUND));
                     case ClaimResult.AlreadyClaimed held ->
                             CompletableFuture.completedFuture(new Result(false, MessageKeys.INVENTORY_IN_USE));
-                    case ClaimResult.Claimed claimed -> placeClaimed(claimed.vault(), targetLoc);
+                    case ClaimResult.Claimed claimed -> placeClaimed(claimed.vault(), claimed.claim(), targetLoc);
                 }, this.mainThread)
                 .exceptionally(failure -> {
                     this.logger.log(Level.SEVERE, "Placing vault " + vaultUuid + " failed.", failure);
@@ -72,7 +74,8 @@ public final class VaultPlacementService {
     }
 
     /** Main thread. The vault is claimed; it is deleted or released before this future completes. */
-    private @NotNull CompletableFuture<Result> placeClaimed(@NotNull StoredVault stored, @NotNull Location targetLoc) {
+    private @NotNull CompletableFuture<Result> placeClaimed(@NotNull StoredVault stored, @NotNull Claim claim,
+                                                            @NotNull Location targetLoc) {
         UUID vaultUuid = stored.vault().uuid();
         Result placed;
         try {
@@ -84,7 +87,7 @@ public final class VaultPlacementService {
         if (!placed.success()) {
             Result refused = placed;
             return CompletableFuture.supplyAsync(() -> {
-                this.store.release(vaultUuid);
+                this.store.release(claim);
                 return refused;
             }, this.database);
         }
@@ -97,7 +100,11 @@ public final class VaultPlacementService {
         Result done = placed;
         return CompletableFuture.supplyAsync(() -> {
             try {
-                this.store.delete(vaultUuid);
+                if (!(this.store.delete(claim) instanceof DeleteResult.Deleted)) {
+                    // Its claim was lost, to a restart or another server on this database.
+                    this.logger.log(Level.SEVERE, "Vault " + vaultUuid + " was placed at " + describe(targetLoc)
+                            + " but was no longer this placement's to delete. Delete it by hand.");
+                }
             } catch (RuntimeException ex) {
                 // The block is in the world. The vault stays claimed, so it cannot be placed again.
                 this.logger.log(Level.SEVERE, "Vault " + vaultUuid + " was placed at " + describe(targetLoc)

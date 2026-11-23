@@ -3,6 +3,7 @@ package com.minecraftcitiesnetwork.vaultstorage.vault;
 import com.minecraftcitiesnetwork.vaultstorage.database.ReplaceResult;
 import com.minecraftcitiesnetwork.vaultstorage.config.MessageKeys;
 import com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin;
+import com.minecraftcitiesnetwork.vaultstorage.database.Claim;
 import com.minecraftcitiesnetwork.vaultstorage.database.ClaimResult;
 import com.minecraftcitiesnetwork.vaultstorage.database.FindResult;
 import com.minecraftcitiesnetwork.vaultstorage.database.StoredVault;
@@ -13,11 +14,12 @@ import com.minecraftcitiesnetwork.vaultstorage.menu.ParentMenu;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
@@ -74,8 +76,8 @@ public final class VaultInventoryService implements Listener {
             mainThread.execute(() -> new LoadingMenu(player, parentMenu, placeholders).open());
         }
         boolean editing = VaultViewRules.savesOnClose(action);
-        // Set once this open holds the claim: a claim it never got is somebody else's to release.
-        AtomicBoolean claimed = new AtomicBoolean();
+        // Set once this open holds the vault. Without it there is nothing of this open's to release.
+        AtomicReference<Claim> claimed = new AtomicReference<>();
         CompletableFuture
                 .supplyAsync(() -> load(plugin, vaultId, editing, claimed), plugin.databaseExecutor())
                 .thenCompose(loaded -> {
@@ -94,14 +96,14 @@ public final class VaultInventoryService implements Listener {
                         return;
                     }
                     if (!player.isOnline()) {
-                        releaseIfClaimed(plugin, vaultId, claimed);
+                        releaseIfClaimed(plugin, claimed);
                         return;
                     }
-                    show(player, loaded.vault().get(), entry.getValue(), action, reopenCallback);
+                    show(player, loaded.vault().get(), claimed.get(), entry.getValue(), action, reopenCallback);
                 }, mainThread)
                 .exceptionally(failure -> {
                     plugin.getLogger().log(Level.SEVERE, "Could not open vault " + vaultId + ".", failure);
-                    releaseIfClaimed(plugin, vaultId, claimed);
+                    releaseIfClaimed(plugin, claimed);
                     mainThread.execute(() -> {
                         closeLoading(player, parentMenu);
                         player.sendMessage(plugin.text().of(MessageKeys.INVENTORY_OPEN_FAILED));
@@ -122,11 +124,11 @@ public final class VaultInventoryService implements Listener {
     }
 
     private static @NotNull Loaded load(@NotNull VaultStoragePlugin plugin, @NotNull UUID vaultId, boolean editing,
-                                        @NotNull AtomicBoolean claimed) {
+                                        @NotNull AtomicReference<Claim> claimed) {
         if (editing) {
             return switch (plugin.repository().claim(vaultId)) {
                 case ClaimResult.Claimed held -> {
-                    claimed.set(true);
+                    claimed.set(held.claim());
                     yield new Loaded(Optional.of(held.vault()), "");
                 }
                 case ClaimResult.AlreadyClaimed inUse -> new Loaded(Optional.empty(), MessageKeys.INVENTORY_IN_USE);
@@ -139,24 +141,26 @@ public final class VaultInventoryService implements Listener {
         };
     }
 
-    private static void releaseIfClaimed(@NotNull VaultStoragePlugin plugin, @NotNull UUID vaultId,
-                                         @NotNull AtomicBoolean claimed) {
-        if (!claimed.get()) {
+    private static void releaseIfClaimed(@NotNull VaultStoragePlugin plugin, @NotNull AtomicReference<Claim> claimed) {
+        Claim claim = claimed.get();
+        if (claim == null) {
             return;
         }
-        CompletableFuture.runAsync(() -> plugin.claimReleases().release(vaultId), plugin.databaseExecutor())
+        CompletableFuture.runAsync(() -> plugin.claimReleases().release(claim), plugin.databaseExecutor())
                 .exceptionally(failure -> {
-                    plugin.getLogger().log(Level.SEVERE, "Could not release vault " + vaultId + ".", failure);
+                    plugin.getLogger().log(Level.SEVERE, "Could not release vault " + claim.vault() + ".", failure);
                     return null;
                 });
     }
 
-    private void show(@NotNull Player player, @NotNull StoredVault stored, @NotNull String ownerName,
+    private void show(@NotNull Player player, @NotNull StoredVault stored, @Nullable Claim claim, @NotNull String ownerName,
                              @NotNull VaultAction action, @Nullable Runnable reopenCallback) {
         int highestSlot = stored.items().stream().mapToInt(VaultItemEntity::slot).max().orElse(-1);
         int size = Math.min(MAX_SIZE, Math.max(ROW, ((highestSlot + 1 + ROW - 1) / ROW) * ROW));
         Component title = plugin.text().of(MessageKeys.INVENTORY_TITLE, Map.of("owner", ownerName, "action", action.name()));
-        VaultView view = new VaultView(stored.vault().uuid(), action, reopenCallback);
+        VaultView view = claim != null
+                ? VaultView.editing(claim, reopenCallback)
+                : VaultView.readOnly(stored.vault().uuid(), action, reopenCallback);
         Inventory inventory = Bukkit.createInventory(view, size, title);
         view.inventory(inventory);
         for (VaultItemEntity row : stored.items()) {
@@ -211,7 +215,7 @@ public final class VaultInventoryService implements Listener {
             return;
         }
         List<VaultItem> items = itemsOf(event.getInventory());
-        CompletableFuture.runAsync(() -> saveAndRelease(plugin, view.vault(), items), plugin.databaseExecutor())
+        CompletableFuture.runAsync(() -> saveAndRelease(plugin, view, items), plugin.databaseExecutor())
                 .exceptionally(failure -> {
                     plugin.getLogger().log(Level.SEVERE, "Vault " + view.vault() + " could not be saved after "
                             + event.getPlayer().getName() + " edited it. It keeps its previous contents; what they"
@@ -232,21 +236,28 @@ public final class VaultInventoryService implements Listener {
         for (int slot = 0; slot < contents.length; slot++) {
             ItemStack stack = contents[slot];
             if (stack != null && !stack.getType().isAir() && stack.getAmount() > 0) {
-                items.add(new VaultItem(slot, stack.getAmount(), ItemSerialization.toBytes(stack)));
+                items.add(ItemSerialization.toVaultItem(slot, stack));
             }
         }
         return items;
     }
 
     /** Saves, then gives the vault back even if the save failed, so it is not held forever. */
-    private static void saveAndRelease(@NotNull VaultStoragePlugin plugin, @NotNull UUID vault, @NotNull List<VaultItem> items) {
+    private static void saveAndRelease(@NotNull VaultStoragePlugin plugin, @NotNull VaultView view, @NotNull List<VaultItem> items) {
+        UUID vault = view.vault();
+        Claim claim = Objects.requireNonNull(view.claim(), "a view that saves holds its vault");
         try {
-            if (plugin.repository().replaceItems(vault, items) instanceof ReplaceResult.NoSuchVault) {
-                // Reported like any failed save: the editor is told and the log says what was lost.
-                throw new IllegalStateException("vault " + vault + " no longer exists");
+            // Anything but a save is reported like a failed one: the editor is told and the log
+            // says what was lost.
+            switch (plugin.repository().replaceItems(claim, items)) {
+                case ReplaceResult.Replaced saved -> { }
+                case ReplaceResult.NoSuchVault gone ->
+                        throw new IllegalStateException("vault " + vault + " no longer exists");
+                case ReplaceResult.NotHeld lost ->
+                        throw new IllegalStateException("vault " + vault + " is no longer held by this edit");
             }
         } finally {
-            plugin.claimReleases().release(vault);
+            plugin.claimReleases().release(claim);
         }
     }
 
@@ -261,7 +272,7 @@ public final class VaultInventoryService implements Listener {
                 continue;
             }
             try {
-                saveAndRelease(plugin, view.vault(), itemsOf(open));
+                saveAndRelease(plugin, view, itemsOf(open));
             } catch (RuntimeException ex) {
                 plugin.getLogger().log(Level.SEVERE, "Vault " + view.vault() + " could not be saved at shutdown.", ex);
             }

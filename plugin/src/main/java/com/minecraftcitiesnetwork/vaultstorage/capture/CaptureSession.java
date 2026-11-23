@@ -170,7 +170,7 @@ public final class CaptureSession implements Listener {
                 return DONE;
             }
             return service.storeThenRemove(captureBlock, owner, outcome.reProtectedHalves())
-                    .thenAccept(result -> report(result, captureBlock, owner));
+                    .thenAccept(result -> service.report(actor, result, captureBlock, owner));
         }, plugin.mainThread());
     }
 
@@ -203,20 +203,6 @@ public final class CaptureSession implements Listener {
         plugin.getLogger().warning("Capture by " + actor.getName() + " at " + captureBlock.getWorld().getName()
                 + " " + captureBlock.getX() + "," + captureBlock.getY() + "," + captureBlock.getZ()
                 + " stopped: the owner's id could not be checked.");
-    }
-
-    private void report(@NotNull CaptureResult result, @NotNull Block captureBlock, @NotNull UUID owner) {
-        switch (result) {
-            case CaptureResult.Vaulted vaulted -> {
-                actor.sendMessage(plugin.text().of(MessageKeys.CAPTURE_CAPTURED_OK));
-                service.mailOwner(captureBlock, actor.getUniqueId(), owner);
-                new PlayerVaultEvent(actor, vaulted.vault(), owner, captureBlock.getLocation()).callEvent();
-            }
-            case CaptureResult.ChangedMeanwhile changed ->
-                    actor.sendMessage(plugin.text().of(MessageKeys.CAPTURE_CHANGED_MEANWHILE));
-            case CaptureResult.Failed failed ->
-                    actor.sendMessage(plugin.text().of(MessageKeys.CAPTURE_SAVE_FAILED));
-        }
     }
 
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = false)

@@ -38,7 +38,7 @@ test('restart: a vault left claimed when the server stopped is free again, and t
         const { claimed } = state();
         const editor = await createPlayer({ username: NAMES.editor });
         await operators(server, editor);
-        expect(query(`SELECT status IS NULL FROM Vault WHERE uuid = '${claimed}'`)).toEqual(['1']);
+        expect(query(`SELECT claimToken IS NULL FROM Vault WHERE uuid = '${claimed}'`)).toEqual(['1']);
         const log = fs.readFileSync(logFile(), 'utf8');
         expect(log).toContain(`Vault ${claimed} was still claimed from before the last shutdown`);
 

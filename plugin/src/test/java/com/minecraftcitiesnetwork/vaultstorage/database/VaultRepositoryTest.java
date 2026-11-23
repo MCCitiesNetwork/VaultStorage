@@ -56,7 +56,6 @@ class VaultRepositoryTest extends DatabaseTestBase {
         Assertions.assertEquals(WORLD, stored.vault().worldUuid());
         Assertions.assertEquals(10, stored.vault().x());
         Assertions.assertEquals("CHEST", stored.vault().material());
-        Assertions.assertNull(stored.vault().status());
         Assertions.assertEquals(List.of(0, 5), stored.items().stream().map(VaultItemEntity::slot).toList());
         Assertions.assertArrayEquals(new byte[] {5, 2, 3}, stored.items().get(1).item());
     }
@@ -134,9 +133,33 @@ class VaultRepositoryTest extends DatabaseTestBase {
         ClaimResult.Claimed claimed = Assertions.assertInstanceOf(ClaimResult.Claimed.class, repository.claim(vault));
         Assertions.assertEquals(1, claimed.vault().items().size());
         Assertions.assertInstanceOf(ClaimResult.AlreadyClaimed.class, repository.claim(vault));
-        repository.release(vault);
+        repository.release(claimed.claim());
         Assertions.assertInstanceOf(ClaimResult.Claimed.class, repository.claim(vault));
         Assertions.assertInstanceOf(ClaimResult.NoSuchVault.class, repository.claim(UUID.randomUUID()));
+    }
+
+    @Test
+    void onlyTheHolderOfAClaimCanReleaseIt() {
+        UUID vault = repository.create(vaultFor(OWNER, WORLD, 10), List.of());
+        ClaimResult.Claimed claimed = Assertions.assertInstanceOf(ClaimResult.Claimed.class, repository.claim(vault));
+
+        repository.release(new Claim(vault, UUID.randomUUID()));
+        Assertions.assertInstanceOf(ClaimResult.AlreadyClaimed.class, repository.claim(vault));
+
+        repository.release(claimed.claim());
+        Assertions.assertInstanceOf(ClaimResult.Claimed.class, repository.claim(vault));
+    }
+
+    @Test
+    void aClaimFromBeforeARestartDoesNotReleaseTheNextHolders() {
+        UUID vault = repository.create(vaultFor(OWNER, WORLD, 10), List.of());
+        ClaimResult.Claimed stale = Assertions.assertInstanceOf(ClaimResult.Claimed.class, repository.claim(vault));
+        repository.releaseAllClaims();
+        Assertions.assertInstanceOf(ClaimResult.Claimed.class, repository.claim(vault));
+
+        repository.release(stale.claim());
+
+        Assertions.assertInstanceOf(ClaimResult.AlreadyClaimed.class, repository.claim(vault));
     }
 
     @Test
@@ -232,9 +255,10 @@ class VaultRepositoryTest extends DatabaseTestBase {
     @Test
     void replacingItemsSwapsTheWholeContents() {
         UUID vault = repository.create(vaultFor(OWNER, WORLD, 10), List.of(item(0), item(1), item(2)));
-        Assertions.assertInstanceOf(ReplaceResult.Replaced.class, repository.replaceItems(vault, List.of(item(7))));
+        Claim claim = claimOf(vault);
+        Assertions.assertInstanceOf(ReplaceResult.Replaced.class, repository.replaceItems(claim, List.of(item(7))));
         Assertions.assertEquals(List.of(7), found(vault).items().stream().map(VaultItemEntity::slot).toList());
-        Assertions.assertInstanceOf(ReplaceResult.Replaced.class, repository.replaceItems(vault, List.of()));
+        Assertions.assertInstanceOf(ReplaceResult.Replaced.class, repository.replaceItems(claim, List.of()));
         Assertions.assertTrue(found(vault).items().isEmpty());
     }
 
@@ -259,6 +283,37 @@ class VaultRepositoryTest extends DatabaseTestBase {
     void writesToAnUnknownVaultSayItIsNotThere() {
         UUID unknown = UUID.randomUUID();
         Assertions.assertInstanceOf(OwnerResult.NoSuchVault.class, repository.setOwner(unknown, OWNER));
-        Assertions.assertInstanceOf(ReplaceResult.NoSuchVault.class, repository.replaceItems(unknown, List.of(item(0))));
+        Claim nothing = new Claim(unknown, UUID.randomUUID());
+        Assertions.assertInstanceOf(ReplaceResult.NoSuchVault.class, repository.replaceItems(nothing, List.of(item(0))));
+        Assertions.assertInstanceOf(DeleteResult.NoSuchVault.class, repository.delete(nothing));
+    }
+
+    @Test
+    void onlyTheHolderOfAClaimCanSaveToItsVaultOrDeleteIt() {
+        UUID vault = repository.create(vaultFor(OWNER, WORLD, 10), List.of(item(0)));
+        Claim held = claimOf(vault);
+        Claim stranger = new Claim(vault, UUID.randomUUID());
+
+        Assertions.assertInstanceOf(ReplaceResult.NotHeld.class, repository.replaceItems(stranger, List.of(item(5))));
+        Assertions.assertInstanceOf(DeleteResult.NotHeld.class, repository.delete(stranger));
+        Assertions.assertEquals(List.of(0), found(vault).items().stream().map(VaultItemEntity::slot).toList());
+
+        Assertions.assertInstanceOf(DeleteResult.Deleted.class, repository.delete(held));
+    }
+
+    @Test
+    void anEditWhoseClaimWasLostAtARestartCannotSaveOverTheNextEditors() {
+        UUID vault = repository.create(vaultFor(OWNER, WORLD, 10), List.of(item(0)));
+        Claim stale = claimOf(vault);
+        repository.releaseAllClaims();
+        Claim next = claimOf(vault);
+
+        Assertions.assertInstanceOf(ReplaceResult.NotHeld.class, repository.replaceItems(stale, List.of()));
+        Assertions.assertInstanceOf(ReplaceResult.Replaced.class, repository.replaceItems(next, List.of(item(3))));
+        Assertions.assertEquals(List.of(3), found(vault).items().stream().map(VaultItemEntity::slot).toList());
+    }
+
+    private static Claim claimOf(UUID vault) {
+        return Assertions.assertInstanceOf(ClaimResult.Claimed.class, repository.claim(vault)).claim();
     }
 }

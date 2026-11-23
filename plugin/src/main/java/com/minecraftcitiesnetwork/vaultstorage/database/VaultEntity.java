@@ -5,8 +5,8 @@ import java.util.UUID;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-/** A row of {@code Vault}. {@code status} is null for a stored vault and CLAIMED while one actor holds it. */
+/** A row of {@code Vault}, without the token of whoever holds it: that is the holder's {@link Claim}. */
 public record VaultEntity(@NotNull UUID uuid, @NotNull UUID ownerUuid, @NotNull UUID worldUuid, int x, int y, int z,
-                          @NotNull String material, @Nullable String blockData, @Nullable String status,
+                          @NotNull String material, @Nullable String blockData,
                           @NotNull Instant createdTime, @NotNull Instant updatedTime) {
 }

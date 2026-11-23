@@ -34,7 +34,7 @@ class MigrationTest extends DatabaseTestBase {
     @Test
     void anEmptyDatabaseMigratesToTheLatestVersion() throws SQLException {
         migrate();
-        Assertions.assertEquals(4, queryLong("SELECT MAX(version) FROM vaultstorage_schema_version"));
+        Assertions.assertEquals(5, queryLong("SELECT MAX(version) FROM vaultstorage_schema_version"));
         for (String table : new String[] {"Vault", "VaultItem", "World"}) {
             Assertions.assertTrue(tableExists(table), table + " is missing");
         }
@@ -47,8 +47,8 @@ class MigrationTest extends DatabaseTestBase {
     void migratingTwiceChangesNothing() throws SQLException {
         migrate();
         migrate();
-        Assertions.assertEquals(4, queryLong("SELECT MAX(version) FROM vaultstorage_schema_version"));
-        Assertions.assertEquals(4, queryLong("SELECT COUNT(*) FROM vaultstorage_schema_version"));
+        Assertions.assertEquals(5, queryLong("SELECT MAX(version) FROM vaultstorage_schema_version"));
+        Assertions.assertEquals(5, queryLong("SELECT COUNT(*) FROM vaultstorage_schema_version"));
     }
 
     @Test

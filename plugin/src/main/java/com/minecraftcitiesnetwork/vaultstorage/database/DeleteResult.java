@@ -7,4 +7,8 @@ public sealed interface DeleteResult {
 
     record NoSuchVault() implements DeleteResult {
     }
+
+    /** The vault is there but this claim does not hold it. Nothing was deleted. */
+    record NotHeld() implements DeleteResult {
+    }
 }

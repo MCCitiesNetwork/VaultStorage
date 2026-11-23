@@ -1,9 +1,6 @@
 package com.minecraftcitiesnetwork.vaultstorage.capture;
 
-import com.minecraftcitiesnetwork.vaultstorage.database.DeleteResult;
-import com.minecraftcitiesnetwork.vaultstorage.database.NewVault;
 import com.minecraftcitiesnetwork.vaultstorage.database.VaultItem;
-import com.minecraftcitiesnetwork.vaultstorage.database.VaultStore;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -23,29 +20,26 @@ class CapturePipelineTest {
     /** Records what happened, in order, so a test can assert the save came before the removal. */
     private final List<String> events = new ArrayList<>();
 
-    private final class FakeStore implements VaultStore {
+    private final class FakeStore implements CaptureStore {
         private final Map<UUID, List<VaultItem>> vaults = new HashMap<>();
         private boolean failCreate;
         private boolean failDelete;
 
         @Override
-        public @NotNull UUID create(@NotNull NewVault vault, @NotNull List<VaultItem> items) {
+        public @NotNull Stored store(@NotNull ContainerSnapshot snapshot, @NotNull UUID owner) {
             if (this.failCreate) {
                 throw new IllegalStateException("database down");
             }
             UUID uuid = UUID.randomUUID();
-            this.vaults.put(uuid, items);
+            this.vaults.put(uuid, snapshot.items());
             CapturePipelineTest.this.events.add("created");
-            return uuid;
-        }
-
-        @Override
-        public @NotNull DeleteResult delete(@NotNull UUID vault) {
-            if (this.failDelete) {
-                throw new IllegalStateException("database down");
-            }
-            CapturePipelineTest.this.events.add("deleted");
-            return this.vaults.remove(vault) != null ? new DeleteResult.Deleted() : new DeleteResult.NoSuchVault();
+            return new Stored(uuid, () -> {
+                if (this.failDelete) {
+                    throw new IllegalStateException("database down");
+                }
+                CapturePipelineTest.this.events.add("deleted");
+                this.vaults.remove(uuid);
+            });
         }
     }
 

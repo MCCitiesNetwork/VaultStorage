@@ -17,17 +17,17 @@ public interface MariaVaultMapper extends VaultMapper {
 
     @Override
     @Insert("""
-            INSERT INTO Vault (uuid, ownerUuid, worldUuid, x, y, z, material, blockData, status,
+            INSERT INTO Vault (uuid, ownerUuid, worldUuid, x, y, z, material, blockData,
                                createdTime, updatedTime)
             VALUES (#{vault.uuid}, #{vault.ownerUuid}, #{vault.worldUuid}, #{vault.x}, #{vault.y}, #{vault.z},
-                    #{vault.material}, #{vault.blockData}, #{vault.status},
+                    #{vault.material}, #{vault.blockData},
                     #{vault.createdTime}, #{vault.updatedTime})
             """)
     int insert(@Param("vault") @NotNull VaultEntity vault);
 
     @Override
     @Select("""
-            SELECT uuid, ownerUuid, worldUuid, x, y, z, material, blockData, status, createdTime, updatedTime
+            SELECT uuid, ownerUuid, worldUuid, x, y, z, material, blockData, createdTime, updatedTime
             FROM Vault
             WHERE uuid = #{uuid}
             """)
@@ -40,7 +40,6 @@ public interface MariaVaultMapper extends VaultMapper {
             @Arg(column = "z", javaType = int.class),
             @Arg(column = "material", javaType = String.class),
             @Arg(column = "blockData", javaType = String.class),
-            @Arg(column = "status", javaType = String.class),
             @Arg(column = "createdTime", javaType = Instant.class),
             @Arg(column = "updatedTime", javaType = Instant.class)
     })
@@ -73,11 +72,29 @@ public interface MariaVaultMapper extends VaultMapper {
     int touch(@Param("uuid") @NotNull UUID uuid, @Param("updatedTime") @NotNull Instant updatedTime);
 
     @Override
+    @Update("""
+            UPDATE Vault
+            SET updatedTime = #{updatedTime}
+            WHERE uuid = #{uuid}
+            AND claimToken = #{token}
+            """)
+    int touchHeld(@Param("uuid") @NotNull UUID uuid, @Param("token") @NotNull UUID token,
+                  @Param("updatedTime") @NotNull Instant updatedTime);
+
+    @Override
     @Delete("""
             DELETE FROM Vault
             WHERE uuid = #{uuid}
             """)
     int delete(@Param("uuid") @NotNull UUID uuid);
+
+    @Override
+    @Delete("""
+            DELETE FROM Vault
+            WHERE uuid = #{uuid}
+            AND claimToken = #{token}
+            """)
+    int deleteHeld(@Param("uuid") @NotNull UUID uuid, @Param("token") @NotNull UUID token);
 
     @Override
     @Select("""
@@ -124,33 +141,34 @@ public interface MariaVaultMapper extends VaultMapper {
     @Override
     @Update("""
             UPDATE Vault
-            SET status = 'CLAIMED'
+            SET claimToken = #{token}
             WHERE uuid = #{uuid}
-            AND status IS NULL
+            AND claimToken IS NULL
             """)
-    int claim(@Param("uuid") @NotNull UUID uuid);
+    int claim(@Param("uuid") @NotNull UUID uuid, @Param("token") @NotNull UUID token);
 
     @Override
     @Update("""
             UPDATE Vault
-            SET status = NULL
+            SET claimToken = NULL
             WHERE uuid = #{uuid}
+            AND claimToken = #{token}
             """)
-    int release(@Param("uuid") @NotNull UUID uuid);
+    int release(@Param("uuid") @NotNull UUID uuid, @Param("token") @NotNull UUID token);
 
     @Override
     @Select("""
             SELECT uuid
             FROM Vault
-            WHERE status = 'CLAIMED'
+            WHERE claimToken IS NOT NULL
             """)
     @NotNull List<UUID> selectClaimed();
 
     @Override
     @Update("""
             UPDATE Vault
-            SET status = NULL
-            WHERE status = 'CLAIMED'
+            SET claimToken = NULL
+            WHERE claimToken IS NOT NULL
             """)
     int releaseAll();
 
@@ -160,7 +178,7 @@ public interface MariaVaultMapper extends VaultMapper {
             FROM Vault v
             LEFT JOIN VaultItem i ON i.vaultUuid = v.uuid
             WHERE v.ownerUuid = #{ownerUuid}
-            AND v.status IS NULL
+            AND v.claimToken IS NULL
             GROUP BY v.uuid, v.createdTime
             HAVING COALESCE(MAX(i.slot), -1) + #{needed} < #{maxSlots}
             ORDER BY v.createdTime, v.uuid

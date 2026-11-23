@@ -14,10 +14,10 @@ function seedMany(ownerExpression: string, count: number): void {
     for (let done = 0; done < count; done += 1000) {
         const rows: string[] = [];
         for (let i = done; i < Math.min(count, done + 1000); i++) {
-            rows.push(`(UUID(), ${ownerExpression}, '${world}', ${i}, 64, 0, 'CHEST', NULL, NULL, `
+            rows.push(`(UUID(), ${ownerExpression}, '${world}', ${i}, 64, 0, 'CHEST', NULL, `
                 + `'2026-01-01 00:00:00' + INTERVAL ${i} SECOND, '2026-01-01 00:00:00' + INTERVAL ${i} SECOND)`);
         }
-        sqlFromInput('INSERT INTO Vault (uuid, ownerUuid, worldUuid, x, y, z, material, blockData, status, createdTime, updatedTime) VALUES '
+        sqlFromInput('INSERT INTO Vault (uuid, ownerUuid, worldUuid, x, y, z, material, blockData, createdTime, updatedTime) VALUES '
             + rows.join(', ') + ';');
     }
 }

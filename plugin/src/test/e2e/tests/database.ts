@@ -43,10 +43,10 @@ export function seedVaults(ownerUuid: string, count: number): void {
     sql(`INSERT INTO World (uuid, name) VALUES ('${world}', 'seeded') ON DUPLICATE KEY UPDATE name = name`);
     const rows: string[] = [];
     for (let i = 0; i < count; i++) {
-        rows.push(`(UUID(), '${ownerUuid}', '${world}', ${i}, 64, 0, 'CHEST', NULL, NULL, `
+        rows.push(`(UUID(), '${ownerUuid}', '${world}', ${i}, 64, 0, 'CHEST', NULL, `
             + `'2026-01-01 00:00:00' + INTERVAL ${i} MINUTE, '2026-01-01 00:00:00' + INTERVAL ${i} MINUTE)`);
     }
-    sql('INSERT INTO Vault (uuid, ownerUuid, worldUuid, x, y, z, material, blockData, status, createdTime, updatedTime) VALUES '
+    sql('INSERT INTO Vault (uuid, ownerUuid, worldUuid, x, y, z, material, blockData, createdTime, updatedTime) VALUES '
         + rows.join(', '));
 }
 
