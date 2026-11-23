@@ -117,6 +117,11 @@ plugwright {
                     spawn-protection=0
                 """.trimIndent() + "\n")
                 // The dev database from compose.dev.yml.
+                // Every bot comes from one address, and GriefPrevention allows three by default.
+                file("plugins/GriefPreventionData/config.yml", """
+                    GriefPrevention:
+                      MaxPlayersPerIpAddress: 0
+                """.trimIndent() + "\n")
                 file("plugins/VaultStorage/config.yml", """
                     mysql:
                       host: "127.0.0.1"

@@ -1,5 +1,6 @@
 package com.minecraftcitiesnetwork.vaultstorage.vault;
 
+import com.minecraftcitiesnetwork.vaultstorage.database.ReplaceResult;
 import com.minecraftcitiesnetwork.vaultstorage.config.MessageKeys;
 import com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin;
 import com.minecraftcitiesnetwork.vaultstorage.database.ClaimResult;
@@ -135,7 +136,7 @@ public final class VaultInventoryService implements Listener {
         if (!editing) {
             return;
         }
-        CompletableFuture.runAsync(() -> plugin.repository().release(vaultId), plugin.databaseExecutor())
+        CompletableFuture.runAsync(() -> plugin.claimReleases().release(vaultId), plugin.databaseExecutor())
                 .exceptionally(failure -> {
                     plugin.getLogger().log(Level.SEVERE, "Could not release vault " + vaultId + ".", failure);
                     return null;
@@ -232,9 +233,12 @@ public final class VaultInventoryService implements Listener {
     /** Saves, then gives the vault back even if the save failed, so it is not held forever. */
     private static void saveAndRelease(@NotNull VaultStoragePlugin plugin, @NotNull UUID vault, @NotNull List<VaultItem> items) {
         try {
-            plugin.repository().replaceItems(vault, items);
+            if (plugin.repository().replaceItems(vault, items) instanceof ReplaceResult.NoSuchVault) {
+                // Reported like any failed save: the editor is told and the log says what was lost.
+                throw new IllegalStateException("vault " + vault + " no longer exists");
+            }
         } finally {
-            plugin.repository().release(vault);
+            plugin.claimReleases().release(vault);
         }
     }
 

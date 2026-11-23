@@ -186,6 +186,12 @@ public final class VaultCaptureService {
      * The callback is invoked on the main thread with true when a vault was persisted (non-empty container), false otherwise.
      */
     public void captureDirectAsync(@NotNull Player actor, @NotNull Block block, @NotNull Consumer<Boolean> onDoneMain) {
+        // A scan result's button reaches this without a capture session having checked.
+        if (!actor.hasPermission(Permissions.ACTION_CAPTURE)) {
+            actor.sendMessage(plugin.text().of(MessageKeys.CAPTURE_NO_PERMISSION));
+            onDoneMain.accept(false);
+            return;
+        }
         VaultCapturePolicy.Decision decision = plugin.capturePolicy().evaluate(actor, block);
         UUID originalOwner = decision.containerOwner();
         if (!decision.allowed()) {
@@ -258,6 +264,10 @@ public final class VaultCaptureService {
      * and never exceptionally.
      */
     public @NotNull CompletableFuture<Boolean> captureHanging(@NotNull Player actor, @NotNull Hanging hang) {
+        if (!actor.hasPermission(Permissions.ACTION_CAPTURE)) {
+            actor.sendMessage(this.plugin.text().of(MessageKeys.CAPTURE_NO_PERMISSION));
+            return CompletableFuture.completedFuture(false);
+        }
         Block supporting = HangingVaultSupport.resolveSupportingBlock(hang);
         VaultCapturePolicy.Decision decision = this.plugin.capturePolicy().evaluateHangingCapture(actor, hang, supporting);
         if (!decision.allowed()) {

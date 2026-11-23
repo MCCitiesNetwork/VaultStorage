@@ -73,7 +73,6 @@ public final class VaultRegionScanner {
             return;
         }
 
-        boolean actorOwnsRegion = region.isOwner(player.getUniqueId());
         BoundingBox boundingBox = region.boundingBox();
 
         Collection<Protection> protections = boltService.getProtections(boundingBox, world);
@@ -110,7 +109,7 @@ public final class VaultRegionScanner {
             if (failure != null) {
                 plugin.getLogger().log(Level.WARNING, "A chunk could not be loaded for a scan of " + regionId + ".", failure);
             }
-            this.task = new ScanTask(blockProtections, world, actorOwnsRegion).runTaskTimer(plugin, 1L, 1L);
+            this.task = new ScanTask(blockProtections, world).runTaskTimer(plugin, 1L, 1L);
         });
     }
 
@@ -123,15 +122,13 @@ public final class VaultRegionScanner {
     private final class ScanTask extends BukkitRunnable {
         private final List<BlockProtection> protections;
         private final World world;
-        private final boolean actorOwnsRegion;
         private final List<ScanResult> results = new ArrayList<>();
         private int index = 0;
         private final int batchSize;
 
-        public ScanTask(@NotNull List<BlockProtection> protections, @NotNull World world, boolean actorOwnsRegion) {
+        public ScanTask(@NotNull List<BlockProtection> protections, @NotNull World world) {
             this.protections = protections;
             this.world = world;
-            this.actorOwnsRegion = actorOwnsRegion;
             this.batchSize = plugin.settings().scan().batchSize();
         }
 
@@ -172,10 +169,11 @@ public final class VaultRegionScanner {
                 VaultCapturePolicy.Decision decision = plugin.capturePolicy().evaluate(player, block);
                 if (!decision.allowed()) continue;
 
-                // Owner filter
-                if (!actorOwnsRegion && uiContext.filterOwner() != null) {
-                    UUID owner = bp.getOwner(); // Use protection owner directly to avoid another lookup
-                    if (owner == null || !owner.equals(uiContext.filterOwner())) continue;
+                // Someone looking at one other player's things sees only that player's. A player
+                // looking for themselves sees whatever the policy lets them vault.
+                UUID onlyOwner = uiContext.filterOwner();
+                if (onlyOwner != null && !onlyOwner.equals(uiContext.actorUuid()) && !onlyOwner.equals(bp.getOwner())) {
+                    continue;
                 }
 
                 results.add(new ScanResult(block, bp.getOwner(), block.getType()));

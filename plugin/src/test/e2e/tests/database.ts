@@ -59,3 +59,9 @@ export function queryDatabase(database: string, statement: string): string[] {
         ['exec', CONTAINER, 'mariadb', '-uroot', '-proot', database, '-N', '-B', '-e', statement]).toString();
     return output.split('\n').filter((line) => line.length > 0);
 }
+
+/** Runs a long statement against the dev database, sent on standard input: an argument has a size limit. */
+export function sqlFromInput(statement: string): void {
+    execFileSync('docker', ['exec', '-i', CONTAINER, 'mariadb', '-uvaultstorage', '-pvaultstorage', 'vault_storage'],
+        { input: statement, stdio: ['pipe', 'ignore', 'inherit'] });
+}

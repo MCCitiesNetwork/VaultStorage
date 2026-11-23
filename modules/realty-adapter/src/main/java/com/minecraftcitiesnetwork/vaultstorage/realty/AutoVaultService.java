@@ -1,5 +1,6 @@
 package com.minecraftcitiesnetwork.vaultstorage.realty;
 
+import org.bukkit.block.Container;
 import com.minecraftcitiesnetwork.pluginInfrastructure.configurate.MessageContainer;
 import com.minecraftcitiesnetwork.vaultstorage.capture.MarkedContainer;
 import com.minecraftcitiesnetwork.vaultstorage.capture.ContainerOwnerSource;
@@ -247,12 +248,41 @@ public final class AutoVaultService {
                                                         @NotNull UUID initiator, @NotNull Runnable onVaulted,
                                                         @NotNull Sweep sweep) {
         VaultCaptureService captureService = plugin.captureService();
+        Executor mainThread = plugin.getServer().getScheduler().getMainThreadExecutor(plugin);
         return forEachChunkPaced(worldId, displaced,
                 dc -> new int[]{dc.x() >> 4, dc.z() >> 4},
-                (world, chunk, dc) ->
-                        // Tolerant of blocks changed since the scan (non-containers just drop their protection).
-                        sweep.track(dc.owner(), captureService.captureOfflineAsync(
-                                world.getBlockAt(dc.x(), dc.y(), dc.z()), initiator, dc.owner(), onVaulted)));
+                (world, chunk, dc) -> {
+                    // Tolerant of blocks changed since the scan (non-containers just drop their protection).
+                    List<Block> halves = halvesInCaptureOrder(world.getBlockAt(dc.x(), dc.y(), dc.z()));
+                    CompletableFuture<Boolean> first = captureService.captureOfflineAsync(
+                            halves.getFirst(), initiator, dc.owner(), onVaulted);
+                    sweep.track(dc.owner(), first);
+                    if (halves.size() > 1) {
+                        // Bolt keeps one lock for a double chest, so the scan found it once. The
+                        // other half is the same owner's and goes too, after the first.
+                        sweep.track(dc.owner(), first.handle((vaulted, failure) -> vaulted)
+                                .thenComposeAsync(done -> captureService.captureOfflineAsync(
+                                        halves.get(1), initiator, dc.owner(), onVaulted), mainThread));
+                    }
+                });
+    }
+
+    /**
+     * The block, and with it the other half if it is half of a double chest. A half with items
+     * comes first: an empty half is only unlocked, and must not be while the other still has to
+     * be captured.
+     */
+    private static @NotNull List<Block> halvesInCaptureOrder(@NotNull Block block) {
+        if (!(block.getState() instanceof Container container)) {
+            return List.of(block);
+        }
+        List<Block> others = ContainerBlocks.otherHalves(block, container);
+        if (others.isEmpty()) {
+            return List.of(block);
+        }
+        Block other = others.getFirst();
+        return ContainerBlocks.isEmpty(block) && !ContainerBlocks.isEmpty(other)
+                ? List.of(other, block) : List.of(block, other);
     }
 
     /**

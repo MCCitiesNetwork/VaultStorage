@@ -1,5 +1,10 @@
 package com.minecraftcitiesnetwork.vaultstorage;
 
+import java.util.UUID;
+import com.minecraftcitiesnetwork.vaultstorage.placement.PlacementStore;
+import com.minecraftcitiesnetwork.vaultstorage.database.DeleteResult;
+import com.minecraftcitiesnetwork.vaultstorage.database.ClaimResult;
+import com.minecraftcitiesnetwork.vaultstorage.database.ClaimReleases;
 import java.util.Objects;
 import com.minecraftcitiesnetwork.vaultstorage.capture.ContainerOwnerLookup;
 import org.jetbrains.annotations.NotNull;
@@ -62,6 +67,8 @@ import org.bukkit.plugin.java.JavaPlugin;
 @SuppressWarnings("NullAway.Init")
 public final class VaultStoragePlugin extends JavaPlugin {
 
+    private static final long RELEASE_RETRY_SECONDS = 3;
+
     private final VaultSessionManager sessionManager = new VaultSessionManager(
             listener -> getServer().getPluginManager().registerEvents(listener, this));
 
@@ -85,6 +92,7 @@ public final class VaultStoragePlugin extends JavaPlugin {
     private OwnerNotifications ownerNotifications;
     private VaultDatabase database;
     private VaultRepository repository;
+    private ClaimReleases claimReleases;
     private ExecutorService databaseExecutor;
     private WorldGuardService worldGuardService;
     private BoltService boltService;
@@ -97,6 +105,9 @@ public final class VaultStoragePlugin extends JavaPlugin {
 
     /** Every read and write of vaults. Blocking: call it on {@link #databaseExecutor()}. */
     public @NotNull VaultRepository repository() { return repository; }
+
+    /** Gives a claimed vault back, retrying while the database is down. Blocking, as the repository is. */
+    public @NotNull ClaimReleases claimReleases() { return claimReleases; }
 
     /** The connection pool and session factory, for a module that owns tables of its own. */
     public @NotNull VaultDatabase database() { return database; }
@@ -197,7 +208,27 @@ public final class VaultStoragePlugin extends JavaPlugin {
         this.containerOwners = new ContainerOwnerLookup(this.integrations::ownerSources,
                 getServer().getScheduler().getMainThreadExecutor(this));
         this.captureService = new VaultCaptureService(this);
-        this.placementService = new VaultPlacementService(this.repository, new BukkitPlacementWorld(this::bolt),
+        this.claimReleases = new ClaimReleases(this.repository::release,
+                task -> CompletableFuture.delayedExecutor(RELEASE_RETRY_SECONDS, TimeUnit.SECONDS, this.databaseExecutor)
+                        .execute(task), getLogger());
+        // A refused placement gives its claim back through the retrying release.
+        PlacementStore placementStore = new PlacementStore() {
+            @Override
+            public @NotNull ClaimResult claim(@NotNull UUID vault) {
+                return VaultStoragePlugin.this.repository.claim(vault);
+            }
+
+            @Override
+            public void release(@NotNull UUID vault) {
+                VaultStoragePlugin.this.claimReleases.release(vault);
+            }
+
+            @Override
+            public @NotNull DeleteResult delete(@NotNull UUID vault) {
+                return VaultStoragePlugin.this.repository.delete(vault);
+            }
+        };
+        this.placementService = new VaultPlacementService(placementStore, new BukkitPlacementWorld(this::bolt),
                 this.databaseExecutor, getServer().getScheduler().getMainThreadExecutor(this), getLogger());
         this.inventoryService = new VaultInventoryService(this);
         this.scanService = new VaultScanServiceImpl(this);

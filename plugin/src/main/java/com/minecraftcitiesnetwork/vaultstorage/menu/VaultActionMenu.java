@@ -6,7 +6,7 @@ import java.util.function.Consumer;
 import com.minecraftcitiesnetwork.pluginInfrastructure.configurate.MessageContainer;
 import com.minecraftcitiesnetwork.vaultstorage.config.MessageKeys;
 import com.minecraftcitiesnetwork.vaultstorage.database.DeleteResult;
-import com.minecraftcitiesnetwork.vaultstorage.database.FindResult;
+import com.minecraftcitiesnetwork.vaultstorage.database.ClaimResult;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.logging.Level;
@@ -131,7 +131,12 @@ public final class VaultActionMenu extends ChildMenuImp {
         return builder.build();
     }
 
-    /** Deletes the vault for good. Reached only through the confirmation. */
+    private enum Deletion { DELETED, IN_USE, FAILED }
+
+    /**
+     * Deletes the vault for good. Reached only through the confirmation. The vault is claimed
+     * first: one that is being edited or placed is not deleted from under whoever has it.
+     */
     private void delete(@NotNull Player actor) {
         if (!actor.hasPermission(Permissions.ADMIN)) {
             actor.sendMessage(plugin.text().of(MessageKeys.COMMAND_NO_PERMISSION));
@@ -139,25 +144,39 @@ public final class VaultActionMenu extends ChildMenuImp {
         }
         actor.sendMessage(plugin.text().of(MessageKeys.ACTION_DELETE_LOADING));
         Executor mainThread = plugin.getServer().getScheduler().getMainThreadExecutor(plugin);
-        CompletableFuture.supplyAsync(() -> plugin.repository().find(vaultId), plugin.databaseExecutor())
-                .thenComposeAsync(found -> {
-                    if (!(found instanceof FindResult.Found vault)) {
-                        return CompletableFuture.completedFuture(false);
+        CompletableFuture.supplyAsync(() -> plugin.repository().claim(vaultId), plugin.databaseExecutor())
+                .thenComposeAsync(claim -> switch (claim) {
+                    case ClaimResult.NoSuchVault missing -> CompletableFuture.completedFuture(Deletion.FAILED);
+                    case ClaimResult.AlreadyClaimed held -> CompletableFuture.completedFuture(Deletion.IN_USE);
+                    case ClaimResult.Claimed claimed -> {
+                        // The event is synchronous, so it is fired here, on the main thread.
+                        new PlayerDeleteVaultEvent(actor, claimed.vault().vault()).callEvent();
+                        yield CompletableFuture.supplyAsync(this::deleteClaimed, plugin.databaseExecutor());
                     }
-                    // The event is synchronous, so it is fired here, on the main thread.
-                    new PlayerDeleteVaultEvent(actor, vault.vault().vault()).callEvent();
-                    return CompletableFuture.supplyAsync(
-                            () -> plugin.repository().delete(vaultId) instanceof DeleteResult.Deleted,
-                            plugin.databaseExecutor());
                 }, mainThread)
                 .exceptionally(failure -> {
                     plugin.getLogger().log(Level.SEVERE, "Could not delete vault " + vaultId + ".", failure);
-                    return false;
+                    return Deletion.FAILED;
                 })
-                .thenAcceptAsync(deleted -> {
-                    actor.sendMessage(plugin.text().of(deleted ? MessageKeys.ACTION_DELETE_OK : MessageKeys.ACTION_DELETE_FAIL));
+                .thenAcceptAsync(deletion -> {
+                    actor.sendMessage(plugin.text().of(switch (deletion) {
+                        case DELETED -> MessageKeys.ACTION_DELETE_OK;
+                        case IN_USE -> MessageKeys.INVENTORY_IN_USE;
+                        case FAILED -> MessageKeys.ACTION_DELETE_FAIL;
+                    }));
                     this.back.accept(actor);
                 }, mainThread);
+    }
+
+    /** Database thread. The vault is claimed by this delete; a failed delete gives it back. */
+    private @NotNull Deletion deleteClaimed() {
+        try {
+            return plugin.repository().delete(vaultId) instanceof DeleteResult.Deleted ? Deletion.DELETED : Deletion.FAILED;
+        } catch (RuntimeException ex) {
+            plugin.getLogger().log(Level.SEVERE, "Could not delete vault " + vaultId + ".", ex);
+            plugin.claimReleases().release(vaultId);
+            return Deletion.FAILED;
+        }
     }
 
     private static @NotNull VaultAction parseAction(@NotNull String s) {

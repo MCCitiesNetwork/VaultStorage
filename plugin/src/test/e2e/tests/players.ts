@@ -13,7 +13,7 @@ export async function ordinary(server: ServerWrapper, player: PlayerWrapper, nod
         await server.execute(`lp user ${player.username} permission set ${node} true`);
     }
     // LuckPerms applies a change a moment after the command returns.
-    await sleep(700);
+    await sleep(1200);
 }
 
 /** Makes these players operators. */
