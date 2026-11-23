@@ -62,9 +62,10 @@ public record MenuView(@NotNull Component title, @NotNull List<Component> body, 
     /**
      * @param readsInputs whether the action uses what the player filled in. A renderer that
      *                    cannot show inputs beside buttons asks for them when this is pressed.
+     * @param width       how wide to draw the button where the client lets a menu say, or 0
      * @param click       run on the main thread with every input's value by key
      */
-    public record Button(@NotNull Component label, boolean readsInputs,
+    public record Button(@NotNull Component label, boolean readsInputs, int width,
                          @NotNull BiConsumer<Player, Map<String, String>> click) {
     }
 

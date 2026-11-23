@@ -84,6 +84,21 @@ public final class VaultRepository implements VaultStore, PlacementStore {
         }
     }
 
+    /**
+     * The page asked for, zero-based, or the last page when the list is shorter than that:
+     * a list can shrink between two clicks. One count and one query.
+     */
+    public @NotNull VaultPage pageAt(@NotNull VaultFilter filter, int requestedPage, int pageSize) {
+        int size = Math.max(1, pageSize);
+        try (SqlSessionWrapper wrapper = this.database.openSession(true)) {
+            int total = wrapper.vaults().count(filter.ownerUuid(), filter.worldUuid());
+            int lastPage = Math.max(0, (total - 1) / size);
+            int page = Math.min(Math.max(0, requestedPage), lastPage);
+            return new VaultPage(wrapper.vaults().selectPage(filter.ownerUuid(), filter.worldUuid(), page * size, size),
+                    total);
+        }
+    }
+
     public int count(@NotNull VaultFilter filter) {
         try (SqlSessionWrapper wrapper = this.database.openSession(true)) {
             return wrapper.vaults().count(filter.ownerUuid(), filter.worldUuid());

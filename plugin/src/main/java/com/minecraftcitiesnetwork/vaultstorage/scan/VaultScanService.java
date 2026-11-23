@@ -3,7 +3,6 @@ package com.minecraftcitiesnetwork.vaultstorage.scan;
 import org.bukkit.block.Block;
 import org.jetbrains.annotations.NotNull;
 
-import com.minecraftcitiesnetwork.vaultstorage.scan.ScanResult;
 import com.minecraftcitiesnetwork.vaultstorage.menu.VaultUIContext;
 import org.bukkit.entity.Player;
 

@@ -17,6 +17,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
@@ -67,14 +68,16 @@ public final class VaultInventoryService implements Listener {
             player.sendMessage(plugin.text().of(MessageKeys.COMMAND_OPEN_NO_PERMISSION));
             return;
         }
-        Executor mainThread = plugin.getServer().getScheduler().getMainThreadExecutor(plugin);
+        Executor mainThread = plugin.mainThread();
         if (parentMenu != null) {
             Map<String, String> placeholders = Map.of("%player%", player.getName(), "%vault%", String.valueOf(vaultId));
             mainThread.execute(() -> new LoadingMenu(player, parentMenu, placeholders).open());
         }
         boolean editing = VaultViewRules.savesOnClose(action);
+        // Set once this open holds the claim: a claim it never got is somebody else's to release.
+        AtomicBoolean claimed = new AtomicBoolean();
         CompletableFuture
-                .supplyAsync(() -> load(plugin, vaultId, editing), plugin.databaseExecutor())
+                .supplyAsync(() -> load(plugin, vaultId, editing, claimed), plugin.databaseExecutor())
                 .thenCompose(loaded -> {
                     if (loaded.vault().isEmpty()) {
                         return CompletableFuture.completedFuture(Map.entry(loaded, ""));
@@ -91,14 +94,14 @@ public final class VaultInventoryService implements Listener {
                         return;
                     }
                     if (!player.isOnline()) {
-                        releaseIfEditing(plugin, vaultId, editing);
+                        releaseIfClaimed(plugin, vaultId, claimed);
                         return;
                     }
                     show(player, loaded.vault().get(), entry.getValue(), action, reopenCallback);
                 }, mainThread)
                 .exceptionally(failure -> {
                     plugin.getLogger().log(Level.SEVERE, "Could not open vault " + vaultId + ".", failure);
-                    releaseIfEditing(plugin, vaultId, editing);
+                    releaseIfClaimed(plugin, vaultId, claimed);
                     mainThread.execute(() -> {
                         closeLoading(player, parentMenu);
                         player.sendMessage(plugin.text().of(MessageKeys.INVENTORY_OPEN_FAILED));
@@ -118,11 +121,15 @@ public final class VaultInventoryService implements Listener {
     private record Loaded(@NotNull Optional<StoredVault> vault, @NotNull String refusal) {
     }
 
-    private static @NotNull Loaded load(@NotNull VaultStoragePlugin plugin, @NotNull UUID vaultId, boolean editing) {
+    private static @NotNull Loaded load(@NotNull VaultStoragePlugin plugin, @NotNull UUID vaultId, boolean editing,
+                                        @NotNull AtomicBoolean claimed) {
         if (editing) {
             return switch (plugin.repository().claim(vaultId)) {
-                case ClaimResult.Claimed claimed -> new Loaded(Optional.of(claimed.vault()), "");
-                case ClaimResult.AlreadyClaimed held -> new Loaded(Optional.empty(), MessageKeys.INVENTORY_IN_USE);
+                case ClaimResult.Claimed held -> {
+                    claimed.set(true);
+                    yield new Loaded(Optional.of(held.vault()), "");
+                }
+                case ClaimResult.AlreadyClaimed inUse -> new Loaded(Optional.empty(), MessageKeys.INVENTORY_IN_USE);
                 case ClaimResult.NoSuchVault missing -> new Loaded(Optional.empty(), MessageKeys.INVENTORY_NOT_FOUND);
             };
         }
@@ -132,8 +139,9 @@ public final class VaultInventoryService implements Listener {
         };
     }
 
-    private static void releaseIfEditing(@NotNull VaultStoragePlugin plugin, @NotNull UUID vaultId, boolean editing) {
-        if (!editing) {
+    private static void releaseIfClaimed(@NotNull VaultStoragePlugin plugin, @NotNull UUID vaultId,
+                                         @NotNull AtomicBoolean claimed) {
+        if (!claimed.get()) {
             return;
         }
         CompletableFuture.runAsync(() -> plugin.claimReleases().release(vaultId), plugin.databaseExecutor())
@@ -195,7 +203,7 @@ public final class VaultInventoryService implements Listener {
             return;
         }
         Runnable afterClose = view.afterClose();
-        Executor mainThread = plugin.getServer().getScheduler().getMainThreadExecutor(plugin);
+        Executor mainThread = plugin.mainThread();
         if (!VaultViewRules.savesOnClose(view.action())) {
             if (afterClose != null) {
                 mainThread.execute(afterClose);

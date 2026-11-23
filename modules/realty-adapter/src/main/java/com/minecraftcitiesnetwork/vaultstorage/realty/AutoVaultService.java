@@ -19,9 +19,6 @@ import com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin;
 import com.minecraftcitiesnetwork.vaultstorage.region.VaultRegion;
 import com.minecraftcitiesnetwork.vaultstorage.bolt.BoltService;
 import com.minecraftcitiesnetwork.vaultstorage.region.WorldGuardService;
-import com.minecraftcitiesnetwork.vaultstorage.realty.RegionKey;
-import com.minecraftcitiesnetwork.vaultstorage.realty.SweepFilter;
-import com.minecraftcitiesnetwork.vaultstorage.realty.OfflineRegionScanner;
 import com.minecraftcitiesnetwork.vaultstorage.realty.OfflineRegionScanner.DisplacedContainer;
 import org.bukkit.Bukkit;
 import org.bukkit.Chunk;
@@ -84,7 +81,7 @@ public final class AutoVaultService {
                     if (!sweeps.isEmpty()) {
                         this.plugin.getLogger().info("Resumed " + sweeps.size() + " auto-vault sweep(s) from before the restart.");
                     }
-                }, this.plugin.getServer().getScheduler().getMainThreadExecutor(this.plugin))
+                }, this.plugin.mainThread())
                 .exceptionally(failure -> {
                     this.plugin.getLogger().log(Level.SEVERE, "Could not read the pending auto-vault sweeps.", failure);
                     return null;
@@ -207,7 +204,7 @@ public final class AutoVaultService {
                     sweep.vaultedPerOwner().forEach((owner, count) ->
                             plugin.ownerNotifications().sweepVaulted(owner, initiator, count, key.regionId()));
                     forget(key);
-                }, plugin.getServer().getScheduler().getMainThreadExecutor(plugin));
+                }, plugin.mainThread());
     }
 
     /** Removes the stored sweep: it has run, or has nothing left to do. */
@@ -248,7 +245,7 @@ public final class AutoVaultService {
                                                         @NotNull UUID initiator, @NotNull Runnable onVaulted,
                                                         @NotNull Sweep sweep) {
         VaultCaptureService captureService = plugin.captureService();
-        Executor mainThread = plugin.getServer().getScheduler().getMainThreadExecutor(plugin);
+        Executor mainThread = plugin.mainThread();
         return forEachChunkPaced(worldId, displaced,
                 dc -> new int[]{dc.x() >> 4, dc.z() >> 4},
                 (world, chunk, dc) -> {
@@ -343,7 +340,7 @@ public final class AutoVaultService {
         for (int[] chunk : chunksOf(box)) {
             reads.add(owners.ownedIn(world.getName(), chunk[0], chunk[1]));
         }
-        Executor mainThread = plugin.getServer().getScheduler().getMainThreadExecutor(plugin);
+        Executor mainThread = plugin.mainThread();
         return CompletableFuture.allOf(reads.toArray(CompletableFuture[]::new))
                 .thenComposeAsync(read -> {
                     // Only what is inside the swept region and belongs to a displaced player.
@@ -394,7 +391,7 @@ public final class AutoVaultService {
             return captures.captureOfflineAsync(container, initiator, owner.get(), onVaulted);
         });
         sweep.track(marked.owner(), done.whenCompleteAsync((vaulted, failure) -> release.run(),
-                plugin.getServer().getScheduler().getMainThreadExecutor(plugin)));
+                plugin.mainThread()));
     }
 
     /**

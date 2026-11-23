@@ -5,44 +5,13 @@ import org.jetbrains.annotations.NotNull;
 import java.util.UUID;
 
 /**
- * Immutable UI context propagated through menus to enforce owner filtering and admin mode.
+ * Whose vaults a menu shows, carried from one screen to the next.
  *
- * @param filterOwner null -> no filter (admin-only)
+ * @param actorUuid   the player the menu was opened for
+ * @param filterOwner the one owner whose vaults are listed, or null for everyone's
+ * @param admin       whether the menu was opened as the staff view
  */
 public record VaultUIContext(@NotNull UUID actorUuid, @Nullable UUID filterOwner, boolean admin) {
-    /**
-     * Creates a new UI context.
-     *
-     * @param actorUuid   the player opening the UI
-     * @param filterOwner owner to filter by; null means no filter (admin-only)
-     * @param admin       whether admin capabilities are enabled
-     */
-    public VaultUIContext {
-    }
-
-    /**
-     * Actor/player UUID who initiated the UI.
-     */
-    @Override
-    public @NotNull UUID actorUuid() {
-        return actorUuid;
-    }
-
-    /**
-     * Optional filter owner; null means no filter (only valid with admin=true).
-     */
-    @Override
-    public @Nullable UUID filterOwner() {
-        return filterOwner;
-    }
-
-    /**
-     * True if user has admin privileges in UI.
-     */
-    @Override
-    public boolean admin() {
-        return admin;
-    }
 
     /**
      * Builds a self-filtered context (non-admin).

@@ -12,7 +12,7 @@ import org.junit.jupiter.api.Test;
 class FormPlanTest {
 
     private static MenuView.Button button(String label, boolean readsInputs) {
-        return new MenuView.Button(Component.text(label), readsInputs, (player, answers) -> { });
+        return new MenuView.Button(Component.text(label), readsInputs, 0, (player, answers) -> { });
     }
 
     private static final MenuView.Text SEARCH = new MenuView.Text("QUERY", Component.text("Search"), "", 255);

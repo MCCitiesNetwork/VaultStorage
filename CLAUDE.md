@@ -24,7 +24,7 @@ project version lives in `gradle.properties`.
 | --- | --- | --- |
 | `:plugin` | `VaultStorage-<version>.jar` | The host plugin |
 | `:modules:namebook-adapter` | `namebook-adapter-<version>.jar` | Names through Namebook |
-| `:modules:floodgate-adapter` | `floodgate-adapter-<version>.jar` | Bedrock names, the Bedrock client check, and the menus as Bedrock forms |
+| `:modules:floodgate-adapter` | `floodgate-adapter-<version>.jar` | Bedrock names, and the menus as Bedrock forms |
 | `:modules:chestshop-adapter` | `chestshop-adapter-<version>.jar` | Everything about shops: ChestShop's signs, the rule for whose a shop is, shop owners from Treasury |
 | `:modules:realty-adapter` | `realty-adapter-<version>.jar` | Auto-vault on a Realty occupant change |
 | `:modules:griefprevention-adapter` | `griefprevention-adapter-<version>.jar` | Placing vaults on GriefPrevention claims |
@@ -49,8 +49,8 @@ Under `com.minecraftcitiesnetwork.vaultstorage`, grouped by feature:
 | `scan` | region scan service and scanner |
 | `region` | WorldGuard service and region types |
 | `bolt` | Bolt service |
-| `names` | `NameSource`, the Paper source, `Names`, `UniqueIdentifierResolver` |
-| `menu` | dialog menus, `AutoDialog`, `MenuView` and `MenuRenderer` (a menu described apart from how it is drawn), `ConfirmMenu`, `VaultLabel` |
+| `names` | `NameSource`, the Paper source, `Names` (the lookup host code calls; remembers names), `UniqueIdentifierResolver` |
+| `menu` | dialog menus, `AutoDialog`, `MenuView` and `MenuRenderer` (a menu described apart from how it is drawn), `ConfirmMenu`, `RegionScans` (starting a scan: who may, the cooldown), `Paging`, `VaultLabel` |
 | `command` | `VaultCommand` (the Brigadier tree), its sealed outcomes, `VaultActionArgument` |
 | `permission` | `Permissions`, one constant per node |
 | `session` | per-player session state |
@@ -58,7 +58,7 @@ Under `com.minecraftcitiesnetwork.vaultstorage`, grouped by feature:
 | `database` | MyBatis mappers, `VaultDatabase`, `VaultRepository`, the schema migrator |
 
 `menu` is a layer, not a feature: it holds every screen. Step 6 changed the screens that had
-findings and kept the framework (`ParentMenu`, `ChildMenu`, `AutoDialog`).
+findings and kept the framework (`ParentMenu`, `ChildMenuImp`, `AutoDialog`).
 
 ## Rules
 
@@ -73,7 +73,7 @@ findings and kept the framework (`ParentMenu`, `ChildMenu`, `AutoDialog`).
   it by scanning the entry class file. If the entry class named such a type, loading the module
   on a server without that plugin would throw out of the host's `onEnable`.
 - **The host has no code about another plugin.** It has hooks named for what the host needs:
-  name sources, the Bedrock check, placement grants, an owner notifier, another way to draw a
+  name sources, placement grants, an owner notifier, another way to draw a
   menu (`MenuRenderer`), what is attached to a
   container (`ContainerAttachments`) and who owns a container nobody locked
   (`ContainerOwnerSource`). Everything about ChestShop, Treasury, Realty and the rest, including
@@ -151,14 +151,20 @@ findings and kept the framework (`ParentMenu`, `ChildMenu`, `AutoDialog`).
 
 ## Rules for menus
 
-- **A menu is built once and can be drawn two ways.** `AutoDialog.Builder.build()` gives the
-  Paper dialog and the same menu as a `MenuView`: title, body lines, inputs, buttons.
-  `ParentMenuImp.open` asks `Integrations.showMenu` first, and shows the dialog if no module
-  drew it. The Floodgate module draws it as Bedrock forms (`BedrockForms`, laid out by
-  `FormPlan`): a form of buttons, and the inputs asked for when a button that reads them is
-  pressed, because Bedrock has no form with both.
+- **A menu is described once and can be drawn two ways.** A menu implements `build()`, which
+  describes it with `AutoDialog.builder()`: title, lines, inputs, buttons. That description is a
+  `MenuView`, and the Paper dialog is made from it, so the two cannot differ. `ParentMenuImp.open`
+  builds, asks `Integrations.showMenu` first, and shows the dialog if no module drew it. The
+  Floodgate module draws it as Bedrock forms (`BedrockForms`, laid out by `FormPlan`): a form of
+  buttons, and the inputs asked for when a button that reads them is pressed, because Bedrock
+  has no form with both. A menu with no buttons, such as `LoadingMenu`, reaches a Bedrock
+  player as chat.
+- **A menu builds on each `open()`, never in its constructor**, so a reload shows at once and
+  `again -> open()` is the way back to a menu.
+- **A button only some players get is added with `permissionButton`**: hidden without the
+  permission, and checked again at the click.
 - **A button that reads the menu's inputs is added with `submitButton`**, any other with
-  `button` or `buttonWithPlayer`. Only a submit button makes a Bedrock player fill the inputs in.
+  `button` or `wideButton`. Only a submit button makes a Bedrock player fill the inputs in.
 - **A dialog's answer comes from the client.** A menu lists only what a player may do, and the
   code that does it checks again: `VaultInventoryService.openVirtualInventory` checks the
   action's permission, and `captureDirectAsync` and `captureHanging` check the capture one.
@@ -168,7 +174,10 @@ findings and kept the framework (`ParentMenu`, `ChildMenu`, `AutoDialog`).
 - **A menu that leads to a vault passes the way back**, so Back returns to the same page and search.
 - **A sentence with two outcomes is two keys** (`scan.entry-vaultable` / `-not-vaultable`), chosen
   in Java. Never insert "yes" or "no" into one.
-- **A list that is paged is sorted first**, by something that does not change between pages.
+- **A list that is paged is sorted first**, by something that does not change between pages,
+  and its pages are worked out by `Paging`.
+- **An owner's name comes from `plugin.names()`**: `displayName(s)` in a menu, `displayNameNow`
+  for text drawn again and again. No class keeps a name cache of its own.
 
 ## Standardisation programme
 

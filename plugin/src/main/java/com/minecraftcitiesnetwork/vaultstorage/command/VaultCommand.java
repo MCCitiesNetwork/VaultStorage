@@ -24,7 +24,6 @@ import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Executor;
 import java.util.logging.Level;
 import net.kyori.adventure.text.Component;
 import org.bukkit.command.CommandSender;
@@ -166,7 +165,7 @@ public final class VaultCommand {
                     } else {
                         new VaultCaptureMenu(plugin, player, VaultUIContext.adminFiltered(player.getUniqueId(), owner)).open();
                     }
-                }, mainThread(plugin))
+                }, plugin.mainThread())
                 .exceptionally(failure -> {
                     plugin.getLogger().log(Level.SEVERE, "Could not resolve " + ownerName + ".", failure);
                     player.sendMessage(messages.messageFor(MessageKeys.COMMAND_MENU_PLAYER_NOT_FOUND));
@@ -232,7 +231,7 @@ public final class VaultCommand {
                         case OpenOutcome.Failed failed ->
                                 player.sendMessage(messages.messageFor(MessageKeys.INVENTORY_OPEN_FAILED));
                     }
-                }, mainThread(plugin));
+                }, plugin.mainThread());
         return Command.SINGLE_SUCCESS;
     }
 
@@ -260,7 +259,7 @@ public final class VaultCommand {
                     return new TransferOutcome.Failed();
                 })
                 .thenAcceptAsync(outcome -> sender.sendMessage(transferReply(plugin, sender, outcome)),
-                        mainThread(plugin));
+                        plugin.mainThread());
         return Command.SINGLE_SUCCESS;
     }
 
@@ -291,7 +290,7 @@ public final class VaultCommand {
             sender.sendMessage(plugin.messages().messageFor(failure == null
                     ? MessageKeys.COMMAND_RELOAD_DONE : MessageKeys.COMMAND_RELOAD_FAILED));
             return null;
-        }, mainThread(plugin));
+        }, plugin.mainThread());
         return Command.SINGLE_SUCCESS;
     }
 
@@ -328,9 +327,5 @@ public final class VaultCommand {
             }
         }
         return builder.buildFuture();
-    }
-
-    private static @NotNull Executor mainThread(@NotNull VaultStoragePlugin plugin) {
-        return plugin.getServer().getScheduler().getMainThreadExecutor(plugin);
     }
 }

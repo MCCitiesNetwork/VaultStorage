@@ -6,9 +6,6 @@ import com.sk89q.worldguard.WorldGuard;
 import com.sk89q.worldguard.protection.managers.RegionManager;
 import com.sk89q.worldguard.protection.regions.ProtectedRegion;
 import com.sk89q.worldguard.protection.regions.RegionContainer;
-import com.minecraftcitiesnetwork.vaultstorage.region.VaultRegion;
-import com.minecraftcitiesnetwork.vaultstorage.region.WorldGuardService;
-import com.minecraftcitiesnetwork.vaultstorage.region.VaultRegionImp;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.util.BoundingBox;
@@ -18,7 +15,7 @@ import org.jetbrains.annotations.Nullable;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -57,29 +54,38 @@ public final class WorldGuardServiceImp implements WorldGuardService {
         return regions;
     }
 
-    /**
-     * Returns all regions in the given world. This method queries WorldGuard's RegionManager
-     * directly on each call and does not use an internal cache.
-     *
-     * @param world the Bukkit world (not null)
-     * @return a list of regions in the world (never null)
-     */
     @Override
-    public @NotNull List<VaultRegion> getRegionsIn(@NotNull World world) {
-        Objects.requireNonNull(world, "world");
-
-        com.sk89q.worldedit.world.World weWorld = BukkitAdapter.adapt(world);
-        RegionManager manager = regionContainer.get(weWorld);
+    public @NotNull List<String> regionIds(@NotNull World world, @NotNull String nameContains, @Nullable UUID partOf) {
+        RegionManager manager = regionContainer.get(BukkitAdapter.adapt(world));
         if (manager == null) {
             return List.of();
         }
+        String wanted = nameContains.toLowerCase(Locale.ROOT);
+        return manager.getRegions().values().stream()
+                .filter(region -> region.getId().toLowerCase(Locale.ROOT).contains(wanted))
+                .filter(region -> partOf == null || hasPart(region, partOf))
+                .map(ProtectedRegion::getId)
+                .sorted(String.CASE_INSENSITIVE_ORDER)
+                .toList();
+    }
 
-        List<VaultRegion> regions = new ArrayList<>(manager.getRegions().size());
-        for (Map.Entry<String, ProtectedRegion> entry : manager.getRegions().entrySet()) {
-
-            regions.add(buildVaultRegion(entry.getValue().getId(), entry.getValue()));
+    /** As {@link VaultRegion#isPartOfRegion}: an owner or member of the region or of a parent. */
+    private static boolean hasPart(@NotNull ProtectedRegion region, @NotNull UUID player) {
+        for (ProtectedRegion cursor = region; cursor != null; cursor = cursor.getParent()) {
+            if (cursor.getOwners().getPlayerDomain().contains(player)
+                    || cursor.getMembers().getPlayerDomain().contains(player)) {
+                return true;
+            }
         }
-        return regions;
+        return false;
+    }
+
+    /** Asks the one region, so nothing is built. */
+    @Override
+    public boolean isInside(@NotNull String regionId, @NotNull Block block) {
+        RegionManager manager = regionContainer.get(BukkitAdapter.adapt(block.getWorld()));
+        ProtectedRegion region = manager == null ? null : manager.getRegion(regionId);
+        return region != null && region.contains(block.getX(), block.getY(), block.getZ());
     }
 
     @Override
@@ -102,9 +108,8 @@ public final class WorldGuardServiceImp implements WorldGuardService {
             memberSet.addAll(cursor.getMembers().getPlayerDomain().getUniqueIds());
             cursor = cursor.getParent();
         }
-        int priority = protectedRegion.getPriority();
         BoundingBox box = getBoundingBox(protectedRegion);
-        return new VaultRegionImp(id, new ArrayList<>(memberSet), new ArrayList<>(ownerSet), box, priority);
+        return new VaultRegionImp(id, new ArrayList<>(memberSet), new ArrayList<>(ownerSet), box);
     }
 
     private @NotNull BoundingBox getBoundingBox(@NotNull ProtectedRegion region) {

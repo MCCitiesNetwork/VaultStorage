@@ -4,7 +4,6 @@ import com.minecraftcitiesnetwork.vaultstorage.names.NameSource;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-import java.util.function.Predicate;
 import org.geysermc.floodgate.api.FloodgateApi;
 import org.jetbrains.annotations.NotNull;
 
@@ -22,11 +21,6 @@ public final class FloodgateNames implements NameSource {
 
     public static @NotNull NameSource create() {
         return new FloodgateNames(FloodgateApi.getInstance());
-    }
-
-    /** Whether a player is connected through Floodgate, including one with a linked Java account. */
-    public static @NotNull Predicate<UUID> clientCheck() {
-        return FloodgateApi.getInstance()::isFloodgatePlayer;
     }
 
     @Override

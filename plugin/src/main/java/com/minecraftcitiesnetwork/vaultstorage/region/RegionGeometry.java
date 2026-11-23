@@ -1,29 +1,15 @@
 package com.minecraftcitiesnetwork.vaultstorage.region;
 
-import org.jetbrains.annotations.NotNull;
 import org.bukkit.util.BoundingBox;
+import org.jetbrains.annotations.NotNull;
 
 /**
- * Inclusive axis-aligned bounding-box tests for WorldGuard regions. Inclusive on all bounds because a
- * WorldGuard region's maximum point is an inclusive block coordinate — unlike {@link BoundingBox}'s own
- * {@code contains}/{@code overlaps}, which are exclusive on the max edge.
+ * Bounding-box tests for WorldGuard regions, inclusive on every bound: a region's maximum
+ * point is a block that belongs to it, unlike {@link BoundingBox}'s own tests.
  */
 public final class RegionGeometry {
 
-    private RegionGeometry() {}
-
-    /** True if the point lies within the box, inclusive on all six bounds. */
-    public static boolean containsInclusive(@NotNull BoundingBox b, double x, double y, double z) {
-        return x >= b.getMinX() && x <= b.getMaxX()
-                && y >= b.getMinY() && y <= b.getMaxY()
-                && z >= b.getMinZ() && z <= b.getMaxZ();
-    }
-
-    /** True if {@code outer} fully encloses {@code inner}, inclusive on all bounds. */
-    public static boolean containsInclusive(@NotNull BoundingBox outer, @NotNull BoundingBox inner) {
-        return outer.getMinX() <= inner.getMinX() && outer.getMaxX() >= inner.getMaxX()
-                && outer.getMinY() <= inner.getMinY() && outer.getMaxY() >= inner.getMaxY()
-                && outer.getMinZ() <= inner.getMinZ() && outer.getMaxZ() >= inner.getMaxZ();
+    private RegionGeometry() {
     }
 
     /**
@@ -31,13 +17,9 @@ public final class RegionGeometry {
      * the same bounds are neither nested in the other.
      */
     public static boolean nestedInside(@NotNull BoundingBox outer, @NotNull BoundingBox inner) {
-        return containsInclusive(outer, inner) && !outer.equals(inner);
-    }
-
-    /** True if the two boxes intersect or merely touch (inclusive on the max edge). */
-    public static boolean overlapsInclusive(@NotNull BoundingBox a, @NotNull BoundingBox b) {
-        return a.getMinX() <= b.getMaxX() && a.getMaxX() >= b.getMinX()
-                && a.getMinY() <= b.getMaxY() && a.getMaxY() >= b.getMinY()
-                && a.getMinZ() <= b.getMaxZ() && a.getMaxZ() >= b.getMinZ();
+        return outer.getMinX() <= inner.getMinX() && outer.getMaxX() >= inner.getMaxX()
+                && outer.getMinY() <= inner.getMinY() && outer.getMaxY() >= inner.getMaxY()
+                && outer.getMinZ() <= inner.getMinZ() && outer.getMaxZ() >= inner.getMaxZ()
+                && !outer.equals(inner);
     }
 }

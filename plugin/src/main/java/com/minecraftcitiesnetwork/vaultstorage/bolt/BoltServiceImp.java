@@ -1,7 +1,6 @@
 package com.minecraftcitiesnetwork.vaultstorage.bolt;
 
 import org.bukkit.Server;
-import com.minecraftcitiesnetwork.vaultstorage.bolt.BoltService;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Entity;

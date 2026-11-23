@@ -1,219 +1,90 @@
 package com.minecraftcitiesnetwork.vaultstorage.menu;
 
-import org.jetbrains.annotations.Nullable;
 import com.minecraftcitiesnetwork.vaultstorage.config.MessageKeys;
-import io.papermc.paper.registry.data.dialog.DialogBase;
-import io.papermc.paper.registry.data.dialog.body.DialogBody;
-import com.minecraftcitiesnetwork.vaultstorage.region.VaultRegion;
-import com.minecraftcitiesnetwork.vaultstorage.region.WorldGuardService;
-import com.minecraftcitiesnetwork.vaultstorage.menu.AutoDialog;
-import com.minecraftcitiesnetwork.vaultstorage.menu.ParentMenu;
 import com.minecraftcitiesnetwork.vaultstorage.permission.Permissions;
-import org.bukkit.World;
+import java.util.List;
+import java.util.Map;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
-
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
+import org.jetbrains.annotations.Nullable;
 
 /**
- * Child menu that lists regions in the current world with pagination and a text filter.
- * Selecting a region opens VaultScanMenu in results mode.
+ * Lists regions a page at a time: those in the player's world whose name contains what was
+ * searched for, or a given few. Picking one scans it.
  */
 public final class VaultRegionListMenu extends ChildMenuImp {
 
-
-
-
     private static final int PAGE_SIZE = 6;
 
-    private final String query; // used only in browse mode
-    private final int page; // 0-based
-    private final @Nullable List<String> subsetIds; // when non-null, list only these region ids
+    private final @NotNull VaultUIContext uiContext;
+    private final @NotNull String query;
+    /** When not null, exactly these regions are listed and nothing is searched. Sorted. */
+    private final @Nullable List<String> given;
+    private final int page;
 
-    /** Browse mode: filter by query across all regions in world. */
-    public VaultRegionListMenu(
-            @NotNull Player player,
-            @NotNull ParentMenu parent,
-            @NotNull String query,
-            int page
-    ) {
-        super(player, parent, "vault_region_list");
-        this.query = query.trim();
-        this.page = Math.max(0, page);
-        this.subsetIds = null;
-        setDialog(build());
+    private VaultRegionListMenu(@NotNull Player player, @NotNull ParentMenu parent, @NotNull VaultUIContext ctx,
+                                @NotNull String query, @Nullable List<String> given, int page) {
+        super(player, parent);
+        this.uiContext = ctx;
+        this.query = query;
+        this.given = given;
+        this.page = page;
     }
 
-    /** Subset mode: list exactly these region ids (e.g., regions at player's location). */
-    public VaultRegionListMenu(@NotNull Player player, @NotNull ParentMenu parent, @NotNull List<String> regionIds, int page) {
-        super(player, parent, "vault_region_list_subset");
-        this.query = "";
-        this.page = Math.max(0, page);
-        // normalize: copy and sort case-insensitively
-        List<String> ids = new ArrayList<>(regionIds);
-        ids.sort(String.CASE_INSENSITIVE_ORDER);
-        this.subsetIds = ids;
-        setDialog(build());
+    /** The regions of the player's world whose name contains the query. */
+    public static @NotNull VaultRegionListMenu search(@NotNull Player player, @NotNull ParentMenu parent,
+                                                      @NotNull VaultUIContext ctx, @NotNull String query) {
+        return new VaultRegionListMenu(player, parent, ctx, query.trim(), null, 0);
     }
 
-    private @NotNull AutoDialog build() {
-        AutoDialog.Builder builder = dialogBuilder();
-        Map<String,String> phTitle = Map.of("%player%", player().getName(), "%query%", query == null ? "" : query);
-        builder.title(plugin.text().of(MessageKeys.REGIONS_TITLE, phTitle));
-        builder.canCloseWithEscape(true);
-        builder.afterAction(DialogBase.DialogAfterAction.CLOSE);
+    /** Exactly these regions, such as the ones that overlap where the player stands. */
+    public static @NotNull VaultRegionListMenu of(@NotNull Player player, @NotNull ParentMenu parent,
+                                                  @NotNull VaultUIContext ctx, @NotNull List<String> regionIds) {
+        return new VaultRegionListMenu(player, parent, ctx, "",
+                regionIds.stream().sorted(String.CASE_INSENSITIVE_ORDER).toList(), 0);
+    }
 
-        if (subsetIds != null) {
-            // Subset mode: paginate over provided ids only
-            int total = subsetIds.size();
-            int pages = Math.max(1, (int) Math.ceil(total / (double) PAGE_SIZE));
-            int currentPage = Math.min(Math.max(0, page), pages - 1);
-            int from = currentPage * PAGE_SIZE;
-            int to = Math.min(total, from + PAGE_SIZE);
-
-            Map<String,String> phHeader = Map.of(
-                    "%count%", String.valueOf(total),
-                    "%page%", String.valueOf(currentPage + 1),
-                    "%pages%", String.valueOf(pages),
-                    "%query%", ""
-            );
-            builder.addBody(DialogBody.plainMessage(plugin.text().of(MessageKeys.REGIONS_HEADER, phHeader)));
-
-            if (from < to) {
-                for (int i = from; i < to; i++) {
-                    String id = subsetIds.get(i);
-                    Map<String,String> ph = Map.of("%region%", id);
-                    builder.button(plugin.text().of(MessageKeys.REGIONS_REGION_BTN, ph), ctx -> openResultsFor(ctx.player(), id));
-                }
-            } else {
-                builder.addBody(DialogBody.plainMessage(plugin.text().of(MessageKeys.REGIONS_NONE_FOUND)));
-            }
-
-            if (pages > 1) {
-                if (currentPage > 0) builder.button(plugin.text().of(MessageKeys.REGIONS_PREV_PAGE_BTN), ctx -> new VaultRegionListMenu(ctx.player(), parentMenu(), subsetIds, currentPage - 1).open());
-                if (currentPage < pages - 1) builder.button(plugin.text().of(MessageKeys.REGIONS_NEXT_PAGE_BTN), ctx -> new VaultRegionListMenu(ctx.player(), parentMenu(), subsetIds, currentPage + 1).open());
-            }
-
-            builder.button(plugin.text().of(MessageKeys.REGIONS_BACK_BTN), ctx -> {
-                VaultUIContext backCtx = ctx.player().hasPermission(Permissions.ADMIN) ? VaultUIContext.admin(ctx.player().getUniqueId()) : VaultUIContext.self(ctx.player().getUniqueId());
-                new VaultScanMenu(ctx.player(), parentMenu(), backCtx).open();
-            });
-            return builder.build();
+    /** The region ids to list, sorted, so a page shows the same regions each time it is built. */
+    private @NotNull List<String> regionIds() {
+        if (this.given != null) {
+            return this.given;
         }
-
-        // Browse mode
-        WorldGuardService wgs = plugin.worldGuard();
-        if (wgs == null) {
-            builder.addBody(DialogBody.plainMessage(plugin.text().of(MessageKeys.REGIONS_SERVICES_MISSING)));
-            builder.button(plugin.text().of(MessageKeys.REGIONS_BACK_BTN), ctx -> new VaultScanMenu(ctx.player(), parentMenu()).open());
-            return builder.build();
-        }
-
-        World world = player().getWorld();
-        List<VaultRegion> all = wgs.getRegionsIn(world);
         // Without the staff view a player is shown only the regions they have a part in.
-        List<VaultRegion> filtered = filterAndSort(all, query).stream()
-                .filter(region -> mayScan(player(), region)).toList();
-
-        int total = filtered.size();
-        int pages = Math.max(1, (int) Math.ceil(total / (double) PAGE_SIZE));
-        int currentPage = Math.min(Math.max(0, page), pages - 1);
-        int from = currentPage * PAGE_SIZE;
-        int to = Math.min(total, from + PAGE_SIZE);
-
-        Map<String,String> phHeader = Map.of(
-                "%count%", String.valueOf(total),
-                "%page%", String.valueOf(currentPage + 1),
-                "%pages%", String.valueOf(pages),
-                "%query%", query
-        );
-        builder.addBody(DialogBody.plainMessage(plugin.text().of(MessageKeys.REGIONS_HEADER, phHeader)));
-
-        if (from < to) {
-            for (int i = from; i < to; i++) {
-                VaultRegion r = filtered.get(i);
-                Map<String,String> ph = Map.of("%region%", r.id());
-                builder.button(plugin.text().of(MessageKeys.REGIONS_REGION_BTN, ph), ctx -> openResultsFor(ctx.player(), r.id()));
-            }
-        } else {
-            builder.addBody(DialogBody.plainMessage(plugin.text().of(MessageKeys.REGIONS_NONE_FOUND)));
-        }
-
-        if (pages > 1) {
-            if (currentPage > 0) builder.button(plugin.text().of(MessageKeys.REGIONS_PREV_PAGE_BTN), ctx -> new VaultRegionListMenu(ctx.player(), parentMenu(), query, currentPage - 1).open());
-            if (currentPage < pages - 1) builder.button(plugin.text().of(MessageKeys.REGIONS_NEXT_PAGE_BTN), ctx -> new VaultRegionListMenu(ctx.player(), parentMenu(), query, currentPage + 1).open());
-        }
-
-        builder.button(plugin.text().of(MessageKeys.REGIONS_BACK_BTN), ctx -> {
-            VaultUIContext backCtx = ctx.player().hasPermission(Permissions.ADMIN) ? VaultUIContext.admin(ctx.player().getUniqueId()) : VaultUIContext.self(ctx.player().getUniqueId());
-            new VaultScanMenu(ctx.player(), parentMenu(), backCtx).open();
-        });
-        return builder.build();
+        return plugin.worldGuard().regionIds(player.getWorld(), this.query,
+                player.hasPermission(Permissions.ADMIN) ? null : player.getUniqueId());
     }
 
     @Override
-    public void open() {
-        setDialog(build());
-        super.open();
-    }
-
-    /**
-     * Opens the scan results menu for a selected region applying permission-based filtering.
-     * <p>Context rules: ADMIN -> full (no owner filter); USER -> self-filter.</p>
-     * @param player actor opening results
-     * @param regionId target region identifier
-     */
-    private void openResultsFor(@NotNull Player player, @NotNull String regionId) {
-        WorldGuardService regions = plugin.worldGuard();
-        VaultRegion target = regions == null ? null : regions.getRegionById(regionId, player.getWorld());
-        boolean allowed = target != null && mayScan(player, target);
-        if (!allowed) {
-            player.sendMessage(plugin.text().of(MessageKeys.SCAN_NOT_YOUR_REGION));
-            return;
+    protected @NotNull AutoDialog build() {
+        List<String> ids = regionIds();
+        Paging paging = Paging.of(ids.size(), PAGE_SIZE, this.page);
+        AutoDialog.Builder builder = AutoDialog.builder()
+                .title(plugin.text().of(MessageKeys.REGIONS_TITLE,
+                        Map.of("%player%", player.getName(), "%query%", this.query)))
+                .line(plugin.text().of(MessageKeys.REGIONS_HEADER, Map.of(
+                        "%count%", String.valueOf(paging.total()),
+                        "%page%", String.valueOf(paging.page() + 1),
+                        "%pages%", String.valueOf(paging.pages()),
+                        "%query%", this.query)));
+        if (ids.isEmpty()) {
+            builder.line(plugin.text().of(MessageKeys.REGIONS_NONE_FOUND));
         }
-        if (!checkCooldown(player)) return;
-        VaultUIContext context = player.hasPermission(Permissions.ADMIN) ? VaultUIContext.admin(player.getUniqueId()) : VaultUIContext.self(player.getUniqueId());
-        new LoadingMenu(player, parentMenu(), Map.of("%player%", player.getName())).open();
-        plugin.scanService().scan(player, regionId, context, results -> {
-            if (results == null) {
-                player.closeDialog();
-                return;
-            }
-            new VaultScanMenu(player, parentMenu(), context, regionId, results).open();
-        });
-    }
-
-    /** Staff may scan any region; anyone else only one they own or are a member of. */
-    static boolean mayScan(@NotNull Player player, @NotNull VaultRegion region) {
-        return player.hasPermission(Permissions.ADMIN) || region.isPartOfRegion(player.getUniqueId());
-    }
-
-    private boolean checkCooldown(@NotNull Player player) {
-        if (player.hasPermission(Permissions.ADMIN)) return true;
-        var session = plugin.sessionManager().getOrCreate(player.getUniqueId());
-        long now = System.currentTimeMillis();
-        long last = session.lastScanTime();
-        long cooldownMs = plugin.settings().scan().cooldownSeconds() * 1000;
-        if (now - last < cooldownMs) {
-            long remaining = (cooldownMs - (now - last)) / 1000;
-            player.sendMessage(plugin.text().of(MessageKeys.REGIONS_SCAN_COOLDOWN, Map.of("%time%", String.valueOf(remaining))));
-            return false;
+        for (String id : ids.subList(paging.offset(), Math.min(ids.size(), paging.offset() + PAGE_SIZE))) {
+            builder.button(plugin.text().of(MessageKeys.REGIONS_REGION_BTN, Map.of("%region%", id)),
+                    actor -> RegionScans.open(parentMenu(), actor, id, uiContext));
         }
-        session.markScanned(now);
-        return true;
+        if (paging.hasPrevious()) {
+            builder.button(plugin.text().of(MessageKeys.REGIONS_PREV_PAGE_BTN), actor -> at(actor, paging.page() - 1).open());
+        }
+        if (paging.hasNext()) {
+            builder.button(plugin.text().of(MessageKeys.REGIONS_NEXT_PAGE_BTN), actor -> at(actor, paging.page() + 1).open());
+        }
+        builder.button(plugin.text().of(MessageKeys.REGIONS_BACK_BTN),
+                actor -> new VaultScanMenu(actor, parentMenu(), uiContext).open());
+        return builder.build();
     }
 
-    private @NotNull List<VaultRegion> filterAndSort(@NotNull List<VaultRegion> all, @Nullable String filter) {
-        if (filter == null || filter.isBlank()) return all.stream().sorted(Comparator.comparing(VaultRegion::id, String.CASE_INSENSITIVE_ORDER)).toList();
-        String f = filter.toLowerCase(Locale.ROOT);
-        return all.stream()
-                .filter(r -> r.id().toLowerCase(Locale.ROOT).contains(f))
-                .sorted(Comparator.comparing(VaultRegion::id, String.CASE_INSENSITIVE_ORDER))
-                .toList();
+    private @NotNull VaultRegionListMenu at(@NotNull Player actor, int otherPage) {
+        return new VaultRegionListMenu(actor, parentMenu(), this.uiContext, this.query, this.given, otherPage);
     }
 }
-

@@ -4,8 +4,6 @@ import org.bukkit.Chunk;
 import org.bukkit.entity.ItemFrame;
 import com.minecraftcitiesnetwork.vaultstorage.config.MessageKeys;
 import com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin;
-import com.minecraftcitiesnetwork.vaultstorage.capture.PlayerVaultEvent;
-import com.minecraftcitiesnetwork.vaultstorage.bolt.BoltService;
 import com.minecraftcitiesnetwork.vaultstorage.vault.ItemSerialization;
 import com.minecraftcitiesnetwork.vaultstorage.names.UniqueIdentifierResolver;
 import net.kyori.adventure.text.Component;
@@ -28,11 +26,9 @@ import com.minecraftcitiesnetwork.vaultstorage.database.AppendResult;
 import com.minecraftcitiesnetwork.vaultstorage.database.NewVault;
 import com.minecraftcitiesnetwork.vaultstorage.database.VaultItem;
 import java.util.function.Consumer;
-import com.minecraftcitiesnetwork.vaultstorage.capture.VaultCapturePolicy;
 import com.minecraftcitiesnetwork.vaultstorage.permission.Permissions;
 import com.minecraftcitiesnetwork.vaultstorage.session.VaultSessionManager;
 import com.minecraftcitiesnetwork.vaultstorage.session.VaultSessionManager.Mode;
-import com.minecraftcitiesnetwork.vaultstorage.capture.HangingVaultSupport;
 
 /**
  * Service responsible for capturing a block into a Vault model.
@@ -104,12 +100,8 @@ public final class VaultCaptureService {
 
     /** Removes the block's Bolt protection. A failure is logged and the block stays protected. */
     void unprotect(@NotNull Block block) {
-        BoltService bolt = this.plugin.bolt();
-        if (bolt == null) {
-            return;
-        }
         try {
-            bolt.removeProtection(block);
+            this.plugin.bolt().removeProtection(block);
         } catch (RuntimeException ex) {
             this.plugin.getLogger().log(Level.WARNING, "Could not remove the Bolt protection at "
                     + block.getWorld().getName() + " " + block.getX() + "," + block.getY() + "," + block.getZ() + ".", ex);
@@ -124,7 +116,7 @@ public final class VaultCaptureService {
                                                                     @NotNull List<Block> otherHalves) {
         CapturePipeline<Block> pipeline = new CapturePipeline<>(plugin.repository(),
                 new BukkitContainerAccess(plugin.bolt(), owner, otherHalves, plugin.getLogger()),
-                plugin.databaseExecutor(), plugin.getServer().getScheduler().getMainThreadExecutor(plugin),
+                plugin.databaseExecutor(), plugin.mainThread(),
                 plugin.getLogger());
         return pipeline.capture(block, owner);
     }
@@ -241,12 +233,12 @@ public final class VaultCaptureService {
                     }
                 }
             });
-        }, plugin.getServer().getScheduler().getMainThreadExecutor(plugin))
+        }, plugin.mainThread())
                 .exceptionally(failure -> {
                     // The caller is waiting behind a loading dialog; it must always hear back.
                     plugin.getLogger().log(Level.SEVERE, "Capture failed for " + actor.getName()
                             + "; the container was left in place.", failure);
-                    plugin.getServer().getScheduler().getMainThreadExecutor(plugin).execute(() -> {
+                    plugin.mainThread().execute(() -> {
                         actor.sendMessage(plugin.text().of(MessageKeys.CAPTURE_SAVE_FAILED));
                         onDoneMain.accept(false);
                     });
@@ -280,7 +272,7 @@ public final class VaultCaptureService {
         if (stacks.isEmpty()) {
             return CompletableFuture.completedFuture(false);
         }
-        Executor mainThread = this.plugin.getServer().getScheduler().getMainThreadExecutor(this.plugin);
+        Executor mainThread = this.plugin.mainThread();
         return this.owners.validate(decision.containerOwner(), actor)
                 .thenComposeAsync(owner -> {
                     if (owner == null) {
@@ -370,7 +362,7 @@ public final class VaultCaptureService {
         }
 
         Block supporting = HangingVaultSupport.resolveSupportingBlock(hang);
-        Executor mainThread = plugin.getServer().getScheduler().getMainThreadExecutor(plugin);
+        Executor mainThread = plugin.mainThread();
         // Held until the entity is dealt with. The sweep only loaded this chunk for a moment, and
         // an entity in an unloaded chunk can be neither checked nor removed.
         Runnable release = this.chunks.hold(hang.getLocation().getChunk());

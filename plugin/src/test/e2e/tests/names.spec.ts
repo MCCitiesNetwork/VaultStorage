@@ -28,7 +28,7 @@ test('with Floodgate installed, its module supplies the Bedrock check and says s
     async () => {
         requireFloodgate();
         const log = serverLog();
-        expect(log).toContain('Bedrock names and the Bedrock client check come from Floodgate');
+        expect(log).toContain('Bedrock names come from Floodgate');
         expect(log).not.toContain('Floodgate is not installed');
         expect(log).not.toContain('Floodgate is enabled but');
     });

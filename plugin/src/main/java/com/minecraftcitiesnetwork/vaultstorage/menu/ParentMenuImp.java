@@ -1,62 +1,60 @@
 package com.minecraftcitiesnetwork.vaultstorage.menu;
 
-import java.util.Objects;
-import org.jetbrains.annotations.Nullable;
-import org.jetbrains.annotations.NotNull;
 import com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin;
-import io.papermc.paper.dialog.Dialog;
-import com.minecraftcitiesnetwork.vaultstorage.menu.AutoDialog;
-import com.minecraftcitiesnetwork.vaultstorage.menu.ParentMenu;
+import com.minecraftcitiesnetwork.vaultstorage.config.MessageKeys;
+import java.util.function.Consumer;
+import net.kyori.adventure.text.Component;
 import org.bukkit.entity.Player;
+import org.jetbrains.annotations.NotNull;
 
-
-/**
- * Base implementation of a ParentMenu used to build Paper Dialog UIs.
- * Provides helper methods for common UI tasks (MiniMessage parsing).
- */
+/** What every menu shares: who it is for, how it is shown, and buttons that need a permission. */
 public abstract class ParentMenuImp implements ParentMenu {
-    protected final @NotNull VaultStoragePlugin plugin;
-    protected final Player player;
-    private final String id;
-    private @Nullable AutoDialog built;
 
-    protected ParentMenuImp(@NotNull VaultStoragePlugin plugin, @NotNull Player player, @NotNull String id) {
+    protected final @NotNull VaultStoragePlugin plugin;
+    protected final @NotNull Player player;
+
+    protected ParentMenuImp(@NotNull VaultStoragePlugin plugin, @NotNull Player player) {
         this.plugin = plugin;
         this.player = player;
-        this.id = id;
     }
 
-    @Override
-    public @NotNull VaultStoragePlugin plugin() { return plugin; }
-
-    @Override
-    public @NotNull String id() { return id; }
-
-    @Override
-    public @NotNull Dialog dialog() {
-        return Objects.requireNonNull(built, "the menu's constructor sets its dialog").dialog();
-    }
+    /** The screen as it is now. Called on each open, so a reload of messages.yml shows at once. */
+    protected abstract @NotNull AutoDialog build();
 
     @Override
     public void open() {
-        if (built == null) {
-            return;
-        }
+        AutoDialog built = build();
         // A module may draw the menu its own way for this player; otherwise it is the dialog.
-        if (!plugin.integrations().showMenu(player, built.view())) {
-            player.showDialog(built.dialog());
+        if (!this.plugin.integrations().showMenu(this.player, built.view())) {
+            this.player.showDialog(built.dialog());
         }
     }
 
     @Override
-    public @NotNull Player player() { return player; }
+    public @NotNull VaultStoragePlugin plugin() {
+        return this.plugin;
+    }
 
     @Override
-    public void setDialog(@NotNull AutoDialog dialog) { this.built = dialog; }
+    public @NotNull Player player() {
+        return this.player;
+    }
 
-    @Override
-    public AutoDialog.@NotNull Builder dialogBuilder() { return AutoDialog.builder(this); }
-
-
-
+    /**
+     * A button only a player with the permission is shown. The permission is checked again at
+     * the click: the menu may be older than the permission, and its answer comes from the client.
+     */
+    protected final void permissionButton(AutoDialog.@NotNull Builder builder, @NotNull String permission,
+                                          @NotNull Component label, @NotNull Consumer<Player> action) {
+        if (!this.player.hasPermission(permission)) {
+            return;
+        }
+        builder.button(label, actor -> {
+            if (actor.hasPermission(permission)) {
+                action.accept(actor);
+            } else {
+                actor.sendMessage(this.plugin.text().of(MessageKeys.COMMAND_NO_PERMISSION));
+            }
+        });
+    }
 }

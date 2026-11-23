@@ -1,13 +1,13 @@
 package com.minecraftcitiesnetwork.vaultstorage.region;
 
 
-import com.minecraftcitiesnetwork.vaultstorage.region.VaultRegion;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
+import java.util.UUID;
 
 /**
  * Service for accessing WorldGuard regions.
@@ -19,8 +19,14 @@ public interface WorldGuardService {
     /** The regions that contain the block, by their real shape. */
     @NotNull List<VaultRegion> getRegionsAt(@NotNull Block block);
 
-    /** Every region in the world. Builds them all: for listing regions, not for finding one. */
-    @NotNull List<VaultRegion> getRegionsIn(@NotNull World world);
+    /**
+     * The ids of the world's regions whose id contains the text, sorted. No region is built.
+     *
+     * @param nameContains any case; empty for every region
+     * @param partOf       when not null, only regions this player owns or is a member of,
+     *                     through a parent region too
+     */
+    @NotNull List<String> regionIds(@NotNull World world, @NotNull String nameContains, @Nullable UUID partOf);
 
     /** The region with this id, or null. Does not build the others. */
     @Nullable VaultRegion getRegionById(@NotNull String id, @NotNull World world);

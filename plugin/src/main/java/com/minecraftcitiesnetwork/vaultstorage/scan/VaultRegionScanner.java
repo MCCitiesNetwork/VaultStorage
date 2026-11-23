@@ -12,14 +12,12 @@ import com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin;
 import com.minecraftcitiesnetwork.vaultstorage.bolt.BoltService;
 import com.minecraftcitiesnetwork.vaultstorage.region.WorldGuardService;
 import com.minecraftcitiesnetwork.vaultstorage.capture.VaultCapturePolicy;
-import com.minecraftcitiesnetwork.vaultstorage.scan.ScanResult;
 import com.minecraftcitiesnetwork.vaultstorage.menu.VaultUIContext;
 import org.bukkit.World;
 import com.minecraftcitiesnetwork.vaultstorage.region.VaultRegion;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitRunnable;
-import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.util.BoundingBox;
 import org.popcraft.bolt.protection.BlockProtection;
 import org.popcraft.bolt.protection.Protection;
@@ -39,7 +37,6 @@ public final class VaultRegionScanner {
     private final String regionId;
     private final VaultUIContext uiContext;
     private final Consumer<List<ScanResult>> callback;
-    private @Nullable BukkitTask task;
     /** Chunks held loaded for this scan. Main thread only. */
     private final List<Chunk> heldChunks = new ArrayList<>();
 
@@ -55,15 +52,6 @@ public final class VaultRegionScanner {
         World world = player.getWorld();
         WorldGuardService worldGuardService = plugin.worldGuard();
         BoltService boltService = plugin.bolt();
-
-        if (worldGuardService == null || boltService == null) {
-            // The caller put up a loading dialog; nothing will replace it.
-            player.closeDialog();
-            player.sendMessage(plugin.text().of(MessageKeys.SCAN_SERVICES_MISSING));
-            callback.accept(null);
-            return;
-        }
-
 
         VaultRegion region = worldGuardService.getRegionById(regionId, world);
         if (region == null) {
@@ -109,14 +97,8 @@ public final class VaultRegionScanner {
             if (failure != null) {
                 plugin.getLogger().log(Level.WARNING, "A chunk could not be loaded for a scan of " + regionId + ".", failure);
             }
-            this.task = new ScanTask(blockProtections, world).runTaskTimer(plugin, 1L, 1L);
+            new ScanTask(blockProtections, world).runTaskTimer(plugin, 1L, 1L);
         });
-    }
-
-    public void cancel() {
-        if (this.task != null && !this.task.isCancelled()) {
-            this.task.cancel();
-        }
     }
 
     private final class ScanTask extends BukkitRunnable {

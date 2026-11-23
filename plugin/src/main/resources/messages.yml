@@ -11,7 +11,6 @@
 loading:
   title: '<yellow><bold>Loading</bold></yellow>'
   message: '<gray>Please wait...</gray>'
-  bedrock: '<gray>Loading, one moment...</gray>'
 
 # The menu for one vault.
 action:
@@ -60,7 +59,6 @@ list:
 scan:
   title: '<gold><bold>Vault Scan</bold></gold>'
   none-found: '<gray>No protected blocks found in this region.</gray>'
-  services-missing: '<red>Scans are not available right now. Try again in a moment.</red>'
   # <region> <count>
   results-header: '<gold><bold>Region <region></bold></gold> <gray>(<count> results)</gray>'
   # <index> <x> <y> <z> <owner> <kind>
@@ -105,9 +103,6 @@ regions:
   prev-page-btn: '<gray><< Prev</gray>'
   next-page-btn: '<gray>Next >></gray>'
   back-btn: '<red><bold>Back</bold></red>'
-  services-missing: '<red>Regions cannot be listed right now. Try again in a moment.</red>'
-  # <time>
-  scan-cooldown: '<red>You can scan again in <time> seconds.</red>'
 
 # The main menu.
 capture-menu:

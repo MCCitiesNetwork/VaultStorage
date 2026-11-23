@@ -1,20 +1,18 @@
 package com.minecraftcitiesnetwork.vaultstorage.menu;
 
-import java.util.function.Consumer;
-import org.jetbrains.annotations.NotNull;
 import com.minecraftcitiesnetwork.vaultstorage.config.MessageKeys;
 import com.minecraftcitiesnetwork.vaultstorage.database.VaultFilter;
-import java.util.concurrent.CompletableFuture;
-import java.util.logging.Level;
-import io.papermc.paper.registry.data.dialog.DialogBase;
-import io.papermc.paper.registry.data.dialog.body.DialogBody;
-import com.minecraftcitiesnetwork.vaultstorage.placement.PlayerPlaceVaultEvent;
-import com.minecraftcitiesnetwork.vaultstorage.menu.AutoDialog;
 import com.minecraftcitiesnetwork.vaultstorage.permission.Permissions;
 import com.minecraftcitiesnetwork.vaultstorage.placement.PlacementRules;
+import com.minecraftcitiesnetwork.vaultstorage.placement.PlayerPlaceVaultEvent;
 import com.minecraftcitiesnetwork.vaultstorage.placement.VaultPlacementService;
 import com.minecraftcitiesnetwork.vaultstorage.session.VaultSessionManager;
 import com.minecraftcitiesnetwork.vaultstorage.session.VaultSessionManager.Mode;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
+import java.util.logging.Level;
 import org.bukkit.Location;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
@@ -26,66 +24,45 @@ import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
+import org.jetbrains.annotations.NotNull;
 
-import java.util.Map;
-import java.util.UUID;
-
-/**
- * Placement UI that mirrors the capture flow but places a selected vault relatively to the clicked face.
- */
+/** Places a vault back: the player starts placement mode and right-clicks where it should go. */
 public final class VaultPlacementMenu extends ChildMenuImp {
 
-    private final UUID vaultId;
-
-
-
-    private final VaultUIContext context;
-    private final Consumer<Player> toVault;
-    private final Consumer<Player> toList;
+    private final @NotNull UUID vaultId;
+    private final @NotNull VaultUIContext context;
+    private final @NotNull Consumer<Player> toVault;
+    private final @NotNull Consumer<Player> toList;
 
     /**
      * @param toVault where Back leads: the vault this placement is for
      * @param toList  where a finished placement leads: the list the vault was picked from
      */
-    public VaultPlacementMenu(@NotNull Player player, @NotNull ParentMenuImp parent, @NotNull UUID vaultId,
+    public VaultPlacementMenu(@NotNull Player player, @NotNull ParentMenu parent, @NotNull UUID vaultId,
                               @NotNull VaultUIContext context, @NotNull Consumer<Player> toVault,
                               @NotNull Consumer<Player> toList) {
-        super(player, parent, "vault_place_" + vaultId);
+        super(player, parent);
         this.vaultId = vaultId;
         this.context = context;
         this.toVault = toVault;
         this.toList = toList;
-        setDialog(build());
-    }
-
-    private @NotNull AutoDialog build() {
-        AutoDialog.Builder builder = dialogBuilder();
-        builder.title(plugin.text().of(MessageKeys.PLACEMENT_TITLE, Map.of("%player%", player().getName())));
-        builder.canCloseWithEscape(true);
-        builder.afterAction(DialogBase.DialogAfterAction.CLOSE);
-
-        builder.addBody(DialogBody.plainMessage(plugin.text().of(MessageKeys.PLACEMENT_INSTRUCTION, Map.of("%player%", player().getName()))));
-        builder.button(plugin.text().of(MessageKeys.PLACEMENT_START_BTN), ctx -> startPlacement(ctx.player()));
-        builder.button(plugin.text().of(MessageKeys.PLACEMENT_BACK_BTN), ctx -> this.toVault.accept(ctx.player()));
-        return builder.build();
     }
 
     @Override
-    public void open() {
-        setDialog(build());
-        super.open();
+    protected @NotNull AutoDialog build() {
+        Map<String, String> placeholders = Map.of("%player%", player.getName());
+        return AutoDialog.builder()
+                .title(plugin.text().of(MessageKeys.PLACEMENT_TITLE, placeholders))
+                .line(plugin.text().of(MessageKeys.PLACEMENT_INSTRUCTION, placeholders))
+                .button(plugin.text().of(MessageKeys.PLACEMENT_START_BTN), this::startPlacement)
+                .button(plugin.text().of(MessageKeys.PLACEMENT_BACK_BTN), this.toVault)
+                .build();
     }
 
     /**
-     * Starts placement interaction capturing the next right-click on a block face.
-     * <p>
-     * Concurrency notes:
-     * <ul>
-     *   <li>Shows a configurable {@link LoadingMenu} while the placement DB operation runs asynchronously.</li>
-     *   <li>All UI updates (messages/dialog opens) are scheduled back on the main thread after the DB callback.</li>
-     *   <li>Prevents race conditions that could reopen dialogs before the DB result is available.</li>
-     * </ul>
-     * </p>
+     * Puts the player in placement mode: the next right-click on a block places the vault
+     * against the clicked face, a left-click cancels. The loading menu shown while the
+     * database works is ended on every path.
      */
     private void startPlacement(@NotNull Player actor) {
         VaultSessionManager.Session session = plugin.sessionManager().getOrCreate(actor.getUniqueId());
@@ -161,12 +138,12 @@ public final class VaultPlacementMenu extends ChildMenuImp {
                                                 actor.sendMessage(plugin.text().of(MessageKeys.PLACEMENT_NONE_LEFT));
                                                 actor.closeDialog();
                                             }
-                                        }, plugin.getServer().getScheduler().getMainThreadExecutor(plugin))
+                                        }, plugin.mainThread())
                                         .exceptionally(failure -> {
                                             plugin.getLogger().log(Level.WARNING, "Could not count the remaining vaults.", failure);
                                             // The vault is placed; only the way back is unknown. The
                                             // loading dialog must not be left up.
-                                            plugin.getServer().getScheduler().getMainThreadExecutor(plugin)
+                                            plugin.mainThread()
                                                     .execute(actor::closeDialog);
                                             return null;
                                         });

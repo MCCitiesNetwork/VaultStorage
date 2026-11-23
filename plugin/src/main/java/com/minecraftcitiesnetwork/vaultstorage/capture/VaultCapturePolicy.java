@@ -1,5 +1,6 @@
 package com.minecraftcitiesnetwork.vaultstorage.capture;
 
+import com.minecraftcitiesnetwork.vaultstorage.names.UniqueIdentifierResolver;
 import com.minecraftcitiesnetwork.vaultstorage.region.WorldGuardService;
 import java.util.function.Supplier;
 import java.util.logging.Logger;
@@ -10,7 +11,6 @@ import com.minecraftcitiesnetwork.vaultstorage.permission.Permissions;
 
 import com.minecraftcitiesnetwork.vaultstorage.region.VaultRegion;
 import com.minecraftcitiesnetwork.vaultstorage.bolt.BoltService;
-import com.minecraftcitiesnetwork.vaultstorage.capture.HangingVaultSupport;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Hanging;
@@ -108,7 +108,7 @@ public final class VaultCapturePolicy {
 
         // Log actor UUID for debugging Bedrock player issues
         UUID actorUUID = actor.getUniqueId();
-        if (actorUUID.toString().matches("0{8}-0{4}-0{4}-0{4}-0{12}")) {
+        if (!UniqueIdentifierResolver.isValidUUID(actorUUID)) {
             this.logger.warning("[VaultCapturePolicy] Invalid actor UUID for player " + actor.getName() + ": " + actorUUID);
         }
 
@@ -138,7 +138,7 @@ public final class VaultCapturePolicy {
         }
 
         UUID actorUUID = actor.getUniqueId();
-        if (actorUUID.toString().matches("0{8}-0{4}-0{4}-0{4}-0{12}")) {
+        if (!UniqueIdentifierResolver.isValidUUID(actorUUID)) {
             this.logger.warning("[VaultCapturePolicy] Invalid actor UUID for player " + actor.getName() + ": " + actorUUID);
         }
 

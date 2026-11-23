@@ -3,10 +3,7 @@ package com.minecraftcitiesnetwork.vaultstorage.capture;
 import java.util.logging.Level;
 import org.jetbrains.annotations.Nullable;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Executor;
 import com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin;
-import com.minecraftcitiesnetwork.vaultstorage.capture.PlayerVaultEvent;
-import com.minecraftcitiesnetwork.vaultstorage.capture.VaultCapturePolicy;
 import com.minecraftcitiesnetwork.vaultstorage.config.MessageKeys;
 import com.minecraftcitiesnetwork.vaultstorage.session.VaultSessionManager.Mode;
 import com.minecraftcitiesnetwork.vaultstorage.session.VaultSessionManager;
@@ -101,7 +98,7 @@ public final class CaptureSession implements Listener {
         // to say. The rest of the click waits for the answer; with nothing to ask, it runs now.
         plugin.containerOwners().ownerOf(captureBlock)
                 .thenCompose(owner -> capture(captureBlock, clickedSign))
-                .whenCompleteAsync((done, failure) -> finish(failure), mainThread());
+                .whenCompleteAsync((done, failure) -> finish(failure), plugin.mainThread());
     }
 
     /** Ends a click, however it went. Main thread. */
@@ -112,10 +109,6 @@ public final class CaptureSession implements Listener {
                     + "; the container was left in place.", failure);
             actor.sendMessage(plugin.text().of(MessageKeys.CAPTURE_SAVE_FAILED));
         }
-    }
-
-    private @NotNull Executor mainThread() {
-        return plugin.getServer().getScheduler().getMainThreadExecutor(plugin);
     }
 
     /**
@@ -178,7 +171,7 @@ public final class CaptureSession implements Listener {
             }
             return service.storeThenRemove(captureBlock, owner, outcome.reProtectedHalves())
                     .thenAccept(result -> report(result, captureBlock, owner));
-        }, mainThread());
+        }, plugin.mainThread());
     }
 
     /**
@@ -240,6 +233,6 @@ public final class CaptureSession implements Listener {
 
         busy = true;
         cancelCooldownUntil = System.currentTimeMillis() + CANCEL_COOLDOWN_MILLIS;
-        service.captureHanging(actor, (Hanging) clicked).whenCompleteAsync((vaulted, failure) -> finish(failure), mainThread());
+        service.captureHanging(actor, (Hanging) clicked).whenCompleteAsync((vaulted, failure) -> finish(failure), plugin.mainThread());
     }
 }

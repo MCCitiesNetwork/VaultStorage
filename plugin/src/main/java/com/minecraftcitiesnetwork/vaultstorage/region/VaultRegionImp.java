@@ -1,6 +1,5 @@
 package com.minecraftcitiesnetwork.vaultstorage.region;
 
-import com.minecraftcitiesnetwork.vaultstorage.region.VaultRegion;
 import org.bukkit.util.BoundingBox;
 import org.jetbrains.annotations.NotNull;
 
@@ -10,8 +9,7 @@ import java.util.UUID;
 public record VaultRegionImp(@NotNull String id,
                              @NotNull List<UUID> members,
                              @NotNull List<UUID> owners,
-                             @NotNull BoundingBox boundingBox,
-                             int priority) implements VaultRegion {
+                             @NotNull BoundingBox boundingBox) implements VaultRegion {
 
     @Override
     public boolean isMember(@NotNull UUID playerUuid) {

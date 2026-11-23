@@ -1,474 +1,50 @@
 package com.minecraftcitiesnetwork.vaultstorage.menu;
 
-import java.util.Objects;
-import org.jetbrains.annotations.Nullable;
-import org.bukkit.entity.Hanging;
-import java.util.Comparator;
-import com.minecraftcitiesnetwork.vaultstorage.permission.Permissions;
 import com.minecraftcitiesnetwork.vaultstorage.config.MessageKeys;
-import io.papermc.paper.registry.data.dialog.DialogBase;
-import io.papermc.paper.registry.data.dialog.body.DialogBody;
-import io.papermc.paper.registry.data.dialog.input.DialogInput;
-import com.minecraftcitiesnetwork.vaultstorage.scan.ScanResult;
 import com.minecraftcitiesnetwork.vaultstorage.region.VaultRegion;
-import com.minecraftcitiesnetwork.vaultstorage.bolt.BoltService;
-import com.minecraftcitiesnetwork.vaultstorage.region.WorldGuardService;
-import com.minecraftcitiesnetwork.vaultstorage.menu.AutoDialog;
-import com.minecraftcitiesnetwork.vaultstorage.menu.ParentMenu;
-import com.minecraftcitiesnetwork.vaultstorage.capture.VaultCapturePolicy;
-import com.minecraftcitiesnetwork.vaultstorage.capture.VaultCaptureService;
-import org.bukkit.Location;
-import org.bukkit.Material;
-import org.bukkit.World;
-import org.bukkit.block.Block;
+import java.util.List;
+import java.util.Map;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
-import org.popcraft.bolt.protection.EntityProtection;
 
-import java.time.Duration;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-
-/**
- * Child menu dedicated to initiating a scan flow: search regions by query or use the current location (Here).
- * Region selection is handled in a separate child menu to keep buttons grouped and clean at the bottom.
- * <p>
- * Filtering rules (now apply to any Bolt-protected block, not just containers):
- * <ul>
- *   <li>When constructed via {@link VaultScanMenu#VaultScanMenu(Player, ParentMenu)} or with a self {@link VaultUIContext}, the scan is <b>owner-filtered</b> to the actor (only blocks whose Bolt owner equals the player).</li>
- *   <li>If an admin {@link VaultUIContext} without filterOwner is provided, results are not owner-filtered.</li>
- *   <li>All candidate blocks are validated by {@link VaultCapturePolicy} to enforce region/ownership rules.</li>
- * </ul>
- * Empty and non-container handling:
- * <ul>
- *   <li>Non-container blocks, and containers with empty inventory, behave like an "empty capture": Bolt protection is removed but no vault is persisted.</li>
- *   <li>Containers with items are vaulted and removed; remaining halves of double chests are re-protected.</li>
- * </ul>
- */
+/** Where a scan starts: search the world's regions by name, or scan the region the player stands in. */
 public final class VaultScanMenu extends ChildMenuImp {
 
-    public enum FilterMode {
-        BLOCK,
-        NON_CONTAINER,
-        CONTAINER,
-        ENTITY;
+    private static final String KEY_QUERY = "QUERY";
+    private static final int QUERY_LENGTH = 64;
 
-        public @NotNull FilterMode next() {
-            return switch (this) {
-                case BLOCK -> NON_CONTAINER;
-                case NON_CONTAINER -> CONTAINER;
-                case CONTAINER -> ENTITY;
-                case ENTITY -> BLOCK;
-            };
-        }
-    }
-
-
-
-    /** Scan results shown on one page: few enough for a dialog. */
-    private static final int RESULTS_PER_PAGE = 5;
-
-    private final @Nullable String regionId; // null -> browse/search mode; non-null -> results mode
-    private final List<ScanResult> entries; // only used in results mode (full set from computeEntries: containers + other protected blocks like paintings)
-    /** Zero-based current page index in results mode. */
-    private final int pageIndex;
-    private final VaultUIContext uiContext;
-    /** Current type filter applied in results mode. */
-    private final FilterMode filterMode;
-
-
-    /** Local cache for UUID->username to avoid repeated lookups per page. */
-    private static final ConcurrentHashMap<UUID, String> NAME_CACHE = new ConcurrentHashMap<>();
-
-    /**
-     * Records an owner's name for the result lists. The scan service resolves names before it
-     * hands results over, so a list is shown once, complete. It used to be shown with short ids
-     * and then opened again when the names arrived, on top of whatever the player had moved to.
-     */
-    public static void rememberName(@NotNull UUID owner, @NotNull String name) {
-        NAME_CACHE.put(owner, name);
-    }
-
-    public VaultScanMenu(@NotNull Player player, @NotNull ParentMenu parent) {
-        this(player, parent, new VaultUIContext(player.getUniqueId(), player.getUniqueId(), false));
-    }
+    private final @NotNull VaultUIContext uiContext;
 
     public VaultScanMenu(@NotNull Player player, @NotNull ParentMenu parent, @NotNull VaultUIContext ctx) {
-        super(player, parent, "vault_scan");
+        super(player, parent);
         this.uiContext = ctx;
-        this.regionId = null;
-        this.entries = List.of();
-        this.pageIndex = 0;
-        this.filterMode = FilterMode.BLOCK;
-        setDialog(build());
-    }
-
-    /** Public constructor for results mode to allow opening from the region list menu. */
-    public VaultScanMenu(@NotNull Player player, @NotNull ParentMenu parent, @NotNull VaultUIContext ctx, @NotNull String regionId, @NotNull List<ScanResult> entries) {
-        this(player, parent, ctx, regionId, entries, 0, FilterMode.BLOCK);
-    }
-
-    /** Results-mode constructor with explicit page index (zero-based). */
-    public VaultScanMenu(@NotNull Player player, @NotNull ParentMenu parent, @NotNull VaultUIContext ctx, @NotNull String regionId, @NotNull List<ScanResult> entries, int pageIndex) {
-        this(player, parent, ctx, regionId, entries, pageIndex, FilterMode.BLOCK);
-    }
-
-    private VaultScanMenu(@NotNull Player player, @NotNull ParentMenu parent, @NotNull VaultUIContext ctx,
-                          @NotNull String regionId, @NotNull List<ScanResult> entries, int pageIndex,
-                          @NotNull FilterMode filterMode) {
-        super(player, parent, "vault_scan_results");
-        this.uiContext = ctx;
-        this.regionId = regionId;
-        this.entries = entries;
-        this.pageIndex = Math.max(0, pageIndex);
-        this.filterMode = filterMode;
-        setDialog(build());
-    }
-
-    private boolean checkCooldown(@NotNull Player player) {
-        if (player.hasPermission(Permissions.ADMIN)) return true;
-        var session = plugin.sessionManager().getOrCreate(player.getUniqueId());
-        long now = System.currentTimeMillis();
-        long last = session.lastScanTime();
-        long cooldownMs = plugin.settings().scan().cooldownSeconds() * 1000;
-        if (now - last < cooldownMs) {
-            long remaining = (cooldownMs - (now - last)) / 1000;
-            player.sendMessage(plugin.text().of(MessageKeys.SCAN_SCAN_COOLDOWN, Map.of("%time%", String.valueOf(remaining))));
-            return false;
-        }
-        session.markScanned(now);
-        return true;
-    }
-
-    private @NotNull AutoDialog build() {
-        AutoDialog.Builder builder = dialogBuilder();
-        Map<String,String> placeholdersSelf = Map.of("%player%", player().getName());
-        builder.title(plugin.text().of(MessageKeys.SCAN_TITLE, placeholdersSelf));
-        builder.canCloseWithEscape(true);
-        builder.afterAction(DialogBase.DialogAfterAction.CLOSE);
-
-        if (regionId == null) {
-            // Browse/search root: only Search input/button and Here. No region listing here.
-            builder.addBody(DialogBody.plainMessage(plugin.text().of(MessageKeys.SCAN_SEARCH_LABEL)));
-            builder.addInput(DialogInput.text("QUERY", plugin.text().of(MessageKeys.SCAN_SEARCH_LABEL)).labelVisible(true).build());
-            builder.submitButton(plugin.text().of(MessageKeys.SCAN_SEARCH_BTN), null, Duration.ofMinutes(5), 1, (player, response) -> {
-                String q = Optional.ofNullable(response.getText("QUERY")).orElse("").trim();
-                // VaultRegionListMenu does not accept uiContext; use its (player, parent, query, page) constructor
-                new VaultRegionListMenu(player, parentMenu(), q, 0).open();
-            });
-
-            // "Here" button: detect region at player's current location and open results or list if multiple
-            builder.button(plugin.text().of(MessageKeys.SCAN_HERE_BTN), ctx -> {
-                WorldGuardService wgs = plugin.worldGuard();
-                if (wgs == null) {
-                    ctx.player().sendMessage(plugin.text().of(MessageKeys.SCAN_SERVICES_MISSING));
-                    return;
-                }
-                // By the regions' real shapes, not their bounding boxes.
-                List<VaultRegion> containing = wgs.getRegionsAt(locationOf(ctx.player()).getBlock());
-                if (containing.isEmpty()) {
-                    ctx.player().sendMessage(plugin.text().of(MessageKeys.SCAN_NO_REGION_HERE));
-                    return;
-                }
-                if (containing.size() > 1) {
-                    List<String> ids = containing.stream().map(VaultRegion::id).sorted(String.CASE_INSENSITIVE_ORDER).toList();
-                    // VaultRegionListMenu subset constructor: (player, parent, ids, page)
-                    new VaultRegionListMenu(ctx.player(), parentMenu(), ids, 0).open();
-                    return;
-                }
-                VaultRegion only = containing.getFirst();
-                if (!VaultRegionListMenu.mayScan(ctx.player(), only)) {
-                    ctx.player().sendMessage(plugin.text().of(MessageKeys.SCAN_NOT_YOUR_REGION));
-                    return;
-                }
-                if (!checkCooldown(ctx.player())) return;
-                new LoadingMenu(ctx.player(), parentMenu(), Map.of("%player%", ctx.player().getName())).open();
-                plugin.scanService().scan(ctx.player(), only.id(), uiContext, blocks -> {
-                    if (blocks == null) {
-                        // The scan could not run and has said why; take the loading dialog down.
-                        ctx.player().closeDialog();
-                        return;
-                    }
-                    new VaultScanMenu(ctx.player(), parentMenu(), uiContext, only.id(), blocks, 0).open();
-                });
-            });
-
-            return builder.build();
-        }
-
-        // Results mode
-        List<ScanResult> visibleEntries = applyTypeFilter(entries, filterMode);
-        int size = visibleEntries.size();
-        int perPage = Math.max(1, RESULTS_PER_PAGE);
-        int totalPages = Math.max(1, (int) Math.ceil(size / (double) perPage));
-        int currentPage = Math.min(pageIndex, totalPages - 1);
-        int startIndex = currentPage * perPage;
-        int endIndex = Math.min(startIndex + perPage, size);
-
-        Map<String,String> placeholdersHeader = Map.of("%region%", regionId, "%count%", String.valueOf(visibleEntries.size()));
-        builder.addBody(DialogBody.plainMessage(plugin.text().of(MessageKeys.SCAN_RESULTS_HEADER, placeholdersHeader)));
-
-        // When ENTITY filter is active, render entity protections separately
-        if (filterMode == FilterMode.ENTITY) {
-            BoltService boltService = plugin.bolt();
-            WorldGuardService worldGuardService = plugin.worldGuard();
-            if (boltService == null || worldGuardService == null) {
-                builder.addBody(DialogBody.plainMessage(plugin.text().of(MessageKeys.SCAN_SERVICES_MISSING)));
-                addFilterButton(builder, currentPage);
-                return builder.build();
-            }
-            VaultRegion region = worldGuardService.getRegionById(regionId, getWorld());
-            if (region == null) {
-                builder.addBody(DialogBody.plainMessage(plugin.text().of(MessageKeys.SCAN_REGION_NOT_FOUND, Map.of("%region%", regionId))));
-                addFilterButton(builder, currentPage);
-                return builder.build();
-            }
-            Map<EntityProtection, Entity> protections = boltService.getProtectedEntities(player().getWorld(), region.boundingBox());
-            // Bolt was asked by bounding box; the region's shape decides what is in it.
-            protections.values().removeIf(entity -> !worldGuardService.isInside(regionId, entity.getLocation().getBlock()));
-            // A fixed order, so that a page shows the same entities each time it is built.
-            List<Map.Entry<EntityProtection, Entity>> ordered = protections.entrySet().stream()
-                    .sorted(Comparator.<Map.Entry<EntityProtection, Entity>>comparingInt(
-                                    entry -> entry.getValue().getLocation().getBlockX())
-                            .thenComparingInt(entry -> entry.getValue().getLocation().getBlockY())
-                            .thenComparingInt(entry -> entry.getValue().getLocation().getBlockZ())
-                            .thenComparing(entry -> entry.getValue().getUniqueId()))
-                    .toList();
-            int eSize = protections.size();
-            if (eSize == 0) {
-                builder.addBody(DialogBody.plainMessage(plugin.text().of(MessageKeys.SCAN_NO_ENTITIES)));
-                addFilterButton(builder, currentPage);
-                return builder.build();
-            }
-            int eTotalPages = Math.max(1, (int) Math.ceil(eSize / (double) perPage));
-            int eCurrentPage = Math.min(currentPage, eTotalPages - 1);
-            int eStart = eCurrentPage * perPage;
-            int eEnd = Math.min(eStart + perPage, eSize);
-
-            Set<UUID> toResolve = new HashSet<>();
-            for (int i = eStart; i < eEnd; i++) {
-                EntityProtection protection = ordered.get(i).getKey();
-                Entity protectedEntity = ordered.get(i).getValue();
-                UUID ownerUuid = protection.getOwner();
-                String ownerName;
-                if (ownerUuid == null) {
-                    ownerName = plugin.text().plain(MessageKeys.SCAN_OWNER_UNKNOWN);
-                } else {
-                    String cached = NAME_CACHE.get(ownerUuid);
-                    if (cached == null) {
-                        ownerName = ownerUuid.toString().substring(0, 8);
-                        toResolve.add(ownerUuid);
-                    } else {
-                        ownerName = cached;
-                    }
-                }
-                String index = String.valueOf(i + 1);
-
-                Location entityLoc = protectedEntity.getLocation();
-
-                String entityName = VaultLabel.materialName(protectedEntity.getType().name());
-
-                var decision = plugin.capturePolicy().evaluate(player(), protectedEntity);
-
-                Map<String,String> placeholdersEntry = Map.of(
-                        "%x%", String.valueOf(entityLoc.getBlockX()),
-                        "%y%", String.valueOf(entityLoc.getBlockY()),
-                        "%z%", String.valueOf(entityLoc.getBlockZ()),
-                        "%index%", index,
-                        "%kind%", entityName,
-                        "%owner%", ownerName
-                );
-                builder.addBody(DialogBody.plainMessage(plugin.text().of(decision.allowed()
-                        ? MessageKeys.SCAN_ENTRY_VAULTABLE : MessageKeys.SCAN_ENTRY_NOT_VAULTABLE, placeholdersEntry)));
-                // Remove protection button for entity (calls BoltService#removeProtection with the EntityProtection instance)
-                builder.sizableButton(plugin.text().of(MessageKeys.SCAN_ENTRY_VAULT_BUTTON, placeholdersEntry), ctx -> {
-                    var check = plugin.capturePolicy().evaluate(ctx.player(), protectedEntity);
-                    if (!check.allowed()) {
-                        ctx.player().sendMessage(plugin.text().of(MessageKeys.SCAN_NOT_ALLOWED));
-                        return;
-                    }
-
-                    Runnable refresh = () -> new VaultScanMenu(ctx.player(), parentMenu(), uiContext, regionId,
-                            entries, eCurrentPage, FilterMode.ENTITY).open();
-                    // An item frame or painting is vaulted with what it shows. Any other locked
-                    // entity holds nothing to store, so it only loses its lock.
-                    if (protectedEntity instanceof Hanging hanging && hanging.isValid()) {
-                        plugin.captureService().captureHanging(ctx.player(), hanging)
-                                .thenRun(refresh);
-                        return;
-                    }
-                    BoltService svc = plugin.bolt();
-                    if (svc == null) return;
-                    svc.removeProtection(protection);
-                    refresh.run();
-                },100);
-            }
-
-            // Navigation for entity pages
-            if (eCurrentPage > 0) {
-                builder.button(plugin.text().of(MessageKeys.SCAN_PREV_BTN), ctx -> new VaultScanMenu(ctx.player(), parentMenu(), uiContext, regionId, entries, eCurrentPage - 1, FilterMode.ENTITY).open());
-            }
-            if (eCurrentPage < eTotalPages - 1) {
-                builder.button(plugin.text().of(MessageKeys.SCAN_NEXT_BTN), ctx -> new VaultScanMenu(ctx.player(), parentMenu(), uiContext, regionId, entries, eCurrentPage + 1, FilterMode.ENTITY).open());
-            }
-            addFilterButton(builder, eCurrentPage);
-            return builder.build();
-        }
-
-        if (visibleEntries.isEmpty()) {
-            builder.addBody(DialogBody.plainMessage(plugin.text().of(MessageKeys.SCAN_NONE_FOUND)));
-            addFilterButton(builder, currentPage);
-            return builder.build();
-        }
-
-        // Page indicator
-        Map<String,String> phPage = Map.of("%page%", String.valueOf(currentPage + 1), "%total%", String.valueOf(totalPages));
-        builder.addBody(DialogBody.plainMessage(plugin.text().of(MessageKeys.SCAN_PAGE_LABEL, phPage)));
-
-        Set<UUID> toResolve = new HashSet<>();
-        for (int i = startIndex; i < endIndex; i++) {
-            ScanResult entry = visibleEntries.get(i);
-            Block entryBlock = entry.block();
-            UUID ownerUuid = entry.owner();
-            String ownerName;
-            if (ownerUuid == null) {
-                ownerName = plugin.text().plain(MessageKeys.SCAN_OWNER_UNKNOWN);
-            } else {
-                String cached = NAME_CACHE.get(ownerUuid);
-                if (cached == null) {
-                    ownerName = ownerUuid.toString().substring(0, 8);
-                    toResolve.add(ownerUuid);
-                } else {
-                    ownerName = cached;
-                }
-            }
-            String kind = plugin.text().plain(isContainerMaterial(entry.type())
-                    ? MessageKeys.SCAN_KIND_CONTAINER : MessageKeys.SCAN_KIND_BLOCK);
-            Map<String,String> placeholdersEntry = Map.of(
-                    "%x%", String.valueOf(entryBlock.getX()), "%y%", String.valueOf(entryBlock.getY()), "%z%", String.valueOf(entryBlock.getZ()),
-                    "%owner%", ownerName,
-                    "%kind%", kind,
-                    "%index%", String.valueOf(i + 1)
-            );
-            builder.addBody(DialogBody.plainMessage(plugin.text().of(MessageKeys.SCAN_ENTRY_VAULTABLE, placeholdersEntry)));
-            // Vault button for this entry
-            builder.button(plugin.text().of(MessageKeys.SCAN_ENTRY_VAULT_BUTTON, placeholdersEntry), ctx -> {
-                // Show a loading menu while we process DB work
-                new LoadingMenu(ctx.player(), parentMenu(), Map.of("%player%", ctx.player().getName())).open();
-                Block targetBlock = ctx.player().getWorld().getBlockAt(entryBlock.getX(), entryBlock.getY(), entryBlock.getZ());
-                VaultCaptureService capSvc = plugin.captureService();
-                
-                capSvc.captureDirectAsync(ctx.player(), targetBlock, success -> {
-                    // The block stops being a result once it has no Bolt owner: it was vaulted, or
-                    // its protection was removed. The cached list is corrected, not rebuilt.
-                    BoltService bolt = plugin.bolt();
-                    List<ScanResult> remaining = entries;
-                    if (bolt == null || bolt.getOwner(targetBlock) == null) {
-                        plugin.scanService().forget(targetBlock);
-                        remaining = entries.stream().filter(result -> !(result.block().getX() == targetBlock.getX()
-                                && result.block().getY() == targetBlock.getY()
-                                && result.block().getZ() == targetBlock.getZ())).toList();
-                    }
-                    int newTotal = Math.max(1, (int) Math.ceil(remaining.size() / (double) Math.max(1, RESULTS_PER_PAGE)));
-                    int safePage = Math.min(currentPage, newTotal - 1);
-                    new VaultScanMenu(ctx.player(), parentMenu(), uiContext, regionId, remaining, safePage).open();
-                });
-            });
-            // Teleport button for this entry (literal coordinates with safe centering)
-            if (player().hasPermission(Permissions.SCAN_TELEPORT)) builder.button(plugin.text().of(MessageKeys.SCAN_ENTRY_TELEPORT_BUTTON, placeholdersEntry), ctx -> {
-                // Checked again at the click: the dialog may be older than the permission.
-                if (!ctx.player().hasPermission(Permissions.SCAN_TELEPORT)) return;
-                boolean passable = entryBlock.isPassable();
-                double destY = passable ? entryBlock.getY() : (entryBlock.getY() + 1);
-                Location destination = new Location(ctx.player().getWorld(), entryBlock.getX() + 0.5, destY, entryBlock.getZ() + 0.5, locationOf(ctx.player()).getYaw(), locationOf(ctx.player()).getPitch());
-                ctx.player().teleport(destination);
-            });
-        }
-
-        // Navigation buttons
-        if (currentPage > 0) {
-            builder.button(plugin.text().of(MessageKeys.SCAN_PREV_BTN), ctx -> new VaultScanMenu(ctx.player(), parentMenu(), uiContext, regionId, entries, currentPage - 1, filterMode).open());
-        }
-        if (currentPage < totalPages - 1) {
-            builder.button(plugin.text().of(MessageKeys.SCAN_NEXT_BTN), ctx -> new VaultScanMenu(ctx.player(), parentMenu(), uiContext, regionId, entries, currentPage + 1, filterMode).open());
-        }
-
-        addFilterButton(builder, currentPage);
-
-        return builder.build();
-    }
-
-    private void addFilterButton(AutoDialog.@NotNull Builder builder, int currentPage) {
-        String label = switch (filterMode) {
-            case BLOCK -> MessageKeys.SCAN_FILTER_BTN_BLOCK;
-            case NON_CONTAINER -> MessageKeys.SCAN_FILTER_BTN_NON_CONTAINER;
-            case CONTAINER -> MessageKeys.SCAN_FILTER_BTN_CONTAINER;
-            case ENTITY -> MessageKeys.SCAN_FILTER_BTN_ENTITY;
-        };
-        String region = Objects.requireNonNull(regionId, "only a results page has a filter button");
-        builder.sizableButton(plugin.text().of(label), ctx -> {
-            FilterMode next = filterMode.next();
-            new VaultScanMenu(ctx.player(), parentMenu(), uiContext, region, entries, currentPage, next).open();
-        }, 100);
-    }
-
-    private @NotNull List<ScanResult> applyTypeFilter(@NotNull List<ScanResult> source, @NotNull FilterMode mode) {
-        // In ENTITY filter mode, block list is not used; entity protections are rendered separately.
-        if (mode == FilterMode.BLOCK || mode == FilterMode.ENTITY) return source;
-        List<ScanResult> out = new ArrayList<>();
-        boolean wantContainers = (mode == FilterMode.CONTAINER);
-        for (ScanResult r : source) {
-            boolean isContainer = isContainerMaterial(r.type());
-            if (wantContainers && isContainer) {
-                out.add(r);
-            } else if (!wantContainers && !isContainer) {
-                out.add(r);
-            }
-        }
-        return out;
-    }
-
-    // This is a faster check than instanceof Container, used for filtering
-    private boolean isContainerMaterial(@NotNull Material type) {
-        return switch (type) {
-            // Standard storage
-            case CHEST, TRAPPED_CHEST, BARREL,
-                 SHULKER_BOX, WHITE_SHULKER_BOX, ORANGE_SHULKER_BOX, MAGENTA_SHULKER_BOX,
-                 LIGHT_BLUE_SHULKER_BOX, YELLOW_SHULKER_BOX, LIME_SHULKER_BOX, PINK_SHULKER_BOX,
-                 GRAY_SHULKER_BOX, LIGHT_GRAY_SHULKER_BOX, CYAN_SHULKER_BOX, PURPLE_SHULKER_BOX,
-                 BLUE_SHULKER_BOX, BROWN_SHULKER_BOX, GREEN_SHULKER_BOX, RED_SHULKER_BOX,
-                 BLACK_SHULKER_BOX -> true;
-
-            // Machines & Redstone
-            case DISPENSER, DROPPER, HOPPER, BREWING_STAND,
-                 FURNACE, BLAST_FURNACE, SMOKER,
-                 CRAFTER -> true;
-
-            default -> false;
-        };
-    }
-    private @NotNull World getWorld() {
-        return player().getWorld();
     }
 
     @Override
-    public void open() {
-        setDialog(build());
-        super.open();
+    protected @NotNull AutoDialog build() {
+        return AutoDialog.builder()
+                .title(plugin.text().of(MessageKeys.SCAN_TITLE, Map.of("%player%", player.getName())))
+                .line(plugin.text().of(MessageKeys.SCAN_SEARCH_LABEL))
+                .textInput(KEY_QUERY, plugin.text().of(MessageKeys.SCAN_SEARCH_LABEL), QUERY_LENGTH)
+                .submitButton(plugin.text().of(MessageKeys.SCAN_SEARCH_BTN), (actor, answers) ->
+                        VaultRegionListMenu.search(actor, parentMenu(), uiContext,
+                                answers.getOrDefault(KEY_QUERY, "")).open())
+                .button(plugin.text().of(MessageKeys.SCAN_HERE_BTN), this::scanHere)
+                .build();
     }
 
-    /**
-     * A player's location, read as an entity's. Player also inherits OfflinePlayer's
-     * getLocation, which may be null, and the null check takes that one.
-     */
-    private static @NotNull Location locationOf(@NotNull Entity entity) {
-        return entity.getLocation();
+    /** The region the player stands in is scanned; where several overlap, the player picks one. */
+    private void scanHere(@NotNull Player actor) {
+        // By the regions' real shapes, not their bounding boxes. Read as an entity's location:
+        // Player also inherits OfflinePlayer's, which may be null.
+        List<VaultRegion> here = plugin.worldGuard().getRegionsAt(((Entity) actor).getLocation().getBlock());
+        if (here.isEmpty()) {
+            actor.sendMessage(plugin.text().of(MessageKeys.SCAN_NO_REGION_HERE));
+        } else if (here.size() == 1) {
+            RegionScans.open(parentMenu(), actor, here.getFirst().id(), uiContext);
+        } else {
+            VaultRegionListMenu.of(actor, parentMenu(), uiContext, here.stream().map(VaultRegion::id).toList()).open();
+        }
     }
 }

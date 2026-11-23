@@ -39,7 +39,6 @@ public final class MessageKeys {
 
     public static final String SCAN_TITLE = "scan.title";
     public static final String SCAN_NONE_FOUND = "scan.none-found";
-    public static final String SCAN_SERVICES_MISSING = "scan.services-missing";
     public static final String SCAN_RESULTS_HEADER = "scan.results-header";
     public static final String SCAN_ENTRY_VAULTABLE = "scan.entry-vaultable";
     public static final String SCAN_ENTRY_NOT_VAULTABLE = "scan.entry-not-vaultable";
@@ -69,8 +68,6 @@ public final class MessageKeys {
     public static final String REGIONS_PREV_PAGE_BTN = "regions.prev-page-btn";
     public static final String REGIONS_NEXT_PAGE_BTN = "regions.next-page-btn";
     public static final String REGIONS_BACK_BTN = "regions.back-btn";
-    public static final String REGIONS_SERVICES_MISSING = "regions.services-missing";
-    public static final String REGIONS_SCAN_COOLDOWN = "regions.scan-cooldown";
 
     public static final String CAPTURE_MENU_TITLE = "capture-menu.title";
     public static final String CAPTURE_MENU_INSTRUCTION = "capture-menu.instruction";
@@ -114,7 +111,6 @@ public final class MessageKeys {
     public static final String CAPTURE_ADMIN_MODE_ENABLED = "capture.admin-mode-enabled";
     public static final String CAPTURE_ACTION_BAR_ADMIN_MODE_TAG = "capture.action-bar-admin-mode-tag";
 
-    public static final String LOADING_BEDROCK = "loading.bedrock";
 
     public static final String LIST_LOAD_FAILED = "list.load-failed";
 

@@ -20,7 +20,7 @@ class CaptureRegionsTest {
 
     private static VaultRegion region(String id, UUID member, int minX, int minY, int minZ, int maxX, int maxY, int maxZ) {
         return new VaultRegionImp(id, member == null ? List.of() : List.of(member), List.of(),
-                new BoundingBox(minX, minY, minZ, maxX, maxY, maxZ), 0);
+                new BoundingBox(minX, minY, minZ, maxX, maxY, maxZ));
     }
 
     /** The regions among these that hold the point: what WorldGuard answers for cuboids. */

@@ -20,7 +20,6 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 import org.bukkit.Location;
-import java.util.function.Predicate;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -35,7 +34,6 @@ public final class Integrations {
 
     private volatile @Nullable NameSource primaryNames;
     private volatile @Nullable NameSource bedrockNames;
-    private volatile @Nullable Predicate<UUID> bedrockClient;
     private volatile @Nullable OwnerNotifier ownerNotifier;
     private final List<PlacementGrant> placementGrants = new CopyOnWriteArrayList<>();
     private final List<MenuRenderer> menuRenderers = new CopyOnWriteArrayList<>();
@@ -63,16 +61,6 @@ public final class Integrations {
 
     public @Nullable NameSource bedrockNames() {
         return this.bedrockNames;
-    }
-
-    public void bedrockClient(@Nullable Predicate<UUID> check) {
-        this.bedrockClient = check;
-    }
-
-    /** Whether the player is on a Bedrock client. False when no module can tell. */
-    public boolean isBedrockClient(@NotNull UUID player) {
-        Predicate<UUID> check = this.bedrockClient;
-        return check != null && check.test(player);
     }
 
     public void ownerNotifier(@Nullable OwnerNotifier notifier) {

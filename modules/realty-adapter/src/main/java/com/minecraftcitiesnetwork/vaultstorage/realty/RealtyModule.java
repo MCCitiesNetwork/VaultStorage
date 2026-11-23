@@ -76,7 +76,7 @@ public final class RealtyModule extends SimplePluginModule<VaultStoragePlugin> {
                 .thenAcceptAsync(reloaded -> {
                     this.settings.set(reloaded.settings());
                     this.messages.load(reloaded.messages());
-                }, plugin.getServer().getScheduler().getMainThreadExecutor(plugin));
+                }, plugin.mainThread());
     }
 
     private @NotNull AutoVaultSettings readSettings(@NotNull VaultStoragePlugin plugin) throws IOException {

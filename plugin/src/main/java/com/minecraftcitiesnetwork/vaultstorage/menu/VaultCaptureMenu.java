@@ -1,93 +1,58 @@
 package com.minecraftcitiesnetwork.vaultstorage.menu;
 
-import org.jetbrains.annotations.NotNull;
-import com.minecraftcitiesnetwork.vaultstorage.config.MessageKeys;
-import io.papermc.paper.registry.data.dialog.DialogBase;
-import io.papermc.paper.registry.data.dialog.body.DialogBody;
 import com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin;
-import com.minecraftcitiesnetwork.vaultstorage.menu.AutoDialog;
+import com.minecraftcitiesnetwork.vaultstorage.config.MessageKeys;
 import com.minecraftcitiesnetwork.vaultstorage.permission.Permissions;
-import org.bukkit.entity.Player;
-
+import java.util.HashMap;
 import java.util.Map;
+import org.bukkit.entity.Player;
+import org.jetbrains.annotations.NotNull;
 
-/**
- * Vault capture UI shown when the command is executed.
- * <p>
- * Authorization policy (overlapping-region aware) applies to any block, not just containers:
- * <ul>
- *   <li>Override permission: may always capture.</li>
- *   <li>Region participant (owner or member): may capture only if the block has a Bolt owner different from themselves AND that owner is not a participant of ANY overlapping region.</li>
- *   <li>Non-participant (not owner nor member in overlapping regions): may capture only their own Bolt-owned blocks.</li>
- *   <li>Unprotected blocks (no Bolt owner) are capturable only with override.</li>
- * </ul>
- * Action bar reflects vaultability in real time using the same logic. Session remains active until the player cancels with a left-click.
- */
+/** The first menu: start capture mode, scan a region, or browse vaults. */
 public final class VaultCaptureMenu extends ParentMenuImp {
 
+    private final @NotNull VaultUIContext uiContext;
 
-
-
-    private final VaultUIContext uiContext;
-
-    /** Existing constructor kept: self-filter context */
+    /** The player's own vaults. */
     public VaultCaptureMenu(@NotNull VaultStoragePlugin plugin, @NotNull Player player) {
         this(plugin, player, VaultUIContext.self(player.getUniqueId()));
     }
 
-    /** New constructor accepting UI context (admin or filtered). */
     public VaultCaptureMenu(@NotNull VaultStoragePlugin plugin, @NotNull Player player, @NotNull VaultUIContext context) {
-        super(plugin, player, "vault_capture");
+        super(plugin, player);
         this.uiContext = context;
-        setDialog(build());
     }
 
-    /**
-     * Builds the dialog structure and associated actions.
-     * @return the constructed dialog instance
-     */
-    private @NotNull AutoDialog build() {
-        AutoDialog.Builder builder = dialogBuilder();
-        Map<String,String> phSelf = new java.util.HashMap<>();
-        phSelf.put("%player%", player().getName());
+    @Override
+    protected @NotNull AutoDialog build() {
+        Map<String, String> placeholders = new HashMap<>();
+        placeholders.put("%player%", player.getName());
         if (uiContext.filterOwner() != null) {
-            phSelf.put("%filterOwner%", uiContext.filterOwner().toString());
+            placeholders.put("%filterOwner%", uiContext.filterOwner().toString());
         } else if (uiContext.admin()) {
-            phSelf.put("%filterOwner%", "ALL");
+            placeholders.put("%filterOwner%", "ALL");
         }
-        builder.title(plugin.text().of(MessageKeys.CAPTURE_MENU_TITLE, phSelf));
-        builder.canCloseWithEscape(true);
-        builder.afterAction(DialogBase.DialogAfterAction.CLOSE);
+        AutoDialog.Builder builder = AutoDialog.builder()
+                .title(plugin.text().of(MessageKeys.CAPTURE_MENU_TITLE, placeholders));
 
         // A player who may not vault containers is here for their own vaults: they are told so,
         // and are not offered a button that would only refuse them.
-        if (player().hasPermission(Permissions.ACTION_CAPTURE)) {
-            builder.addBody(DialogBody.plainMessage(plugin.text().of(MessageKeys.CAPTURE_MENU_INSTRUCTION, phSelf)));
-            builder.addBody(DialogBody.plainMessage(plugin.text().of(MessageKeys.CAPTURE_MENU_CANCEL_HINT, phSelf)));
-            builder.button(plugin.text().of(MessageKeys.CAPTURE_MENU_START_BTN, phSelf), ctx -> {
-                Player actor = ctx.player();
-                // Checked again at the click: the menu may be older than the permission.
-                if (!actor.hasPermission(Permissions.ACTION_CAPTURE)) {
-                    actor.sendMessage(plugin.text().of(MessageKeys.CAPTURE_NO_PERMISSION));
-                    return;
-                }
-                plugin.captureService().startCaptureSession(actor);
-                actor.closeDialog();
-            });
+        if (player.hasPermission(Permissions.ACTION_CAPTURE)) {
+            builder.line(plugin.text().of(MessageKeys.CAPTURE_MENU_INSTRUCTION, placeholders));
+            builder.line(plugin.text().of(MessageKeys.CAPTURE_MENU_CANCEL_HINT, placeholders));
+            permissionButton(builder, Permissions.ACTION_CAPTURE,
+                    plugin.text().of(MessageKeys.CAPTURE_MENU_START_BTN, placeholders), actor -> {
+                        plugin.captureService().startCaptureSession(actor);
+                        actor.closeDialog();
+                    });
         } else {
-            builder.addBody(DialogBody.plainMessage(plugin.text().of(MessageKeys.CAPTURE_MENU_INSTRUCTION_OWNER, phSelf)));
+            builder.line(plugin.text().of(MessageKeys.CAPTURE_MENU_INSTRUCTION_OWNER, placeholders));
         }
-
-        builder.button(plugin.text().of(MessageKeys.CAPTURE_MENU_OPEN_SCAN_BTN, phSelf), ctx -> new VaultScanMenu(ctx.player(), this, uiContext).open());
-        builder.button(plugin.text().of(MessageKeys.CAPTURE_MENU_BROWSE_BTN, phSelf), ctx -> new VaultListMenu(ctx.player(), this, uiContext, "").open());
-        builder.button(plugin.text().of(MessageKeys.CAPTURE_MENU_CLOSE_BTN, phSelf), ctx -> {});
+        builder.button(plugin.text().of(MessageKeys.CAPTURE_MENU_OPEN_SCAN_BTN, placeholders),
+                actor -> new VaultScanMenu(actor, this, uiContext).open());
+        builder.button(plugin.text().of(MessageKeys.CAPTURE_MENU_BROWSE_BTN, placeholders),
+                actor -> new VaultListMenu(actor, this, uiContext, "").open());
+        builder.button(plugin.text().of(MessageKeys.CAPTURE_MENU_CLOSE_BTN, placeholders), actor -> { });
         return builder.build();
-    }
-
-
-    @Override
-    public void open() {
-        setDialog(build());
-        super.open();
     }
 }

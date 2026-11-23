@@ -49,9 +49,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 import org.spongepowered.configurate.ConfigurationNode;
-import java.util.concurrent.CompletableFuture;
 import java.sql.SQLException;
-import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -114,6 +112,11 @@ public final class VaultStoragePlugin extends JavaPlugin {
 
     /** The pool database work runs on. */
     public @NotNull Executor databaseExecutor() { return databaseExecutor; }
+
+    /** Runs a task on the server's main thread. */
+    public @NotNull Executor mainThread() {
+        return getServer().getScheduler().getMainThreadExecutor(this);
+    }
 
     public @NotNull WorldGuardService worldGuard() { return worldGuardService; }
 
@@ -206,7 +209,7 @@ public final class VaultStoragePlugin extends JavaPlugin {
 
         // Domain services
         this.containerOwners = new ContainerOwnerLookup(this.integrations::ownerSources,
-                getServer().getScheduler().getMainThreadExecutor(this));
+                mainThread());
         this.captureService = new VaultCaptureService(this);
         this.claimReleases = new ClaimReleases(this.repository::release,
                 task -> CompletableFuture.delayedExecutor(RELEASE_RETRY_SECONDS, TimeUnit.SECONDS, this.databaseExecutor)
@@ -229,7 +232,7 @@ public final class VaultStoragePlugin extends JavaPlugin {
             }
         };
         this.placementService = new VaultPlacementService(placementStore, new BukkitPlacementWorld(this::bolt),
-                this.databaseExecutor, getServer().getScheduler().getMainThreadExecutor(this), getLogger());
+                this.databaseExecutor, mainThread(), getLogger());
         this.inventoryService = new VaultInventoryService(this);
         this.scanService = new VaultScanServiceImpl(this);
 
@@ -328,7 +331,7 @@ public final class VaultStoragePlugin extends JavaPlugin {
      * is also logged.
      */
     public @NotNull CompletableFuture<Void> reload() {
-        Executor mainThread = getServer().getScheduler().getMainThreadExecutor(this);
+        Executor mainThread = mainThread();
         return CompletableFuture
                 .supplyAsync(() -> {
                     try {

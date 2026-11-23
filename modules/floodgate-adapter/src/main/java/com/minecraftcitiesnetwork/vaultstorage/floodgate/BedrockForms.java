@@ -42,6 +42,11 @@ public final class BedrockForms implements MenuRenderer {
         if (!this.floodgate.isFloodgatePlayer(player.getUniqueId())) {
             return false;
         }
+        if (view.buttons().isEmpty()) {
+            // Nothing to press, such as "Loading": a form would have to be closed by hand.
+            view.body().forEach(player::sendMessage);
+            return true;
+        }
         if (FormPlan.asksAtOnce(view)) {
             // Closing the inputs leaves the menu: there is nothing else on it to go back to.
             return ask(player, view, view.buttons().getFirst(), () -> { });

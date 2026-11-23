@@ -1,23 +1,13 @@
 package com.minecraftcitiesnetwork.vaultstorage.menu;
 
-import org.jetbrains.annotations.NotNull;
-import io.papermc.paper.dialog.Dialog;
 import org.bukkit.entity.Player;
-import org.jetbrains.annotations.Nullable;
+import org.jetbrains.annotations.NotNull;
 
+/** A screen shown to one player. */
 public interface Menu {
 
-    @NotNull String id();
-    @Nullable
-    Dialog dialog();
-
+    /** Builds the screen as it is now and shows it. */
     void open();
 
     @NotNull Player player();
-
-    void setDialog(@NotNull AutoDialog dialog);
-
-    AutoDialog.@NotNull Builder dialogBuilder();
-
-
 }

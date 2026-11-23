@@ -3,7 +3,6 @@ package com.minecraftcitiesnetwork.vaultstorage.realty;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.NotNull;
 import com.minecraftcitiesnetwork.vaultstorage.bolt.BoltService;
-import com.minecraftcitiesnetwork.vaultstorage.realty.SweepFilter;
 import org.bukkit.Bukkit;
 import org.bukkit.World;
 import org.bukkit.util.BoundingBox;

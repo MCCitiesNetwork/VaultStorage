@@ -17,11 +17,11 @@ class SweepFilterTest {
 
     /** The swept plot's bounding box is 0..20 on x and z. */
     private static final VaultRegion PLOT = new VaultRegionImp("plot", List.of(MEMBER), List.of(),
-            new BoundingBox(0, 0, 0, 20, 100, 20), 0);
+            new BoundingBox(0, 0, 0, 20, 100, 20));
     private static final VaultRegion CELLAR = new VaultRegionImp("cellar", List.of(), List.of(),
-            new BoundingBox(2, 0, 2, 6, 10, 6), 0);
+            new BoundingBox(2, 0, 2, 6, 10, 6));
     private static final VaultRegion STREET = new VaultRegionImp("street", List.of(NEIGHBOUR), List.of(),
-            new BoundingBox(15, 0, -10, 40, 100, 40), 0);
+            new BoundingBox(15, 0, -10, 40, 100, 40));
 
     /**
      * The plot is L-shaped: it has the whole strip x 0..9 and, of the strip x 10..20, only z 0..9.
@@ -88,8 +88,8 @@ class SweepFilterTest {
 
     @Test
     void aContainerInARegionAboveOrBelowThePlotStays() {
-        VaultRegion ground = new VaultRegionImp("ground", List.of(), List.of(), new BoundingBox(0, 0, 0, 20, 9, 20), 0);
-        VaultRegion upstairs = new VaultRegionImp("upstairs", List.of(), List.of(), new BoundingBox(0, 10, 0, 20, 20, 20), 0);
+        VaultRegion ground = new VaultRegionImp("ground", List.of(), List.of(), new BoundingBox(0, 0, 0, 20, 9, 20));
+        VaultRegion upstairs = new VaultRegionImp("upstairs", List.of(), List.of(), new BoundingBox(0, 10, 0, 20, 20, 20));
         SweepFilter upstairsSold = SweepFilter.forSweep(upstairs, BUYER,
                 (x, y, z) -> List.of(y >= 10 ? upstairs : ground));
 
@@ -101,7 +101,7 @@ class SweepFilterTest {
     @Test
     void aRegionWithTheSameBoundsAsThePlotIsNotNestedInIt() {
         VaultRegion twin = new VaultRegionImp("twin", List.of(NEIGHBOUR), List.of(),
-                new BoundingBox(0, 0, 0, 20, 100, 20), 0);
+                new BoundingBox(0, 0, 0, 20, 100, 20));
         SweepFilter twinned = SweepFilter.forSweep(PLOT, BUYER, (x, y, z) -> List.of(PLOT, twin));
 
         Assertions.assertTrue(twinned.shouldVault(PREVIOUS, 8, 64, 8));

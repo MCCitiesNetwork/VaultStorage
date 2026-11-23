@@ -1,33 +1,26 @@
 package com.minecraftcitiesnetwork.vaultstorage.menu;
 
-import org.bukkit.World;
-import org.bukkit.Bukkit;
 import com.minecraftcitiesnetwork.pluginInfrastructure.configurate.MessageContainer;
-import com.minecraftcitiesnetwork.vaultstorage.config.MessageKeys;
 import com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin;
+import com.minecraftcitiesnetwork.vaultstorage.config.MessageKeys;
 import com.minecraftcitiesnetwork.vaultstorage.database.FindResult;
 import com.minecraftcitiesnetwork.vaultstorage.database.VaultFilter;
 import com.minecraftcitiesnetwork.vaultstorage.database.VaultPage;
 import com.minecraftcitiesnetwork.vaultstorage.database.VaultRepository;
 import com.minecraftcitiesnetwork.vaultstorage.database.VaultSummary;
+import com.minecraftcitiesnetwork.vaultstorage.names.Names;
 import com.minecraftcitiesnetwork.vaultstorage.names.UniqueIdentifierResolver;
-import io.papermc.paper.dialog.Dialog;
-import io.papermc.paper.registry.data.dialog.DialogBase;
-import io.papermc.paper.registry.data.dialog.body.DialogBody;
-import io.papermc.paper.registry.data.dialog.input.DialogInput;
-import java.time.Duration;
 import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.logging.Level;
 import net.kyori.adventure.text.Component;
+import org.bukkit.Bukkit;
+import org.bukkit.World;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -37,104 +30,106 @@ import org.jetbrains.annotations.Nullable;
  * can search by owner name, owner UUID or vault UUID.
  *
  * <p>The page is read on the database executor, one count and one query however many vaults
- * exist. It used to read every vault on the main thread and show each as a button.
+ * exist; a loading menu is shown meanwhile.
  */
 public final class VaultListMenu extends ChildMenuImp {
+
+    /** Wide enough for a whole label; the client shrinks it to the window. */
+    private static final int LABEL_WIDTH = 400;
+    private static final String KEY_QUERY = "QUERY";
+    private static final int QUERY_LENGTH = 255;
+
+    private final @NotNull VaultUIContext uiContext;
+    private final @NotNull String query;
+    private final int requestedPage;
+    /** Null until the page has been loaded. */
+    private final @Nullable Loaded loaded;
+
+    private record Entry(@NotNull VaultSummary vault, @NotNull String ownerName, int index) {
+    }
+
+    private record Loaded(@NotNull List<Entry> entries, @NotNull Paging paging) {
+    }
+
+    /** Opens the first page. */
+    public VaultListMenu(@NotNull Player player, @NotNull ParentMenu parent, @NotNull VaultUIContext ctx,
+                         @NotNull String query) {
+        this(player, parent, ctx, query, 0);
+    }
+
+    /** Opens the given page, zero-based; a page past the end shows the last one. */
+    public VaultListMenu(@NotNull Player player, @NotNull ParentMenu parent, @NotNull VaultUIContext ctx,
+                         @NotNull String query, int page) {
+        this(player, parent, ctx, query, page, null);
+    }
+
+    private VaultListMenu(@NotNull Player player, @NotNull ParentMenu parent, @NotNull VaultUIContext ctx,
+                          @NotNull String query, int page, @Nullable Loaded loaded) {
+        super(player, parent);
+        this.uiContext = ctx;
+        this.query = query.trim();
+        this.requestedPage = page;
+        this.loaded = loaded;
+    }
+
+    /** Shows the loading menu and reads the page, or shows the page that was read. */
+    @Override
+    public void open() {
+        if (this.loaded != null) {
+            super.open();
+            return;
+        }
+        new LoadingMenu(player, parentMenu(), Map.of("%query%", this.query)).open();
+        load();
+    }
 
     /** Vaults per page, from settings.yml; read each time, so a reload takes effect at the next open. */
     private int pageSize() {
         return plugin.settings().vaultList().pageSize();
     }
 
-    /** Wide enough for a whole label; the client shrinks it to the window. */
-    private static final int LABEL_WIDTH = 400;
-
-    private final VaultUIContext uiContext;
-    private final String query;
-    private final int requestedPage;
-    /** Null until the page has been loaded. */
-    private final @Nullable Loaded loaded;
-
-    private record Entry(@NotNull VaultSummary vault, @NotNull String ownerName, int index) {}
-
-    private record Loaded(@NotNull List<Entry> entries, @NotNull Paging paging) {}
-
-
-
-
-
-
-    /** Opens the first page. */
-    public VaultListMenu(@NotNull Player player, @NotNull ParentMenuImp parent, @NotNull VaultUIContext ctx, @NotNull String query) {
-        this(player, parent, ctx, query, 0);
-    }
-
-    /** Opens the given page, zero-based; a page past the end shows the last one. */
-    public VaultListMenu(@NotNull Player player, @NotNull ParentMenuImp parent, @NotNull VaultUIContext ctx, @NotNull String query, int page) {
-        this(player, parent, ctx, query, page, null);
-    }
-
-    private VaultListMenu(@NotNull Player player, @NotNull ParentMenuImp parent, @NotNull VaultUIContext ctx, @Nullable String query, int page,
-                          @Nullable Loaded loaded) {
-        super(player, parent, "vault_list");
-        this.uiContext = ctx;
-        this.query = query == null ? "" : query.trim();
-        this.requestedPage = page;
-        this.loaded = loaded;
-        if (loaded != null) {
-            setDialog(build(loaded));
-        }
+    private @NotNull VaultListMenu at(@NotNull Player actor, @NotNull String search, int page) {
+        return new VaultListMenu(actor, parentMenu(), this.uiContext, search, page);
     }
 
     @Override
-    public @NotNull Dialog dialog() { return super.dialog(); }
-
-    private @NotNull AutoDialog build(@NotNull Loaded page) {
-        AutoDialog.Builder builder = dialogBuilder();
+    protected @NotNull AutoDialog build() {
+        Loaded page = Objects.requireNonNull(this.loaded, "the list is built once its page is loaded");
         Map<String, String> phQuery = Map.of("%query%", this.query);
-        builder.title(plugin.text().of(MessageKeys.LIST_TITLE, phQuery));
-        builder.canCloseWithEscape(true);
-        builder.afterAction(DialogBase.DialogAfterAction.CLOSE);
-        ParentMenuImp parent = (ParentMenuImp) parentMenu();
+        AutoDialog.Builder builder = AutoDialog.builder().title(plugin.text().of(MessageKeys.LIST_TITLE, phQuery));
 
         // Only someone who may see everyone's vaults has anything to search for.
         if (this.uiContext.filterOwner() == null) {
-            builder.addInput(DialogInput.text("QUERY", plugin.text().of(MessageKeys.LIST_SEARCH_LABEL, phQuery))
-                    .maxLength(255)
-                    .labelVisible(true)
-                    .build());
-            builder.submitButton(plugin.text().of(MessageKeys.LIST_SEARCH_BTN, phQuery), null, Duration.ofMinutes(5), 1,
-                    (player, response) -> {
-                        String typed = Optional.ofNullable(response.getText("QUERY")).orElse("").trim();
-                        new VaultListMenu(player, parent, this.uiContext, typed).open();
-                    });
+            builder.textInput(KEY_QUERY, plugin.text().of(MessageKeys.LIST_SEARCH_LABEL, phQuery), QUERY_LENGTH);
+            builder.submitButton(plugin.text().of(MessageKeys.LIST_SEARCH_BTN, phQuery),
+                    (actor, answers) -> at(actor, answers.getOrDefault(KEY_QUERY, ""), 0).open());
         }
 
         Paging paging = page.paging();
         if (page.entries().isEmpty()) {
-            builder.addBody(DialogBody.plainMessage(plugin.text().of(MessageKeys.LIST_NONE_FOUND, phQuery)));
+            builder.line(plugin.text().of(MessageKeys.LIST_NONE_FOUND, phQuery));
         } else {
-            builder.addBody(DialogBody.plainMessage(plugin.text().of(MessageKeys.LIST_PAGE_LABEL, Map.of(
+            builder.line(plugin.text().of(MessageKeys.LIST_PAGE_LABEL, Map.of(
                     "%page%", String.valueOf(paging.page() + 1),
                     "%pages%", String.valueOf(paging.pages()),
-                    "%count%", String.valueOf(paging.total())))));
+                    "%count%", String.valueOf(paging.total()))));
             for (Entry entry : page.entries()) {
                 Component label = label(entry);
                 // Back from the vault returns to this page of this search.
-                builder.sizableButton(label, ctx -> new VaultActionMenu(ctx.player(), parent, this.uiContext,
-                        entry.vault().uuid(), label, actor -> new VaultListMenu(actor, parent, this.uiContext,
-                        this.query, paging.page()).open()).open(), LABEL_WIDTH);
+                builder.wideButton(label, LABEL_WIDTH, actor -> new VaultActionMenu(actor, parentMenu(),
+                        this.uiContext, entry.vault().uuid(), label,
+                        returning -> at(returning, this.query, paging.page()).open()).open());
             }
         }
         if (paging.hasPrevious()) {
             builder.button(plugin.text().of(MessageKeys.LIST_PREV_BTN),
-                    ctx -> new VaultListMenu(ctx.player(), parent, this.uiContext, this.query, paging.page() - 1).open());
+                    actor -> at(actor, this.query, paging.page() - 1).open());
         }
         if (paging.hasNext()) {
             builder.button(plugin.text().of(MessageKeys.LIST_NEXT_BTN),
-                    ctx -> new VaultListMenu(ctx.player(), parent, this.uiContext, this.query, paging.page() + 1).open());
+                    actor -> at(actor, this.query, paging.page() + 1).open());
         }
-        builder.button(plugin.text().of(MessageKeys.LIST_BACK_BTN), ctx -> parentMenu().open());
+        builder.button(plugin.text().of(MessageKeys.LIST_BACK_BTN), actor -> parentMenu().open());
         return builder.build();
     }
 
@@ -149,7 +144,7 @@ public final class VaultListMenu extends ChildMenuImp {
                 MessageContainer.value("owner", entry.ownerName()),
                 MessageContainer.value("index", String.valueOf(entry.index())),
                 MessageContainer.value("material", VaultLabel.materialName(vault.material())),
-                MessageContainer.value("world", world != null ? world.getName() : vault.worldUuid().toString().substring(0, 8)),
+                MessageContainer.value("world", world != null ? world.getName() : Names.shortId(vault.worldUuid())),
                 MessageContainer.value("x", String.valueOf(vault.x())),
                 MessageContainer.value("y", String.valueOf(vault.y())),
                 MessageContainer.value("z", String.valueOf(vault.z())),
@@ -186,6 +181,7 @@ public final class VaultListMenu extends ChildMenuImp {
         }
     }
 
+    /** Database thread. One count and one query: a page past the end becomes the last page. */
     private @NotNull VaultPage read(@NotNull VaultRepository repository, @NotNull Scope scope) {
         if (scope.nothing()) {
             return new VaultPage(List.of(), 0);
@@ -199,45 +195,28 @@ public final class VaultListMenu extends ChildMenuImp {
             }
             return new VaultPage(List.of(), 0);
         }
-        VaultFilter filter = new VaultFilter(scope.owner(), null);
-        // Count first, so a page past the end becomes the last page instead of an empty one.
-        Paging paging = Paging.of(repository.count(filter), pageSize(), this.requestedPage);
-        return repository.page(filter, paging.offset(), pageSize());
+        return repository.pageAt(new VaultFilter(scope.owner(), null), this.requestedPage, pageSize());
     }
 
     private void load() {
-        Player player = player();
-        Executor mainThread = plugin.getServer().getScheduler().getMainThreadExecutor(plugin);
+        Executor mainThread = plugin.mainThread();
         scope(plugin)
                 .thenApplyAsync(scope -> read(plugin.repository(), scope), plugin.databaseExecutor())
-                .thenCompose(page -> {
-                    Set<UUID> owners = new LinkedHashSet<>();
-                    page.vaults().forEach(vault -> owners.add(vault.ownerUuid()));
-                    Map<UUID, String> names = new HashMap<>();
-                    List<CompletableFuture<Void>> lookups = new ArrayList<>();
-                    for (UUID owner : owners) {
-                        lookups.add(plugin.names().nameOf(owner).thenAccept(name -> {
-                            synchronized (names) {
-                                names.put(owner, name.filter(found -> !found.isBlank())
-                                        .orElse(owner.toString().substring(0, 8)));
+                .thenCompose(page -> plugin.names()
+                        .displayNames(page.vaults().stream().map(VaultSummary::ownerUuid).toList())
+                        .thenApply(names -> {
+                            Paging paging = Paging.of(page.total(), pageSize(), this.requestedPage);
+                            List<Entry> entries = new ArrayList<>();
+                            int index = paging.offset() + 1;
+                            for (VaultSummary vault : page.vaults()) {
+                                entries.add(new Entry(vault, names.getOrDefault(vault.ownerUuid(), Names.shortId(vault.ownerUuid())), index++));
                             }
-                        }));
-                    }
-                    return CompletableFuture.allOf(lookups.toArray(new CompletableFuture[0])).thenApply(done -> {
-                        Paging paging = Paging.of(page.total(), pageSize(), this.requestedPage);
-                        List<Entry> entries = new ArrayList<>();
-                        int index = paging.offset() + 1;
-                        for (VaultSummary vault : page.vaults()) {
-                            entries.add(new Entry(vault, names.getOrDefault(vault.ownerUuid(),
-                                    vault.ownerUuid().toString().substring(0, 8)), index++));
-                        }
-                        return new Loaded(entries, paging);
-                    });
-                })
+                            return new Loaded(entries, paging);
+                        }))
                 .thenAcceptAsync(result -> {
                     if (player.isOnline()) {
-                        new VaultListMenu(player, (ParentMenuImp) parentMenu(), this.uiContext, this.query,
-                                this.requestedPage, result).open();
+                        new VaultListMenu(player, parentMenu(), this.uiContext, this.query, this.requestedPage,
+                                result).open();
                     }
                 }, mainThread)
                 .exceptionally(failure -> {
@@ -248,16 +227,5 @@ public final class VaultListMenu extends ChildMenuImp {
                     });
                     return null;
                 });
-    }
-
-    @Override
-    public void open() {
-        if (this.loaded == null) {
-            new LoadingMenu(player(), parentMenu(), Map.of("%query%", this.query)).open();
-            load();
-        } else {
-            setDialog(build(this.loaded));
-            super.open();
-        }
     }
 }
