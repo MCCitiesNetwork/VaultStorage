@@ -1,9 +1,9 @@
-package com.minecraftcitiesnetwork.vaultstorage.chestshop.adapter;
+package com.minecraftcitiesnetwork.vaultstorage.chestshop;
 
-import com.minecraftcitiesnetwork.vaultstorage.chestshop.Shop;
-import com.minecraftcitiesnetwork.vaultstorage.chestshop.ShopDirectory;
-import com.minecraftcitiesnetwork.vaultstorage.chestshop.ShopOwner;
-import com.minecraftcitiesnetwork.vaultstorage.chestshop.ShopPosition;
+import com.minecraftcitiesnetwork.vaultstorage.shop.Shop;
+import com.minecraftcitiesnetwork.vaultstorage.shop.ShopDirectory;
+import com.minecraftcitiesnetwork.vaultstorage.shop.ShopOwner;
+import com.minecraftcitiesnetwork.vaultstorage.shop.ShopPosition;
 import io.paradaux.treasury.api.ShopQueryApi;
 import io.paradaux.treasury.api.market.ShopResult;
 import java.util.List;

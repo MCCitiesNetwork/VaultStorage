@@ -39,16 +39,20 @@ the removed `addItems`. The sweep adds no behaviour, so it adds no tests.
 
 ## What the sweep did not do
 
-- **`CaptureSession.capture` is still about ninety lines** of branches. The capture service was
-  split by moving code; the parts that were rewritten, each with its own test, are
-  `DoubleChestRule` and `CaptureRules`.
-- **Menus and services hold the whole plugin**, not the two or three things each uses. That
-  removed the singleton without rewriting every constructor chain; narrowing them is possible
-  class by class.
+- **Menus, the capture service and the scan classes hold the whole plugin.** A menu takes it
+  from its parent, and each of those classes uses most of what the plugin hands out.
+  `VaultPlacementService`, `VaultCapturePolicy`, `CaptureOwners` and `BoltServiceImp` now take
+  only what they use.
 - **Queries with an argument keep their names** (`BoltService.getOwner(block)`,
   `WorldGuardService.getRegionsAt(block)`). The accessor rule is about getters.
 - **`Imp` and `Impl` suffixes stay.**
-- **Annotations are documentation, not checks.** Nothing verifies them at build time. An audit
-  after the sweep found several that were wrong, since corrected; others may remain.
 - **Null checks on `plugin.bolt()` and `plugin.worldGuard()` remain** although neither is null
   once the plugin has enabled.
+
+## Done after the sweep
+
+- **`CaptureSession.capture` is five short methods.** Every click ends in one place, `finish`,
+  which clears the busy flag and reports a failure.
+- **Annotations are checked at build time** by NullAway, on main code. Turning it on found 42
+  places where an annotation or a missing one was wrong; all are corrected.
+

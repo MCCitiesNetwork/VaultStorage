@@ -1,5 +1,5 @@
 module-name: chestshop-adapter
-entry-class: com.minecraftcitiesnetwork.vaultstorage.chestshop.adapter.ChestShopModule
+entry-class: com.minecraftcitiesnetwork.vaultstorage.chestshop.ChestShopModule
 author: MCCitiesNetwork
 expected-plugin-class: com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin
 reloadable: false

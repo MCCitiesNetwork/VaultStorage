@@ -1,6 +1,6 @@
 package com.minecraftcitiesnetwork.vaultstorage.bolt;
 
-import com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin;
+import org.bukkit.Server;
 import com.minecraftcitiesnetwork.vaultstorage.bolt.BoltService;
 import org.bukkit.World;
 import org.bukkit.block.Block;
@@ -26,17 +26,15 @@ import java.util.UUID;
 public final class BoltServiceImp implements BoltService {
 
     private final BoltAPI api;
-    private final VaultStoragePlugin plugin;
 
     /**
      * Constructs a new BoltService implementation that integrates with the Bolt plugin.
      *
-     * @param plugin the VaultStorage plugin instance (not null)
+     * @param server where Bolt registers its API
      * @throws IllegalStateException if the BoltAPI is not found or not registered
      */
-    public BoltServiceImp(@NotNull VaultStoragePlugin plugin) {
-        this.plugin = plugin;
-        BoltAPI loaded = this.plugin.getServer().getServicesManager().load(BoltAPI.class);
+    public BoltServiceImp(@NotNull Server server) {
+        BoltAPI loaded = server.getServicesManager().load(BoltAPI.class);
         if (loaded == null) {
             throw new IllegalStateException("BoltAPI service not found. Ensure the Bolt plugin is installed and registered.");
         }

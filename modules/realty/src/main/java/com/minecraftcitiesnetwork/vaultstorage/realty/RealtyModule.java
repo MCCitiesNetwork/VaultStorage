@@ -13,12 +13,12 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 /** Vaults a previous occupant's locked containers when a Realty region changes hands. */
-public final class AutoVaultModule extends SimplePluginModule<VaultStoragePlugin> {
+public final class RealtyModule extends SimplePluginModule<VaultStoragePlugin> {
 
     private final AtomicReference<AutoVaultSettings> settings = new AtomicReference<>();
     private @Nullable AutoVaultService service;
 
-    public AutoVaultModule() {
+    public RealtyModule() {
     }
 
     @Override

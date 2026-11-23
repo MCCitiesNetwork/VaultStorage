@@ -6,12 +6,12 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.HashSet;
 import com.minecraftcitiesnetwork.vaultstorage.capture.ContainerBlocks;
-import com.minecraftcitiesnetwork.vaultstorage.chestshop.ChestShopService;
-import com.minecraftcitiesnetwork.vaultstorage.chestshop.ShopPosition;
-import com.minecraftcitiesnetwork.vaultstorage.chestshop.ShopOwners;
-import com.minecraftcitiesnetwork.vaultstorage.chestshop.ShopOwner;
-import com.minecraftcitiesnetwork.vaultstorage.chestshop.ShopDirectory;
-import com.minecraftcitiesnetwork.vaultstorage.chestshop.Shop;
+import com.minecraftcitiesnetwork.vaultstorage.shop.ShopSigns;
+import com.minecraftcitiesnetwork.vaultstorage.shop.ShopPosition;
+import com.minecraftcitiesnetwork.vaultstorage.shop.ShopOwners;
+import com.minecraftcitiesnetwork.vaultstorage.shop.ShopOwner;
+import com.minecraftcitiesnetwork.vaultstorage.shop.ShopDirectory;
+import com.minecraftcitiesnetwork.vaultstorage.shop.Shop;
 import java.time.Instant;
 import java.util.concurrent.CompletableFuture;
 import java.util.logging.Level;
@@ -309,7 +309,7 @@ public final class AutoVaultService {
                                                        @NotNull SweepFilter filter, @NotNull UUID initiator,
                                                        @NotNull Runnable onVaulted, @NotNull Sweep sweep) {
         ShopDirectory directory = plugin.integrations().shopDirectory();
-        if (directory == null || !plugin.chestShop().isAvailable()) {
+        if (directory == null) {
             return CompletableFuture.completedFuture(null);
         }
         UUID worldId = world.getUID();
@@ -340,9 +340,9 @@ public final class AutoVaultService {
     private void sweepShop(@NotNull World world, @NotNull Shop shop, @NotNull List<Shop> registry,
                            @NotNull Set<ShopPosition> handled, @NotNull SweepFilter filter, @NotNull UUID initiator,
                            @NotNull Runnable onVaulted, @NotNull Sweep sweep) {
-        ChestShopService chestShop = plugin.chestShop();
+        ShopSigns shopSigns = plugin.shopSigns();
         Block sign = world.getBlockAt(shop.sign().x(), shop.sign().y(), shop.sign().z());
-        if (!chestShop.isShopSign(sign)) {
+        if (!shopSigns.isShopSign(sign)) {
             // The registry is behind the world: the sign has gone since.
             return;
         }
@@ -354,7 +354,7 @@ public final class AutoVaultService {
         if (bolt != null && bolt.getOwner(container) != null) {
             return;
         }
-        List<Block> signs = chestShop.findShopSigns(container);
+        List<Block> signs = shopSigns.findShopSigns(container);
         Optional<UUID> owner = ShopOwners.playerOwner(registry, signs.stream()
                 .map(block -> new ShopPosition(block.getX(), block.getY(), block.getZ())).toList());
         if (owner.isEmpty() || !filter.shouldVault(owner.get(), container.getX(), container.getY(), container.getZ())) {
@@ -362,7 +362,7 @@ public final class AutoVaultService {
         }
         if (ContainerBlocks.isEmpty(container)) {
             // Nothing to store. The shop is still the displaced player's, so its signs go.
-            signs.forEach(block -> chestShop.removeShopSign(null, block));
+            signs.forEach(block -> shopSigns.removeShopSign(null, block));
             return;
         }
         // The shop plugin sees the container go and closes the shop itself.

@@ -1,9 +1,9 @@
-package com.minecraftcitiesnetwork.vaultstorage.chestshop.adapter;
+package com.minecraftcitiesnetwork.vaultstorage.chestshop;
 
 import com.Acrobot.ChestShop.Events.ShopDestroyedEvent;
 import com.Acrobot.ChestShop.Signs.ChestShopSign;
 import com.Acrobot.ChestShop.Utils.uBlock;
-import com.minecraftcitiesnetwork.vaultstorage.chestshop.ChestShopService;
+import com.minecraftcitiesnetwork.vaultstorage.shop.ShopSigns;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
@@ -17,15 +17,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * {@link ChestShopService} backed by the ChestShop API. Only instantiated when ChestShop is installed,
+ * {@link ShopSigns} backed by the ChestShop API. Only instantiated when ChestShop is installed,
  * so that the {@code com.Acrobot} imports are never linked otherwise.
  */
-public final class ChestShopServiceImp implements ChestShopService {
-
-    @Override
-    public boolean isAvailable() {
-        return true;
-    }
+public final class ChestShopSigns implements ShopSigns {
 
     @Override
     public boolean isShopSign(@Nullable Block block) {

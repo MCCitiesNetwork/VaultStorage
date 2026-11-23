@@ -1,4 +1,4 @@
-package com.minecraftcitiesnetwork.vaultstorage.chestshop;
+package com.minecraftcitiesnetwork.vaultstorage.shop;
 
 /** Where a shop's sign is, within one world. */
 public record ShopPosition(int x, int y, int z) {

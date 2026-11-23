@@ -1,12 +1,12 @@
 package com.minecraftcitiesnetwork.vaultstorage;
 
 import java.util.Objects;
-import com.minecraftcitiesnetwork.vaultstorage.chestshop.ShopOwnerLookup;
+import com.minecraftcitiesnetwork.vaultstorage.shop.ShopOwnerLookup;
 import org.jetbrains.annotations.NotNull;
 import com.minecraftcitiesnetwork.vaultstorage.capture.VaultCapturePolicy;
 import com.minecraftcitiesnetwork.vaultstorage.config.Text;
 import com.minecraftcitiesnetwork.vaultstorage.bolt.BoltService;
-import com.minecraftcitiesnetwork.vaultstorage.chestshop.ChestShopService;
+import com.minecraftcitiesnetwork.vaultstorage.shop.ShopSigns;
 import com.minecraftcitiesnetwork.vaultstorage.scan.VaultScanService;
 import com.minecraftcitiesnetwork.vaultstorage.region.WorldGuardService;
 import com.minecraftcitiesnetwork.vaultstorage.command.VaultCommand;
@@ -77,7 +77,8 @@ public final class VaultStoragePlugin extends JavaPlugin {
     private final AtomicReference<PluginSettings> settings = new AtomicReference<>();
     private final MessageContainer messages = new MessageContainer();
     private final Text text = new Text(this.messages);
-    private final VaultCapturePolicy capturePolicy = new VaultCapturePolicy(this);
+    private final VaultCapturePolicy capturePolicy = new VaultCapturePolicy(this::bolt, this::worldGuard,
+            this::shopOwners, getLogger());
     private ShopOwnerLookup shopOwners;
     private ModuleLifecycleManager<VaultStoragePlugin> modules;
     private Names names;
@@ -126,7 +127,7 @@ public final class VaultStoragePlugin extends JavaPlugin {
     public @NotNull Text text() { return text; }
 
     /** Whose an unlocked shop container is. */
-    public ShopOwnerLookup shopOwners() { return shopOwners; }
+    public @NotNull ShopOwnerLookup shopOwners() { return shopOwners; }
 
     /** Who may vault what. */
     public @NotNull VaultCapturePolicy capturePolicy() { return capturePolicy; }
@@ -188,7 +189,7 @@ public final class VaultStoragePlugin extends JavaPlugin {
         // Integration services
         this.worldGuardService = new WorldGuardServiceImp();
         this.integrations.addPlacementGrant(new WorldGuardPlacementGrant(this.worldGuardService));
-        this.boltService = new BoltServiceImp(this);
+        this.boltService = new BoltServiceImp(getServer());
 
 
 
@@ -376,9 +377,9 @@ public final class VaultStoragePlugin extends JavaPlugin {
     }
 
 
-    /** ChestShop integration; returns a no-op implementation when ChestShop is not installed. */
-    public @NotNull ChestShopService chestShop() {
-        return this.integrations.chestShop();
+    /** The shop signs modules know of; read at use time. */
+    public @NotNull ShopSigns shopSigns() {
+        return this.integrations.shopSigns();
     }
 
 }

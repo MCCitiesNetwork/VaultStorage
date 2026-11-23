@@ -1,4 +1,4 @@
-package com.minecraftcitiesnetwork.vaultstorage.chestshop;
+package com.minecraftcitiesnetwork.vaultstorage.shop;
 
 import java.util.Collection;
 import java.util.List;

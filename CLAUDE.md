@@ -30,8 +30,6 @@ project version lives in `gradle.properties`.
 
 The host goes in `plugins/`; module jars go in `plugins/VaultStorage/modules/`.
 
-`e2e-plugins/realty-stub` is a test-only plugin for the live-test server and is never shipped.
-
 `buildSrc` holds three conventions: `vaultstorage-conventions` (every project),
 `vaultstorage-shared-relocation` (every project; the one list of relocations) and
 `vaultstorage-module-conventions` (modules).
@@ -43,13 +41,13 @@ Under `com.minecraftcitiesnetwork.vaultstorage`, grouped by feature:
 | Package | Holds |
 | --- | --- |
 | (root) | `VaultStoragePlugin` (owns and hands out every service), `Integrations` |
-| `capture` | `VaultCaptureService` (prepare, store, offline), `CaptureSession` (a player's capture mode), `CaptureActionBar`, `CaptureOwners`, `ContainerBlocks`, `DoubleChestRule`, the pipeline, the policy |
-| `placement` | placement service |
+| `capture` | `VaultCaptureService` (prepare, store, offline), `CaptureSession` (a player's capture mode), `CaptureActionBar`, `CaptureOwners`, `ContainerBlocks`, `DoubleChestRule`, `CaptureRules` and `CaptureRegions` (who may vault what), the pipeline, the policy |
+| `placement` | `VaultPlacementService` (the order of a placement), `PlacementStore` and `PlacementWorld` (what it writes to), `PlacementRules` (who may place where) |
 | `vault` | vault types, the vault inventory, item serialization, events |
 | `scan` | region scan service and scanner |
 | `region` | WorldGuard service and region types |
 | `bolt` | Bolt service |
-| `chestshop` | `ChestShopService` and its no-op default; `ShopDirectory`, `Shop`, `ShopOwner`; `ShopOwners` (the rule) and `ShopOwnerLookup` (asks and remembers) |
+| `shop` | `ShopSigns` (the signs a shop plugin keeps on containers); `ShopDirectory`, `Shop`, `ShopOwner`; `ShopOwners` (the rule) and `ShopOwnerLookup` (asks and remembers). Names no shop plugin |
 | `names` | `NameSource`, the Paper source, `Names`, `UniqueIdentifierResolver` |
 | `menu` | dialog menus, `AutoDialog`, `ConfirmMenu`, `VaultLabel` |
 | `command` | `VaultCommand` (the Brigadier tree), its sealed outcomes, `VaultActionArgument` |
@@ -69,11 +67,19 @@ findings and kept the framework (`ParentMenu`, `ChildMenu`, `AutoDialog`).
 - **Host code reads `Integrations` at use time, never once at construction.** Modules start
   after the host's services exist and can stop while it runs.
 - **A module's entry class names no type from its optional plugin.** Those types live in one
-  separate class per module (`NamebookNameSource`, `FloodgateNames`, `ChestShopServiceImp`,
+  separate class per module (`NamebookNameSource`, `FloodgateNames`, `ChestShopSigns`,
   `TreasuryShopDirectory`,
   `RealtyOccupantChangeListener` behind `RealtyBinding`). Each module's `*ModuleTest` enforces
   it by scanning the entry class file. If the entry class named such a type, loading the module
   on a server without that plugin would throw out of the host's `onEnable`.
+- **An integration is a host concept, never a plugin's name.** The host has shop signs, name
+  sources, placement grants and an owner notifier; it has no `chestshop` or `realty` package.
+- **A slot that several plugins could fill is a list** (`addPlacementGrant`, `addShopSigns`), and
+  an empty list is the default: no no-op class and no `isAvailable()`. A provider that throws is
+  logged and counted as having nothing to say.
+- **A module fills its slots last.** It builds everything it supplies first: if `initialize`
+  throws, its class loader is closed and `shutdown` is never called, so a slot already filled
+  would point at dead classes.
 - **An optional plugin a module needs is declared in the host's `paper-plugin.yml`** with
   `required: false` and `join-classpath: true`. Module class loaders are parented to the host's.
 - **Relocations live only in `vaultstorage-shared-relocation`.** Modules apply it too, so their
@@ -95,16 +101,19 @@ findings and kept the framework (`ParentMenu`, `ChildMenu`, `AutoDialog`).
   They fail, not skip, without Docker.
 - **Checkstyle fails the build** on wildcard imports, static imports, unused imports,
   `printStackTrace` and `System.out`.
+- **NullAway fails the build** on main code: a value that may be null is annotated `@Nullable`,
+  and one that is not annotated is never null. A field a framework sets later is the one place
+  for `@SuppressWarnings("NullAway.Init")`, with a comment saying who sets it.
 - **Never commit `*.sql` from the repository root.** A production snapshot is kept there for
   testing and is ignored.
 
 ## Rules for config and messages
 
 - **Operator files are `database.yml`, `settings.yml`, `messages.yml`** and one `config.yml` per
-  module that needs one. `ConfigFiles` creates each from the bundled default and never writes it
+  module that needs one (`modules/<module-name>/config.yml`). `ConfigFiles` creates each from the bundled default and never writes it
   again; the defaults go to `defaults/` on every start.
-- **Settings are records read through `VaultStoragePlugin.settings().get()` at use time.** A
-  reload swaps the reference. `database.yml` is read once.
+- **Settings are a record read through `VaultStoragePlugin.settings()` at use time.** A
+  reload swaps it. `database.yml` is read once.
 - **No player-facing text in Java.** A sentence is a key in `messages.yml` and a constant in
   `MessageKeys`, named after the key; `MessageKeysTest` fails when either is missing.
 - **Runtime strings go in through `MessageContainer.value`** (or `Text.of(key, map)`, which does
@@ -118,7 +127,9 @@ findings and kept the framework (`ParentMenu`, `ChildMenu`, `AutoDialog`).
 
 ## Rules for commands and permissions
 
-- **`/vault` is one Brigadier tree**, built by `VaultCommand.create`. Each branch has a
+- **`/vault` is one Brigadier tree**, built by `VaultCommand.tree` from a `Handlers` interface, so
+  `VaultCommandTreeTest` checks its branches and permissions without a server. `create` supplies
+  the handlers that use the plugin. Each branch has a
   `requires`; a handler checks the sender, reads permissions on the main thread, works on the
   database executor and replies on the main thread.
 - **A permission is a constant in `Permissions` and an entry in `paper-plugin.yml`** with a
@@ -179,9 +190,10 @@ What step 3 delivered (plan: `docs/superpowers/plans/2026-11-12-capture-placemen
 
 `./gradlew :plugin:plugwrightTest` starts MariaDB from `compose.dev.yml` (port 3309), provisions a
 Paper 26.3 server with Bolt, WorldGuard, WorldEdit, LuckPerms, GriefPrevention, ViaVersion and
-ViaBackwards,
+ViaBackwards, Realty and the four economy plugins,
 installs the host and module jars, and runs the specs in `plugin/src/test/e2e/tests/`. It is never
-part of `build`. It needs Docker and Node.
+part of `build`. It needs Docker, Node and `gh` signed in to an account that can read the
+Realty and hibernia-economy repositories.
 
 - Bots join as 1.21.11 clients; `plugins/test-server.ts` keeps them connected and still.
 - Bots do not walk: place them with `standAt`. Click blocks with `rightClick` in `tests/world.ts`,
@@ -195,13 +207,27 @@ part of `build`. It needs Docker and Node.
 - Menus are Paper dialogs: `tests/dialogs.ts` reads and clicks them. A loading dialog comes
   between most screens.
 - The test server's log is `plugin/src/test/e2e/generated/local/run/logs/latest.log`.
-- ChestShop, Treasury, Business and TreasuryAPI are installed by `installE2eEconomy` from
-  `../hibernia-economy/release` (built there with `./gradlew release`; another place with
-  `-PhiberniaEconomyDir=`). Treasury will not start without all four. Their database is
-  `treasury` on the dev MariaDB. Without the checkout, `chestshop.spec.ts` passes without running.
-- Realty is a stand-in, `e2e-plugins/realty-stub`: a plugin named `Realty` that bundles Realty's
-  API classes. The console command `realtystub bought <world> <region> <buyer>` fires
-  `RegionBoughtEvent`, which starts a sweep after the one-second delay the test config sets.
+- ChestShop, Treasury, Business and TreasuryAPI are installed by `installE2eEconomy`: from
+  `../hibernia-economy/release` when that checkout has one (built there with `./gradlew
+  release`; another place with `-PhiberniaEconomyDir=`), otherwise from the `dev-latest`
+  release of `ParadauxIO/hibernia-economy`, fetched with `gh`. Treasury will not start without
+  all four. Their database is `treasury` on the dev MariaDB.
+- Realty is the real plugin, installed by `installE2eRealty` from the jars the latest
+  successful `main` build of `MCCitiesNetwork/realty` keeps on GitHub Actions, fetched with
+  `gh` (or `-PrealtyJar=<file>`). Its database is `realty` on the dev MariaDB. It needs an
+  economy, so it enables only when the economy plugins are installed.
+- Downloads are kept in `plugin/build/e2e-downloads` and reused until GitHub has a newer set.
+- A spec that needs a shop or a region sale starts with `requireChestShop()` or
+  `requireRealty()` (`tests/shops.ts`) and fails when the plugin is missing. No spec passes
+  without running.
+- In `tests/sweep.spec.ts` staff registers a region with `/realty register`, naming themself
+  as authority or landlord: Realty's default is a government account the test server lacks.
+  A buyer gets money from the console with `eco give`. The sweep starts one second after
+  Realty's event, the delay the test config sets.
+- Realty replaces a region's WorldGuard owners and members with the new occupant before it
+  fires its event, so the sweep sees the previous occupant as an outsider.
+- Add several WorldGuard members with one `/rg addmember`, and wait for the answer that names
+  the region: a bot's messages last the whole test, so an earlier region's answer would match.
 - A test run starts by emptying `Vault`, `VaultItem` and `PendingSweep` (`resetE2eData`): bots get
   a random four-character name, and a name seen before would bring its old vaults.
 - A vault's row exists a tick before its block is removed. Wait for the message that follows
@@ -241,10 +267,17 @@ locked shop by its sign vaults the container, and an empty locked shop loses its
 sign; in both, ChestShop's registry marks the shop inactive. A stocked shop nobody locked is
 vaulted to the shop's owner, not to the player who clicked.
 
-Also covered live: a region being bought vaults the previous occupant's locked chest for them
-and tells the buyer once; the buyer's own locked chest stays. With the economy plugins: the
+Also covered live, through Realty itself: a region being bought vaults the previous occupant's
+locked chest for them and tells the buyer once; the buyer's own locked chest stays. The same
+sweep after a title transfer, a rental of a vacant region, and a tenant replaced by staff. The
 sweep vaults the previous occupant's stocked unlocked shop, removes the sign of their empty one
 and leaves the chest, and leaves the buyer's own shop alone.
+
+Also covered live, for regions that share space: where two regions overlap, a member of one
+vaults an outsider's chest and not the other region's member's; a member of a region next
+door, or of the region above, has no say; a member of a city has none over a plot inside it.
+Buying the region above another leaves a chest in the region below, and buying a region that
+overlaps another leaves that region's member's chest.
 
 Shared steps are in `tests/vaults.ts`.
 
@@ -261,7 +294,14 @@ Shared steps are in `tests/vaults.ts`.
   outcome. `VaultCapturePolicy` only gathers its inputs from Bolt and WorldGuard.
 - **A region counts by its real shape.** Ask `WorldGuardService.getRegionsAt` or `isInside`;
   `getRegionsIn` builds every region and is for listing them. A bounding box is used only to
-  ask Bolt for candidates and to decide "nested inside".
+  ask Bolt for candidates and to decide "nested inside" (`RegionGeometry.nestedInside`: inside
+  and not the same box, so two regions with equal bounds are nested in neither).
+- **Turning regions into the rule's input is `CaptureRegions.at`.** `CaptureRegionsTest` covers
+  regions that overlap, touch, nest and lie above one another.
+- **Only the override removes a shop sign from a container that cannot be vaulted**
+  (`CaptureRules.mayRemoveShopSign`).
+- **A placement is `VaultPlacementService` over a `PlacementStore` and a `PlacementWorld`**, so
+  its order is tested with fakes. Who may place where is `PlacementRules.decide`.
 - **A hanging entity follows the ordering rule too:** stored, then checked to be still there and
   unchanged, then removed. If the check fails the store is undone with `undoAppend`.
 - **A chunk is held with `ChunkHolds` from store to remove** when nothing else keeps it loaded.

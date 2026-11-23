@@ -153,6 +153,13 @@ plugwright {
     }
 }
 
+// Runs a command and gives back its exit code and output. Used for docker and gh.
+fun runCommand(vararg command: String): Pair<Int, String> {
+    val process = ProcessBuilder(*command).redirectErrorStream(true).start()
+    val output = process.inputStream.readAllBytes().toString(Charsets.UTF_8)
+    return process.waitFor() to output
+}
+
 val startE2eDatabase by tasks.registering(Exec::class) {
     description = "Starts the MariaDB from compose.dev.yml for the live-server tests."
     commandLine("docker", "compose", "-f", rootProject.file("compose.dev.yml").absolutePath, "up", "-d", "--wait")
@@ -165,8 +172,8 @@ val resetE2eData by tasks.registering {
     dependsOn(startE2eDatabase)
     doLast {
         for (table in listOf("VaultItem", "Vault", "PendingSweep")) {
-            ProcessBuilder("docker", "exec", "vaultstorage-dev-mariadb", "mariadb", "-uroot", "-proot", "vault_storage",
-                "-e", "DELETE FROM $table").redirectErrorStream(true).start().apply { inputStream.readAllBytes() }.waitFor()
+            runCommand("docker", "exec", "vaultstorage-dev-mariadb", "mariadb", "-uroot", "-proot", "vault_storage",
+                "-e", "DELETE FROM $table")
         }
     }
 }
@@ -178,35 +185,53 @@ val installE2eModules by tasks.registering(Sync::class) {
     preserve { exclude("*.jar") }
 }
 
-// A stand-in for Realty, so that a test can make a region change hands and start a sweep.
-val e2ePlugins: Configuration by configurations.creating
-dependencies {
-    e2ePlugins(project(path = ":e2e-plugins:realty-stub", configuration = "archives")) { isTransitive = false }
-}
-val installE2ePlugins by tasks.registering(Copy::class) {
-    from(e2ePlugins)
-    into(e2eRunDir.dir("plugins"))
-}
+val e2eDownloads = layout.buildDirectory.dir("e2e-downloads")
 
-// ChestShop and Treasury are not published anywhere: they come from a checkout of hibernia-economy
-// beside this repository (or wherever -PhiberniaEconomyDir points), built with its
-// `./gradlew release`. Without them the ChestShop specs skip themselves.
+// ChestShop, Treasury, Business and TreasuryAPI are not in any Maven repository. They come from,
+// in this order: -PhiberniaEconomyDir=<checkout>, a hibernia-economy checkout beside this
+// repository (its `./gradlew release` output), or the rolling dev-latest release on GitHub,
+// fetched with `gh`. Without them the specs that need a shop or a region sale fail.
+val economyRepository = "ParadauxIO/hibernia-economy"
 val hiberniaEconomyDir = providers.gradleProperty("hiberniaEconomyDir").orElse("../hibernia-economy")
     .map { rootProject.file(it) }
 
 val installE2eEconomy by tasks.registering {
-    description = "Installs the economy plugins from a hibernia-economy checkout into the test server."
+    description = "Installs the economy plugins into the test server."
     val releaseDir = hiberniaEconomyDir.map { File(it, "release") }
+    val downloadDir = e2eDownloads.map { it.dir("economy").asFile }
     val pluginsDir = e2eRunDir.dir("plugins").asFile
     doLast {
         // Treasury refuses to start unless all four economy plugins are there, at one version.
         val dataFolders = mapOf("treasury" to "Treasury", "business" to "Business",
             "chestshop" to "ChestShop", "treasury-api-plugin" to "TreasuryAPI")
         val installed = Regex("(treasury|business|chestshop|treasury-api-plugin)-\\d.*\\.jar")
-        pluginsDir.listFiles { file -> installed.matches(file.name) }?.forEach { it.delete() }
-        val jars = releaseDir.get().listFiles { file -> installed.matches(file.name) }?.toList().orEmpty()
+        fun jarsIn(folder: File): List<File> =
+            folder.listFiles { file -> installed.matches(file.name) }?.toList().orEmpty()
+
+        var jars = jarsIn(releaseDir.get())
         if (jars.size < dataFolders.size) {
-            logger.lifecycle("No full economy release in ${releaseDir.get()}; the ChestShop specs will skip.")
+            // The release's jar names carry its commit, so a new release is a new set of names.
+            val (listed, names) = runCommand("gh", "release", "view", "dev-latest", "-R", economyRepository,
+                "--json", "assets", "-q", ".assets[].name")
+            val wanted = names.lines().filter { installed.matches(it) }
+            val folder = downloadDir.get().apply { mkdirs() }
+            if (listed == 0 && wanted.size == dataFolders.size) {
+                if (!wanted.all { File(folder, it).exists() }) {
+                    jarsIn(folder).forEach { it.delete() }
+                    val (downloaded, output) = runCommand("gh", "release", "download", "dev-latest", "-R",
+                        economyRepository, "-p", "*.jar", "-D", folder.absolutePath, "--clobber")
+                    check(downloaded == 0) { "Could not download the economy plugins: $output" }
+                }
+                jars = wanted.map { File(folder, it) }
+            } else {
+                // Offline, or gh is missing: whatever an earlier run fetched.
+                jars = jarsIn(folder)
+            }
+        }
+        pluginsDir.listFiles { file -> installed.matches(file.name) }?.forEach { it.delete() }
+        if (jars.size != dataFolders.size) {
+            logger.warn("No economy plugins: no release in ${releaseDir.get()} and none from $economyRepository."
+                + " The shop and region-sale specs will fail.")
             return@doLast
         }
         for (jar in jars) {
@@ -229,9 +254,64 @@ val installE2eEconomy by tasks.registering {
             File(pluginsDir, "$folder/config.yml").apply { parentFile.mkdirs() }.writeText(config)
         }
 
-        val created = ProcessBuilder("docker", "exec", "vaultstorage-dev-mariadb", "mariadb", "-uroot", "-proot",
-            "-e", "CREATE DATABASE IF NOT EXISTS treasury").inheritIO().start().waitFor()
-        check(created == 0) { "Could not create the treasury database in the dev MariaDB" }
+        val (created, output) = runCommand("docker", "exec", "vaultstorage-dev-mariadb", "mariadb", "-uroot",
+            "-proot", "-e", "CREATE DATABASE IF NOT EXISTS treasury")
+        check(created == 0) { "Could not create the treasury database in the dev MariaDB: $output" }
+    }
+}
+
+// Realty itself, so that a region really changes hands. Its plugin jar is not in any Maven
+// repository: it is taken from -PrealtyJar=<file>, or from the jars the latest successful build
+// of Realty's main branch keeps on GitHub, fetched with `gh`. Realty needs an economy, so it
+// runs after installE2eEconomy and only enables when that installed one.
+val realtyRepository = "MCCitiesNetwork/realty"
+val realtyJarOverride = providers.gradleProperty("realtyJar").map { rootProject.file(it) }
+
+val installE2eRealty by tasks.registering {
+    description = "Installs Realty into the test server."
+    mustRunAfter(installE2eEconomy)
+    val override = realtyJarOverride
+    val downloadDir = e2eDownloads.map { it.dir("realty").asFile }
+    val pluginsDir = e2eRunDir.dir("plugins").asFile
+    doLast {
+        val pluginJar = Regex("realty-paper-\\d.*-all\\.jar")
+        fun jarIn(folder: File): File? = folder.walkTopDown().firstOrNull { pluginJar.matches(it.name) }
+
+        var jar: File? = override.orNull
+        if (jar == null) {
+            val (listed, run) = runCommand("gh", "run", "list", "-R", realtyRepository, "--branch", "main",
+                "--workflow", "Build", "--status", "success", "--limit", "1",
+                "--json", "databaseId,headSha", "-q", ".[0] | \"\\(.databaseId) \\(.headSha)\"")
+            val parts = run.trim().split(" ")
+            if (listed == 0 && parts.size == 2) {
+                val folder = File(downloadDir.get(), parts[1])
+                if (jarIn(folder) == null) {
+                    downloadDir.get().deleteRecursively()
+                    folder.mkdirs()
+                    val (downloaded, output) = runCommand("gh", "run", "download", parts[0], "-R", realtyRepository,
+                        "-n", "jars-${parts[1]}", "-D", folder.absolutePath)
+                    check(downloaded == 0) { "Could not download Realty's jars: $output" }
+                }
+                jar = jarIn(folder)
+            } else {
+                // Offline, or gh is missing: whatever an earlier run fetched.
+                jar = jarIn(downloadDir.get().apply { mkdirs() })
+            }
+        }
+        pluginsDir.listFiles { file -> file.name.startsWith("realty-") && file.name.endsWith(".jar") }
+            ?.forEach { it.delete() }
+        if (jar == null || !jar.exists()) {
+            logger.warn("No Realty jar: none given with -PrealtyJar and none from $realtyRepository."
+                + " The region-sale specs will fail.")
+            return@doLast
+        }
+        jar.copyTo(File(pluginsDir, jar.name), overwrite = true)
+        // Realty prepends "jdbc:" itself and creates its own tables, in a database of its own.
+        File(pluginsDir, "Realty/database.yml").apply { parentFile.mkdirs() }.writeText(
+            "url: 'mariadb://127.0.0.1:3309/realty'\nusername: 'root'\npassword: 'root'\n")
+        val (created, output) = runCommand("docker", "exec", "vaultstorage-dev-mariadb", "mariadb", "-uroot",
+            "-proot", "-e", "CREATE DATABASE IF NOT EXISTS realty")
+        check(created == 0) { "Could not create the realty database in the dev MariaDB: $output" }
     }
 }
 
@@ -265,16 +345,16 @@ val usePaperStableBuild by tasks.registering {
 // Plugwright registers its tasks late, so they are matched by name instead of tasks.named(...).
 tasks.matching { it.name == "plugwrightProvisionLocal" }.configureEach {
     dependsOn(startE2eDatabase)
-    finalizedBy(usePaperStableBuild, installE2eModules, installE2eEconomy, installE2ePlugins)
+    finalizedBy(usePaperStableBuild, installE2eModules, installE2eEconomy, installE2eRealty)
 }
 tasks.matching { it.name == "plugwrightTestLocal" || it.name == "plugwrightRunServerLocal" }.configureEach {
-    dependsOn(usePaperStableBuild, installE2eModules, installE2eEconomy, installE2ePlugins)
+    dependsOn(usePaperStableBuild, installE2eModules, installE2eEconomy, installE2eRealty)
 }
 // Only a test run starts from empty tables; a server run by hand keeps what is there.
 // `plugwrightTest` runs the environment itself, not through `plugwrightTestLocal`.
 tasks.matching { it.name == "plugwrightTest" || it.name == "plugwrightTestLocal" }.configureEach {
     dependsOn(resetE2eData)
 }
-listOf(usePaperStableBuild, installE2eModules, installE2eEconomy, installE2ePlugins).forEach { task ->
+listOf(usePaperStableBuild, installE2eModules, installE2eEconomy, installE2eRealty).forEach { task ->
     task.configure { mustRunAfter(tasks.matching { it.name == "plugwrightProvisionLocal" }) }
 }

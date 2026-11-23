@@ -16,19 +16,50 @@ async function ordinaryPlayer(server: ServerWrapper, player: PlayerWrapper): Pro
     await sleep(700);
 }
 
+interface Bounds { minX: number; maxX: number; minY: number; maxY: number; minZ: number; maxZ: number }
+
+/** The whole height of the test world around a spot. */
+function around(x: number, z: number): Bounds {
+    return { minX: x - 5, maxX: x + 5, minY: -64, maxY: -50, minZ: z - 5, maxZ: z + 5 };
+}
+
+/** A WorldGuard region with these bounds, defined by staff, with these members. */
+async function region(staff: PlayerWrapper, name: string, bounds: Bounds, members: PlayerWrapper[]): Promise<string> {
+    staff.chat(`//pos1 ${bounds.minX},${bounds.minY},${bounds.minZ}`);
+    staff.chat(`//pos2 ${bounds.maxX},${bounds.maxY},${bounds.maxZ}`);
+    await sleep(300);
+    staff.chat(`/rg define ${name}`);
+    await expect(staff).toHaveReceivedMessage(name);
+    if (members.length > 0) {
+        // One command for all of them: WorldGuard answers once, when every member is in.
+        staff.chat(`/rg addmember ${name} ${members.map((member) => member.username).join(' ')}`);
+        // Named, so the answer about an earlier region is not taken for this one's.
+        await expect(staff).toHaveReceivedMessage(`'${name}' updated with new members`);
+    }
+    return name;
+}
+
 /** A WorldGuard region around a spot, defined by staff, with these members. */
 async function regionAround(staff: PlayerWrapper, x: number, z: number, members: PlayerWrapper[]): Promise<string> {
-    const region = `policy_${x}`;
-    staff.chat(`//pos1 ${x - 5},-64,${z - 5}`);
-    staff.chat(`//pos2 ${x + 5},-50,${z + 5}`);
-    await sleep(300);
-    staff.chat(`/rg define ${region}`);
-    await expect(staff).toHaveReceivedMessage(region);
-    for (const member of members) {
-        staff.chat(`/rg addmember ${region} ${member.username}`);
-        await expect(staff).toHaveReceivedMessage('updated with new members');
-    }
-    return region;
+    return region(staff, `policy_${x}`, around(x, z), members);
+}
+
+/** The actor right-clicks the chest in capture mode and is refused; the chest stays. */
+async function expectRefused(server: ServerWrapper, actor: PlayerWrapper, x: number, z: number, marker: string): Promise<void> {
+    actor.chat('/vault capture');
+    await expect(actor).toHaveReceivedMessage('Capture session started');
+    await rightClick(actor, x, FLOOR, z);
+    await expect(actor).toHaveReceivedMessage('Not allowed');
+    await expectBlock(server, x, FLOOR, z, 'chest', marker);
+}
+
+/** The actor right-clicks the chest in capture mode and it is vaulted. */
+async function expectVaulted(server: ServerWrapper, actor: PlayerWrapper, x: number, z: number, marker: string): Promise<void> {
+    actor.chat('/vault capture');
+    await expect(actor).toHaveReceivedMessage('Capture session started');
+    await rightClick(actor, x, FLOOR, z);
+    await expect(actor).toHaveReceivedMessage('Vault captured.');
+    await expectBlock(server, x, FLOOR, z, 'air', marker);
 }
 
 /** Staff, an owner with a locked chest, and a third player, all standing at a fresh spot. */
@@ -95,6 +126,75 @@ test('a chest outside any region cannot be vaulted by a player without the overr
         await rightClick(wanderer, chestX, FLOOR, z);
         await expect(wanderer).toHaveReceivedMessage('Not allowed');
         await expectBlock(server, chestX, FLOOR, z, 'chest', 'wilderness-left-it');
+    });
+
+// Regions that overlap. The chest is at x+2. West is x-5..x+3 and east is x+1..x+7, so the
+// chest is in both.
+
+test('where two regions overlap, a member of one vaults the chest of someone in neither',
+    { requires: { consoleOutput: 'full' } }, async ({ player, createPlayer, server }) => {
+        const [owner, member] = await Promise.all([createPlayer(), createPlayer()]);
+        const { x, z, chestX } = await scene(server, player, owner, member);
+        await region(player, `west_${x}`, { ...around(x, z), maxX: x + 3 }, [member]);
+        await region(player, `east_${x}`, { ...around(x, z), minX: x + 1, maxX: x + 7 }, []);
+
+        await expectVaulted(server, member, chestX, z, 'overlap-vaulted');
+    });
+
+test('where two regions overlap, a member of one cannot vault the chest of the other\'s member',
+    { requires: { consoleOutput: 'full' } }, async ({ player, createPlayer, server }) => {
+        const [owner, member] = await Promise.all([createPlayer(), createPlayer()]);
+        const { x, z, chestX } = await scene(server, player, owner, member);
+        await region(player, `west_${x}`, { ...around(x, z), maxX: x + 3 }, [member]);
+        await region(player, `east_${x}`, { ...around(x, z), minX: x + 1, maxX: x + 7 }, [owner]);
+
+        await expectRefused(server, member, chestX, z, 'overlap-left');
+    });
+
+test('a member of a region that only touches the chest\'s region has no say over the chest',
+    { requires: { consoleOutput: 'full' } }, async ({ player, createPlayer, server }) => {
+        const [owner, member] = await Promise.all([createPlayer(), createPlayer()]);
+        const { x, z, chestX } = await scene(server, player, owner, member);
+        // The chest at x+2 is in east alone; west ends one block before it.
+        await region(player, `west_${x}`, { ...around(x, z), maxX: x + 1 }, [member]);
+        await region(player, `east_${x}`, { ...around(x, z), minX: x + 2, maxX: x + 7 }, []);
+
+        await expectRefused(server, member, chestX, z, 'next-door-left');
+    });
+
+// Regions on one footprint, one above the other. The chest is on the floor, in the lower one.
+
+test('a member of the region above cannot vault a chest in the region below',
+    { requires: { consoleOutput: 'full' } }, async ({ player, createPlayer, server }) => {
+        const [owner, member] = await Promise.all([createPlayer(), createPlayer()]);
+        const { x, z, chestX } = await scene(server, player, owner, member);
+        await region(player, `ground_${x}`, { ...around(x, z), maxY: FLOOR + 1 }, []);
+        await region(player, `upstairs_${x}`, { ...around(x, z), minY: FLOOR + 2 }, [member]);
+
+        await expectRefused(server, member, chestX, z, 'below-left');
+    });
+
+test('a member of the region below vaults a chest in it, whoever belongs to the region above',
+    { requires: { consoleOutput: 'full' } }, async ({ player, createPlayer, server }) => {
+        const [owner, member] = await Promise.all([createPlayer(), createPlayer()]);
+        const { x, z, chestX } = await scene(server, player, owner, member);
+        await region(player, `ground_${x}`, { ...around(x, z), maxY: FLOOR + 1 }, [member]);
+        // The chest's owner belongs to the region above, which the chest is not in.
+        await region(player, `upstairs_${x}`, { ...around(x, z), minY: FLOOR + 2 }, [owner]);
+
+        await expectVaulted(server, member, chestX, z, 'below-vaulted');
+    });
+
+// A plot inside a city.
+
+test('a member of the city cannot vault a chest in a plot inside it',
+    { requires: { consoleOutput: 'full' } }, async ({ player, createPlayer, server }) => {
+        const [owner, citizen] = await Promise.all([createPlayer(), createPlayer()]);
+        const { x, z, chestX } = await scene(server, player, owner, citizen);
+        await region(player, `city_${x}`, { ...around(x, z), minX: x - 20, maxX: x + 20, minZ: z - 20, maxZ: z + 20 }, [citizen]);
+        await region(player, `plot_${x}`, around(x, z), []);
+
+        await expectRefused(server, citizen, chestX, z, 'plot-in-city-left');
     });
 
 test('a vault is placed only where its owner belongs to the region, or on their own claim',

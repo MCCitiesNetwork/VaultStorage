@@ -39,7 +39,6 @@ jobs:
           mkdir -p jars
           find . -path "*/build/libs/*.jar" -type f \
             ! -path "./buildSrc/*" \
-            ! -path "./e2e-plugins/*" \
             ! -name "*-sources.jar" \
             ! -name "*-javadoc.jar" \
             ! -name "*-tests.jar" \

@@ -7,10 +7,10 @@ import java.nio.charset.StandardCharsets;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
-class AutoVaultModuleTest {
+class RealtyModuleTest {
 
     private static String resource(String name) throws IOException {
-        try (InputStream stream = AutoVaultModuleTest.class.getClassLoader().getResourceAsStream(name)) {
+        try (InputStream stream = RealtyModuleTest.class.getClassLoader().getResourceAsStream(name)) {
             Assertions.assertNotNull(stream, name + " is not on the classpath");
             return new String(stream.readAllBytes(), StandardCharsets.ISO_8859_1);
         }
@@ -21,7 +21,7 @@ class AutoVaultModuleTest {
         String manifest = resource("module-manifest.yml");
         Assertions.assertTrue(manifest.contains("module-name: realty"));
         Assertions.assertTrue(manifest.contains(
-                "entry-class: com.minecraftcitiesnetwork.vaultstorage.realty.AutoVaultModule"));
+                "entry-class: com.minecraftcitiesnetwork.vaultstorage.realty.RealtyModule"));
         Assertions.assertTrue(manifest.contains(
                 "expected-plugin-class: " + VaultStoragePlugin.class.getName()));
         Assertions.assertTrue(manifest.contains("reloadable: true"));
@@ -35,7 +35,7 @@ class AutoVaultModuleTest {
     @Test
     void theEntryClassNamesNoRealtyType() throws IOException {
         String classFile = resource(
-                "com/minecraftcitiesnetwork/vaultstorage/realty/AutoVaultModule.class");
+                "com/minecraftcitiesnetwork/vaultstorage/realty/RealtyModule.class");
         Assertions.assertFalse(classFile.contains("io/github/md5sha256/realty/"));
     }
 }

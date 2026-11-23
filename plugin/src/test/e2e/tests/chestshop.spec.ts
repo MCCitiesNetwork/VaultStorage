@@ -1,11 +1,10 @@
 import { expect, sleep, test, type PlayerWrapper, type ServerWrapper } from '@plugwright/runner';
 import { query } from './database.js';
-import { chestShopInstalled, shop, shopIsActive } from './shops.js';
+import { requireChestShop, shop, shopIsActive } from './shops.js';
 import { expectBlock, FLOOR, freshSpot, rightClick, standAt } from './world.js';
 
-// Capturing a container that is a ChestShop shop. ChestShop and Treasury come from a
-// hibernia-economy checkout (see installE2eEconomy in plugin/build.gradle.kts); without them
-// these specs pass without doing anything, and say so.
+// Capturing a container that is a ChestShop shop. ChestShop and Treasury are installed by
+// installE2eEconomy in plugin/build.gradle.kts; without them these specs fail.
 
 async function scene(server: ServerWrapper, staff: PlayerWrapper, owner: PlayerWrapper) {
     const { x, z } = freshSpot();
@@ -20,10 +19,7 @@ async function scene(server: ServerWrapper, staff: PlayerWrapper, owner: PlayerW
 
 test('capturing a shop by its sign vaults the container and removes the sign',
     { requires: { consoleOutput: 'full' } }, async ({ player, createPlayer, server }) => {
-        if (!chestShopInstalled()) {
-            console.log('ChestShop is not installed on the test server; skipped.');
-            return;
-        }
+        requireChestShop();
         const owner = await createPlayer();
         const { z, shopX } = await scene(server, player, owner);
         await shop(server, owner, shopX, z, true, true);
@@ -42,10 +38,7 @@ test('capturing a shop by its sign vaults the container and removes the sign',
 
 test('an empty shop container keeps its block and loses its lock and its sign',
     { requires: { consoleOutput: 'full' } }, async ({ player, createPlayer, server }) => {
-        if (!chestShopInstalled()) {
-            console.log('ChestShop is not installed on the test server; skipped.');
-            return;
-        }
+        requireChestShop();
         const owner = await createPlayer();
         const { z, shopX } = await scene(server, player, owner);
         await shop(server, owner, shopX, z, false, true);
@@ -62,10 +55,7 @@ test('an empty shop container keeps its block and loses its lock and its sign',
 
 test('a shop container nobody locked is vaulted to the player the shop belongs to',
     { requires: { consoleOutput: 'full' } }, async ({ player, createPlayer, server }) => {
-        if (!chestShopInstalled()) {
-            console.log('ChestShop is not installed on the test server; skipped.');
-            return;
-        }
+        requireChestShop();
         const owner = await createPlayer();
         const { z, shopX } = await scene(server, player, owner);
         await shop(server, owner, shopX, z, true, false);

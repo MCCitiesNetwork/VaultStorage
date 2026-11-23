@@ -10,9 +10,9 @@ import javax.sql.DataSource;
 import org.jetbrains.annotations.NotNull;
 
 /** The module's own schema, versioned apart from the host's so the two never read each other's. */
-public final class AutoVaultSchemaMigrator extends SchemaMigrator {
+public final class RealtySchemaMigrator extends SchemaMigrator {
 
-    public static final String RESOURCE_DIR = "sql/autovault";
+    public static final String RESOURCE_DIR = "sql/realty";
 
     /** Adding a migration means adding the V*.sql file and a step here. The list is not discovered. */
     public static final List<MigrationStep> MIGRATIONS = List.of(
@@ -21,13 +21,13 @@ public final class AutoVaultSchemaMigrator extends SchemaMigrator {
 
     public void migrate(@NotNull DataSource dataSource, @NotNull Logger logger) throws SQLException {
         // The module's class loader: its scripts are in its jar, not the host's.
-        migrate(dataSource, Path.of(RESOURCE_DIR), MIGRATIONS, AutoVaultSchemaMigrator.class.getClassLoader(), logger);
+        migrate(dataSource, Path.of(RESOURCE_DIR), MIGRATIONS, RealtySchemaMigrator.class.getClassLoader(), logger);
     }
 
     @Override
     protected @NotNull String bootstrapDdl() {
         return """
-                CREATE TABLE IF NOT EXISTS vaultstorage_autovault_schema_version (
+                CREATE TABLE IF NOT EXISTS vaultstorage_realty_schema_version (
                     version INT PRIMARY KEY,
                     description VARCHAR(255) NOT NULL,
                     applied_at DATETIME NOT NULL DEFAULT NOW()
@@ -37,11 +37,11 @@ public final class AutoVaultSchemaMigrator extends SchemaMigrator {
 
     @Override
     protected @NotNull String selectVersion() {
-        return "SELECT COALESCE(MAX(version), 0) FROM vaultstorage_autovault_schema_version";
+        return "SELECT COALESCE(MAX(version), 0) FROM vaultstorage_realty_schema_version";
     }
 
     @Override
     protected @NotNull String insertVersion() {
-        return "INSERT INTO vaultstorage_autovault_schema_version (version, description) VALUES (?, ?)";
+        return "INSERT INTO vaultstorage_realty_schema_version (version, description) VALUES (?, ?)";
     }
 }

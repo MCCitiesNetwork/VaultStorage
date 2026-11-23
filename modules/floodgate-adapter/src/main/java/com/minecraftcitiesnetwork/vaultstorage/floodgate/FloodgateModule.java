@@ -2,7 +2,10 @@ package com.minecraftcitiesnetwork.vaultstorage.floodgate;
 
 import com.minecraftcitiesnetwork.pluginInfrastructure.modules.SimplePluginModule;
 import com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin;
+import com.minecraftcitiesnetwork.vaultstorage.names.NameSource;
 import java.nio.file.Path;
+import java.util.UUID;
+import java.util.function.Predicate;
 import java.util.logging.Level;
 import org.jetbrains.annotations.NotNull;
 
@@ -21,8 +24,11 @@ public final class FloodgateModule extends SimplePluginModule<VaultStoragePlugin
         }
         try {
             // Every Floodgate type lives in FloodgateNames, so this class loads without them.
-            plugin.integrations().bedrockNames(FloodgateNames.create());
-            plugin.integrations().bedrockClient(FloodgateNames.clientCheck());
+            // Both are built before either slot is filled: a failure must leave nothing behind.
+            NameSource names = FloodgateNames.create();
+            Predicate<UUID> clientCheck = FloodgateNames.clientCheck();
+            plugin.integrations().bedrockNames(names);
+            plugin.integrations().bedrockClient(clientCheck);
         } catch (LinkageError error) {
             plugin.getLogger().log(Level.SEVERE,
                     "Floodgate is enabled but its classes are not reachable from this module.", error);

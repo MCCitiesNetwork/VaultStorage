@@ -418,3 +418,14 @@ Deliberately left unaligned with the playbook:
 - `PaperProfileNameSourceTest` covers the failure cases only. A completed profile needs a
   running server to produce, so the positive case is covered by the live tests that search and
   transfer by player name.
+- **The auto-vault module is `realty`**, not `realty-autovault`: project `:modules:realty`, package
+  `...vaultstorage.realty`, entry class `RealtyModule`, config `modules/realty/config.yml`,
+  version table `vaultstorage_realty_schema_version`. Its classes keep the `AutoVault` name
+  where they are about the feature.
+- **The host has no `chestshop` package and no `NoOpChestShopService`.** The host's concept is
+  shop signs: package `shop`, interface `ShopSigns`. A module adds a provider with
+  `Integrations.addShopSigns`, as a placement grant is added; with none added no block is a
+  shop sign. `ChestShopService.isAvailable()` is gone with the no-op. The module's class is
+  `ChestShopSigns`, in `...vaultstorage.chestshop`.
+- **A module builds everything it supplies before it fills a slot**, so a failed `initialize`
+  leaves nothing of the module in the host.

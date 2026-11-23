@@ -7,7 +7,6 @@ import java.util.concurrent.Executor;
 import com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin;
 import com.minecraftcitiesnetwork.vaultstorage.capture.PlayerVaultEvent;
 import com.minecraftcitiesnetwork.vaultstorage.capture.VaultCapturePolicy;
-import com.minecraftcitiesnetwork.vaultstorage.chestshop.ChestShopService;
 import com.minecraftcitiesnetwork.vaultstorage.config.MessageKeys;
 import com.minecraftcitiesnetwork.vaultstorage.session.VaultSessionManager.Mode;
 import com.minecraftcitiesnetwork.vaultstorage.session.VaultSessionManager;
@@ -125,10 +124,9 @@ public final class CaptureSession implements Listener {
      */
     private @Nullable Block containerFor(@NotNull Block block) {
         boolean clickedSign = ContainerBlocks.isSign(block);
-        ChestShopService chestShop = plugin.chestShop();
-        boolean clickedChestShopSign = clickedSign && chestShop.isShopSign(block);
+        boolean clickedShopSign = clickedSign && plugin.shopSigns().isShopSign(block);
 
-        if (clickedChestShopSign) {
+        if (clickedShopSign) {
             // A shop sign stands for its container and goes when the container does.
             return ContainerBlocks.attachedContainer(block);
         }
@@ -191,7 +189,7 @@ public final class CaptureSession implements Listener {
      * first when the actor holds the override: region membership alone does not remove one.
      */
     private void refuse(@NotNull Block captureBlock, boolean clickedSign) {
-        if (plugin.chestShop().isAvailable() && ContainerBlocks.isEmpty(captureBlock)
+        if (ContainerBlocks.isEmpty(captureBlock)
                 && plugin.capturePolicy().mayRemoveShopSign(actor) && removeShopSigns(captureBlock)) {
             return;
         }
@@ -201,11 +199,7 @@ public final class CaptureSession implements Listener {
 
     /** Removes the container's shop signs and says so. False when it has none. */
     private boolean removeShopSigns(@NotNull Block captureBlock) {
-        ChestShopService chestShop = plugin.chestShop();
-        if (!chestShop.isAvailable()) {
-            return false;
-        }
-        List<Block> shopSigns = chestShop.findShopSigns(captureBlock);
+        List<Block> shopSigns = plugin.shopSigns().findShopSigns(captureBlock);
         if (shopSigns.isEmpty()) {
             return false;
         }

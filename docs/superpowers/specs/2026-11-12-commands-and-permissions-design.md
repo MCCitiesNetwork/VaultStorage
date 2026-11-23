@@ -90,7 +90,8 @@ plugin statically. Step 7 removes that.
 
 - **Every subcommand also needs `vaultstorage.command.vault`**, because the root literal requires
   it. The command table gives the node each branch adds.
-- **There is no `VaultCommandTreeTest`.** Paper's UUID argument type cannot be built without a
-  server. The live tests run each branch, and check that a player without a branch's node is
-  not offered it.
+- **`VaultCommandTreeTest` tests the tree with a UUID argument of its own.** Paper's UUID
+  argument type cannot be built without a server, so `VaultCommand.tree` takes the argument
+  type and a `Handlers` interface; `create` passes Paper's type and the handlers that use the
+  plugin. The live tests still run each branch on a server.
 - `VaultActionArgument` is tested in `VaultCommandRulesTest`.

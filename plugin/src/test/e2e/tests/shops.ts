@@ -4,10 +4,11 @@ import * as path from 'node:path';
 import { queryDatabase } from './database.js';
 import { FLOOR, rightClick } from './world.js';
 
-// ChestShop shops for the specs that need one. ChestShop and Treasury come from a
-// hibernia-economy checkout (see installE2eEconomy in plugin/build.gradle.kts).
+// ChestShop shops for the specs that need one. ChestShop and Treasury are installed by
+// installE2eEconomy in plugin/build.gradle.kts.
 
-export function chestShopInstalled(): boolean {
+/** The jar names in the test server's plugins folder. */
+function installedPlugins(): string[] {
     let folder = process.cwd();
     for (let depth = 0; depth < 6; depth++) {
         for (const plugins of [
@@ -16,12 +17,32 @@ export function chestShopInstalled(): boolean {
             path.join(folder, 'plugin/src/test/e2e/generated/local/run/plugins'),
         ]) {
             if (fs.existsSync(plugins)) {
-                return fs.readdirSync(plugins).some((name) => /^chestshop-.*\.jar$/.test(name));
+                return fs.readdirSync(plugins);
             }
         }
         folder = path.dirname(folder);
     }
-    return false;
+    return [];
+}
+
+/**
+ * Fails the test when ChestShop is not on the test server. A spec that needs a shop must not
+ * pass without having run.
+ */
+export function requireChestShop(): void {
+    if (!installedPlugins().some((name) => /^chestshop-.*\.jar$/.test(name))) {
+        throw new Error('ChestShop is not on the test server. installE2eEconomy in plugin/build.gradle.kts '
+            + 'takes it from a hibernia-economy checkout or from GitHub; see its warning in the Gradle output.');
+    }
+}
+
+/** Fails the test when Realty, or the economy it needs, is not on the test server. */
+export function requireRealty(): void {
+    requireChestShop();
+    if (!installedPlugins().some((name) => /^realty-paper-.*\.jar$/.test(name))) {
+        throw new Error('Realty is not on the test server. installE2eRealty in plugin/build.gradle.kts '
+            + 'takes it from GitHub Actions or from -PrealtyJar; see its warning in the Gradle output.');
+    }
 }
 
 /**

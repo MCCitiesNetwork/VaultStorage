@@ -5,7 +5,7 @@ import com.minecraftcitiesnetwork.vaultstorage.config.MessageKeys;
 import com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin;
 import com.minecraftcitiesnetwork.vaultstorage.capture.PlayerVaultEvent;
 import com.minecraftcitiesnetwork.vaultstorage.bolt.BoltService;
-import com.minecraftcitiesnetwork.vaultstorage.chestshop.ChestShopService;
+import com.minecraftcitiesnetwork.vaultstorage.shop.ShopSigns;
 import com.minecraftcitiesnetwork.vaultstorage.vault.ItemSerialization;
 import com.minecraftcitiesnetwork.vaultstorage.names.UniqueIdentifierResolver;
 import net.kyori.adventure.text.Component;
@@ -50,7 +50,7 @@ public final class VaultCaptureService {
 
     public VaultCaptureService(@NotNull VaultStoragePlugin plugin) {
         this.plugin = plugin;
-        this.owners = new CaptureOwners(plugin);
+        this.owners = new CaptureOwners(plugin.getLogger(), plugin::names);
         this.chunks = new ChunkHolds(plugin);
     }
 
@@ -158,13 +158,13 @@ public final class VaultCaptureService {
         session.dynamicListener().start();
     }
 
-    /** Unlocks and removes the given shop signs, notifying ChestShop. {@code actor} may be null for automated captures. Must run on the main thread. */
+    /** Unlocks and removes the given shop signs, through the plugin that keeps them. {@code actor} may be null for automated captures. Must run on the main thread. */
     void removeShopSigns(@Nullable Player actor, @NotNull List<Block> shopSigns) {
-        ChestShopService chestShop = plugin.chestShop();
+        ShopSigns signs = plugin.shopSigns();
         BoltService bolt = plugin.bolt();
         for (Block signBlock : shopSigns) {
             unprotect(signBlock);
-            chestShop.removeShopSign(actor, signBlock);
+            signs.removeShopSign(actor, signBlock);
         }
     }
 
@@ -325,13 +325,10 @@ public final class VaultCaptureService {
             }
             plugin.getLogger().info("[VaultCaptureService] Offline vault created: ID=" + vaulted.vault()
                     + " owner=" + finalOwner + " initiator=" + initiatorUuid);
-            // Drop any ChestShop sign left where the container was.
-            ChestShopService chestShop = plugin.chestShop();
-            if (chestShop != null && chestShop.isAvailable()) {
-                List<Block> shopSigns = chestShop.findShopSigns(block);
-                if (!shopSigns.isEmpty()) {
-                    removeShopSigns(null, shopSigns);
-                }
+            // Drop any shop sign left where the container was.
+            List<Block> shopSigns = plugin.shopSigns().findShopSigns(block);
+            if (!shopSigns.isEmpty()) {
+                removeShopSigns(null, shopSigns);
             }
             // The sweep tells the owner once, at its end; no PlayerVaultEvent for an automated capture.
             onVaulted.run();

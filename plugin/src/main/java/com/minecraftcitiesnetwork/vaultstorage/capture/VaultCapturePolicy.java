@@ -1,11 +1,14 @@
 package com.minecraftcitiesnetwork.vaultstorage.capture;
 
+import com.minecraftcitiesnetwork.vaultstorage.shop.ShopOwnerLookup;
+import com.minecraftcitiesnetwork.vaultstorage.region.WorldGuardService;
+import java.util.function.Supplier;
+import java.util.logging.Logger;
 import java.util.logging.Level;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.NotNull;
 import com.minecraftcitiesnetwork.vaultstorage.permission.Permissions;
 
-import com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin;
 import com.minecraftcitiesnetwork.vaultstorage.region.VaultRegion;
 import com.minecraftcitiesnetwork.vaultstorage.bolt.BoltService;
 import com.minecraftcitiesnetwork.vaultstorage.capture.HangingVaultSupport;
@@ -24,10 +27,18 @@ import java.util.UUID;
  */
 public final class VaultCapturePolicy {
 
-    private final @NotNull VaultStoragePlugin plugin;
+    private final @NotNull Supplier<BoltService> bolt;
+    private final @NotNull Supplier<WorldGuardService> worldGuard;
+    private final @NotNull Supplier<ShopOwnerLookup> shopOwners;
+    private final @NotNull Logger logger;
 
-    public VaultCapturePolicy(@NotNull VaultStoragePlugin plugin) {
-        this.plugin = plugin;
+    /** Suppliers, not services: the plugin builds them after this, and reads are at use time. */
+    public VaultCapturePolicy(@NotNull Supplier<BoltService> bolt, @NotNull Supplier<WorldGuardService> worldGuard,
+                              @NotNull Supplier<ShopOwnerLookup> shopOwners, @NotNull Logger logger) {
+        this.bolt = bolt;
+        this.worldGuard = worldGuard;
+        this.shopOwners = shopOwners;
+        this.logger = logger;
     }
 
     public record Decision(boolean allowed, boolean hasOverride, boolean actorParticipantAny,
@@ -80,26 +91,26 @@ public final class VaultCapturePolicy {
      *
      */
     public @NotNull Decision evaluate(@NotNull Player actor, @NotNull Block block) {
-        BoltService bolt = plugin.bolt();
+        BoltService bolt = this.bolt.get();
         UUID originalOwner = null;
         if (bolt != null) {
             try {
                 originalOwner = bolt.getOwner(block);
             } catch (Throwable t) {
-                plugin.getLogger().warning("[VaultCapturePolicy] Error obtaining Bolt owner for block in "
+                this.logger.warning("[VaultCapturePolicy] Error obtaining Bolt owner for block in "
                         + formatBlock(block) + ": " + t.getClass().getSimpleName() + " - " + t.getMessage());
             }
         }
         if (originalOwner == null) {
             // Nobody locked it. If it is a player's shop, it is that player's: the registry was
             // asked when the container was looked at or clicked, and the answer is used here.
-            originalOwner = plugin.shopOwners().known(block);
+            originalOwner = this.shopOwners.get().known(block);
         }
 
         // Log actor UUID for debugging Bedrock player issues
         UUID actorUUID = actor.getUniqueId();
         if (actorUUID.toString().matches("0{8}-0{4}-0{4}-0{4}-0{12}")) {
-            plugin.getLogger().warning("[VaultCapturePolicy] Invalid actor UUID for player " + actor.getName() + ": " + actorUUID);
+            this.logger.warning("[VaultCapturePolicy] Invalid actor UUID for player " + actor.getName() + ": " + actorUUID);
         }
 
         return evaluateBlockPolicy(actor, block, originalOwner);
@@ -113,7 +124,7 @@ public final class VaultCapturePolicy {
      * @param supportingBlock block the hanging is attached to
      */
     public @NotNull Decision evaluateHangingCapture(@NotNull Player actor, @NotNull Hanging hanging, @NotNull Block supportingBlock) {
-        BoltService bolt = plugin.bolt();
+        BoltService bolt = this.bolt.get();
         UUID originalOwner = null;
         if (bolt != null) {
             try {
@@ -122,14 +133,14 @@ public final class VaultCapturePolicy {
                     originalOwner = bolt.getOwner(supportingBlock);
                 }
             } catch (Throwable t) {
-                plugin.getLogger().warning("[VaultCapturePolicy] Error obtaining Bolt owner for hanging entity in "
+                this.logger.warning("[VaultCapturePolicy] Error obtaining Bolt owner for hanging entity in "
                         + formatBlock(supportingBlock) + ": " + t.getClass().getSimpleName() + " - " + t.getMessage());
             }
         }
 
         UUID actorUUID = actor.getUniqueId();
         if (actorUUID.toString().matches("0{8}-0{4}-0{4}-0{4}-0{12}")) {
-            plugin.getLogger().warning("[VaultCapturePolicy] Invalid actor UUID for player " + actor.getName() + ": " + actorUUID);
+            this.logger.warning("[VaultCapturePolicy] Invalid actor UUID for player " + actor.getName() + ": " + actorUUID);
         }
 
         return evaluateBlockPolicy(actor, supportingBlock, originalOwner);
@@ -145,10 +156,10 @@ public final class VaultCapturePolicy {
                                                            @Nullable UUID originalOwner) {
         List<VaultRegion> regions;
         try {
-            regions = plugin.worldGuard().getRegionsAt(block);
+            regions = this.worldGuard.get().getRegionsAt(block);
         } catch (RuntimeException ex) {
             // Counts as "outside every region", which allows nothing without the override.
-            plugin.getLogger().log(Level.WARNING, "Could not read the regions at " + formatBlock(block) + ".", ex);
+            this.logger.log(Level.WARNING, "Could not read the regions at " + formatBlock(block) + ".", ex);
             return List.of();
         }
         return CaptureRegions.at(actor.getUniqueId(), originalOwner, regions);

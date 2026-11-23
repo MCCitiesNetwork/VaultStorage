@@ -22,7 +22,7 @@ public final class PendingSweepStore {
 
     /** Creates the table if it is missing and makes the mapper known to the host's MyBatis. */
     public void migrate(@NotNull Logger logger) throws SQLException {
-        new AutoVaultSchemaMigrator().migrate(this.database.dataSource(), logger);
+        new RealtySchemaMigrator().migrate(this.database.dataSource(), logger);
         this.database.registerMapper(MariaPendingSweepMapper.class);
     }
 

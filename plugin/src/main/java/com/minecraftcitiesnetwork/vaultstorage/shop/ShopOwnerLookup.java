@@ -1,4 +1,4 @@
-package com.minecraftcitiesnetwork.vaultstorage.chestshop;
+package com.minecraftcitiesnetwork.vaultstorage.shop;
 
 import com.minecraftcitiesnetwork.vaultstorage.Integrations;
 import java.util.ArrayList;
@@ -59,8 +59,8 @@ public final class ShopOwnerLookup {
      */
     public @NotNull CompletableFuture<Optional<UUID>> ownerOf(@NotNull Block container) {
         ShopDirectory directory = this.integrations.shopDirectory();
-        ChestShopService shops = this.integrations.chestShop();
-        if (directory == null || !shops.isAvailable()) {
+        ShopSigns shops = this.integrations.shopSigns();
+        if (directory == null) {
             return CompletableFuture.completedFuture(Optional.empty());
         }
         List<ShopPosition> signs = shops.findShopSigns(container).stream()

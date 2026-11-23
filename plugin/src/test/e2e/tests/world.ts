@@ -1,4 +1,4 @@
-import { expect, sleep, type PlayerWrapper, type ServerWrapper } from '@plugwright/runner';
+import { expect, sleep, waitUntil, type PlayerWrapper, type ServerWrapper } from '@plugwright/runner';
 import { Vec3 } from 'vec3';
 
 // The flat test world: grass at y -61, so a player stands and blocks are placed at y -60.
@@ -31,9 +31,9 @@ let clickSequence = 1;
  * server does not need the player to face a block to accept a click on it.
  */
 export async function rightClick(player: PlayerWrapper, x: number, y: number, z: number): Promise<void> {
-    if (!player.bot.blockAt(new Vec3(x, y, z))) {
-        throw new Error(`${player.username} has no block loaded at ${x},${y},${z}`);
-    }
+    // A chunk can reach a bot a few seconds after the teleport when several bots have just joined.
+    await waitUntil(() => player.bot.blockAt(new Vec3(x, y, z)) !== null,
+        { timeout: 10000, message: `${player.username} has no block loaded at ${x},${y},${z}` });
     (player.bot as any)._client.write('block_place', {
         hand: 0, location: { x, y, z }, direction: 1,
         cursorX: 0.5, cursorY: 0.5, cursorZ: 0.5,

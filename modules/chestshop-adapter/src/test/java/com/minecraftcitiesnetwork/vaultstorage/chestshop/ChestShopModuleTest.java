@@ -1,4 +1,4 @@
-package com.minecraftcitiesnetwork.vaultstorage.chestshop.adapter;
+package com.minecraftcitiesnetwork.vaultstorage.chestshop;
 
 import com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin;
 import java.io.IOException;
@@ -21,7 +21,7 @@ class ChestShopModuleTest {
         String manifest = resource("module-manifest.yml");
         Assertions.assertTrue(manifest.contains("module-name: chestshop-adapter"));
         Assertions.assertTrue(manifest.contains(
-                "entry-class: com.minecraftcitiesnetwork.vaultstorage.chestshop.adapter.ChestShopModule"));
+                "entry-class: com.minecraftcitiesnetwork.vaultstorage.chestshop.ChestShopModule"));
         Assertions.assertTrue(manifest.contains(
                 "expected-plugin-class: " + VaultStoragePlugin.class.getName()));
         Assertions.assertTrue(manifest.contains("reloadable: false"));
@@ -35,7 +35,7 @@ class ChestShopModuleTest {
     @Test
     void theEntryClassNamesNoChestShopType() throws IOException {
         String classFile = resource(
-                "com/minecraftcitiesnetwork/vaultstorage/chestshop/adapter/ChestShopModule.class");
+                "com/minecraftcitiesnetwork/vaultstorage/chestshop/ChestShopModule.class");
         Assertions.assertFalse(classFile.contains("com/Acrobot/"));
         Assertions.assertFalse(classFile.contains("io/paradaux/"));
     }

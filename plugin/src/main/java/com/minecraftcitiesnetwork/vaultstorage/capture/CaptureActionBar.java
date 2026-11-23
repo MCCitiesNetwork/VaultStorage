@@ -3,7 +3,6 @@ package com.minecraftcitiesnetwork.vaultstorage.capture;
 import com.minecraftcitiesnetwork.pluginInfrastructure.configurate.MessageContainer;
 import com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin;
 import com.minecraftcitiesnetwork.vaultstorage.capture.VaultCapturePolicy;
-import com.minecraftcitiesnetwork.vaultstorage.chestshop.ChestShopService;
 import com.minecraftcitiesnetwork.vaultstorage.config.MessageKeys;
 import java.util.Map;
 import java.util.UUID;
@@ -52,8 +51,7 @@ public final class CaptureActionBar {
         if (target == null) {
             return plugin.text().of(MessageKeys.CAPTURE_ACTION_BAR_IDLE);
         }
-        ChestShopService chestShop = plugin.chestShop();
-        if (chestShop.isAvailable() && chestShop.isShopSign(target)) {
+        if (plugin.shopSigns().isShopSign(target)) {
             Block container = ContainerBlocks.attachedContainer(target);
             if (container != null) target = container;
         }

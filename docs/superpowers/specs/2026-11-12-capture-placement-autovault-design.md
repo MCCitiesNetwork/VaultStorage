@@ -372,17 +372,20 @@ Names and shapes that differ from the sections above:
 | `PlacementResult` | `VaultPlacementService.Result(success, messageKey)`; the place permission is checked by the menu |
 | `OwnerNotifier` builds the text; `LoggingOwnerNotifier` | the host's `OwnerNotifications` builds it and `OwnerNotifier.deliver` sends it; with no notifier the host logs |
 | `PlacementGrant.mayPlace(player, Block)` | takes a `Location` |
-| services take collaborators and two executors | they take the plugin |
+| the module fills the `ChestShopService` slot | it adds a `ShopSigns` provider; see the scaffold spec's "As built" |
+| module `realty-autovault` | module `realty` |
+| sweeps are tested against Realty's events | they are, live, through the real Realty: a sale, a transfer, a rental and a replaced tenant |
+| services take collaborators and two executors | `VaultPlacementService` does; the capture service takes the plugin |
 | the policy "takes region participation as input" | `CaptureRules.decide` does; `VaultCapturePolicy` gathers it |
 
 Tests named under "Testing" that were not written as unit tests, and what covers the behaviour:
 
 | Promised | Covered by |
 | --- | --- |
-| placement: target no longer air, a second placement refused, the override alone | not unit-tested; `VaultPlacementService` is bound to Bukkit. Live: placement refused on foreign land, allowed on a claim, and a claimed vault refused to a second editor |
+| placement: target no longer air, a second placement refused, the override alone | `VaultPlacementServiceTest` and `PlacementRulesTest`, against a fake store and a fake world |
 | a furnace round trip | live: a furnace comes back with input, fuel and output in their slots |
 | the busy flag clear after a failure | live: the capture after a database outage succeeds |
-| a member cannot remove a co-member's shop sign | `CaptureRulesTest` for the capture rule; the sign rule itself (override only) is not tested |
+| a member cannot remove a co-member's shop sign | `CaptureRulesTest`: the capture rule, and `mayRemoveShopSign` (override only) |
 | a sweep rescheduled by a fresh module instance | `PendingSweepStoreTest` at store level only |
 
 A Bolt-locked chest that carries a firm's or an admin shop's sign is vaulted for its Bolt owner:
