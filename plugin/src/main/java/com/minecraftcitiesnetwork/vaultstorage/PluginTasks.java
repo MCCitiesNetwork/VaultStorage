@@ -12,6 +12,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import org.bukkit.plugin.IllegalPluginAccessException;
 import org.jetbrains.annotations.NotNull;
 
 /**
@@ -125,6 +126,9 @@ public final class PluginTasks {
             for (Runnable task = this.forMainThread.poll(); task != null; task = this.forMainThread.poll()) {
                 try {
                     task.run();
+                } catch (IllegalPluginAccessException disabled) {
+                    // It asked the server for a timer or a listener, which a stopping plugin does not get.
+                    this.logger.log(Level.FINE, "A task was cut short because VaultStorage is stopping.", disabled);
                 } catch (RuntimeException ex) {
                     this.logger.log(Level.SEVERE, "A task failed while VaultStorage was stopping.", ex);
                 }

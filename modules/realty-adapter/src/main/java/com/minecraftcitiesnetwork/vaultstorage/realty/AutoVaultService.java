@@ -80,6 +80,10 @@ public final class AutoVaultService {
                 this.storeWrites.thenApplyAsync(start -> this.store.all(), this.plugin.databaseExecutor());
         this.storeWrites = read.handle((sweeps, failure) -> null);
         read.thenAcceptAsync(sweeps -> {
+            if (!this.plugin.isEnabled()) {
+                // Stopped before the read came back: a stopping plugin gets no timer. They stay stored.
+                return;
+            }
             Instant now = Instant.now();
             int resumed = 0;
             for (PendingSweep sweep : sweeps) {
@@ -416,13 +420,18 @@ public final class AutoVaultService {
     /**
      * Runs {@code work} for each item, loading the chunk given by {@code chunkOf} asynchronously and keeping
      * at most {@code scan.batch-size} loads in flight. {@code work} runs on the main thread once that chunk is
-     * loaded. Stops if the world unloads.
+     * loaded. Stops if the world unloads. Does not start, and never completes, once the plugin is stopping.
      */
     private <T> @NotNull CompletableFuture<Void> forEachChunkPaced(@NotNull UUID worldId, @NotNull List<T> items,
                                                                   @NotNull Function<T, int[]> chunkOf,
                                                                   @NotNull ChunkWork<T> work) {
         final int maxInFlight = Math.max(1, plugin.settings().scan().batchSize());
         CompletableFuture<Void> dispatched = new CompletableFuture<>();
+        if (!plugin.isEnabled()) {
+            // A stopping plugin gets no timer. Never done, like a pass the stop cut short: the
+            // sweep stays stored and runs again after a restart.
+            return dispatched;
+        }
 
         new BukkitRunnable() {
             int index = 0;

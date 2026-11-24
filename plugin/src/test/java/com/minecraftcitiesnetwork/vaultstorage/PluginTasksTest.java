@@ -6,7 +6,11 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.logging.Handler;
+import java.util.logging.Level;
+import java.util.logging.LogRecord;
 import java.util.logging.Logger;
+import org.bukkit.plugin.IllegalPluginAccessException;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -39,9 +43,35 @@ class PluginTasksTest {
     }
 
     private final FakeScheduler scheduler = new FakeScheduler();
+    private final List<LogRecord> logged = new ArrayList<>();
     private final PluginTasks tasks = new PluginTasks(this.scheduler::schedule, Executors.newFixedThreadPool(2),
-            Executors.newSingleThreadScheduledExecutor(), Logger.getAnonymousLogger());
+            Executors.newSingleThreadScheduledExecutor(), recordingLogger());
     private final List<String> ran = new ArrayList<>();
+
+    private Logger recordingLogger() {
+        Logger logger = Logger.getAnonymousLogger();
+        logger.setUseParentHandlers(false);
+        logger.setLevel(Level.ALL);
+        logger.addHandler(new Handler() {
+            @Override
+            public void publish(LogRecord record) {
+                PluginTasksTest.this.logged.add(record);
+            }
+
+            @Override
+            public void flush() {
+            }
+
+            @Override
+            public void close() {
+            }
+        });
+        return logger;
+    }
+
+    private List<Level> loggedLevels() {
+        return this.logged.stream().map(LogRecord::getLevel).toList();
+    }
 
     @Test
     void aMainThreadTaskRunsOnTheNextTick() {
@@ -107,6 +137,21 @@ class PluginTasksTest {
         Assertions.assertTrue(this.tasks.stop(PATIENCE));
 
         Assertions.assertEquals(List.of("next"), this.ran);
+        Assertions.assertEquals(List.of(Level.SEVERE), loggedLevels());
+    }
+
+    @Test
+    void aTaskRefusedATimerByTheStoppingServerIsNotReportedAsAFailure() {
+        this.scheduler.disable();
+        this.tasks.mainThread().execute(() -> {
+            throw new IllegalPluginAccessException("Plugin attempted to register task while disabled");
+        });
+        this.tasks.mainThread().execute(() -> this.ran.add("next"));
+
+        Assertions.assertTrue(this.tasks.stop(PATIENCE));
+
+        Assertions.assertEquals(List.of("next"), this.ran);
+        Assertions.assertEquals(List.of(Level.FINE), loggedLevels());
     }
 
     @Test

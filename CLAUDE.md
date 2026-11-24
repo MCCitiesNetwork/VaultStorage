@@ -118,7 +118,9 @@ findings and kept the framework (`ParentMenu`, `ChildMenuImp`, `AutoDialog`).
   disabled. `onDisable` runs what was started to its end, before the modules stop and again
   after, so a capture between store and remove, or a placement between place and delete, is
   finished and not cut in half. Bukkit's scheduler is for timers (action bars, scan and sweep
-  pacing) that may simply stop.
+  pacing) that may simply stop. A step that can run during a stop and needs a timer checks
+  `plugin.isEnabled()` first: the server refuses a stopping plugin with
+  `IllegalPluginAccessException`, which `PluginTasks` logs at FINE, not as a failure.
 - **State only the main thread touches is a plain field or collection**, with a comment saying
   so. `Integrations` slots, `Names` and the settings reference are read from other threads and
   are the exceptions.
