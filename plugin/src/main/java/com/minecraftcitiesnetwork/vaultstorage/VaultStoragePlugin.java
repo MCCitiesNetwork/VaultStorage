@@ -7,6 +7,7 @@ import com.minecraftcitiesnetwork.vaultstorage.database.Claim;
 import com.minecraftcitiesnetwork.vaultstorage.database.ClaimResult;
 import com.minecraftcitiesnetwork.vaultstorage.database.ClaimReleases;
 import java.util.Objects;
+import org.jetbrains.annotations.Nullable;
 import com.minecraftcitiesnetwork.vaultstorage.capture.ContainerOwnerLookup;
 import org.jetbrains.annotations.NotNull;
 import com.minecraftcitiesnetwork.vaultstorage.capture.VaultCapturePolicy;
@@ -51,9 +52,9 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 import org.spongepowered.configurate.ConfigurationNode;
 import java.sql.SQLException;
-import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
+import java.time.Duration;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.logging.Level;
@@ -66,7 +67,9 @@ import org.bukkit.plugin.java.JavaPlugin;
 @SuppressWarnings("NullAway.Init")
 public final class VaultStoragePlugin extends JavaPlugin {
 
-    private static final long RELEASE_RETRY_SECONDS = 3;
+    private static final Duration RELEASE_RETRY = Duration.ofSeconds(3);
+    /** How long a stop waits for captures and saves under way. */
+    private static final Duration STOP_PATIENCE = Duration.ofSeconds(10);
 
     private final VaultSessionManager sessionManager = new VaultSessionManager(
             listener -> getServer().getPluginManager().registerEvents(listener, this));
@@ -92,7 +95,7 @@ public final class VaultStoragePlugin extends JavaPlugin {
     private VaultDatabase database;
     private VaultRepository repository;
     private ClaimReleases claimReleases;
-    private ExecutorService databaseExecutor;
+    private PluginTasks tasks;
     private WorldGuardService worldGuardService;
     private BoltService boltService;
 
@@ -111,13 +114,11 @@ public final class VaultStoragePlugin extends JavaPlugin {
     /** The connection pool and session factory, for a module that owns tables of its own. */
     public @NotNull VaultDatabase database() { return database; }
 
-    /** The pool database work runs on. */
-    public @NotNull Executor databaseExecutor() { return databaseExecutor; }
+    /** The pool database work runs on. What is handed to it before the plugin stops is finished. */
+    public @NotNull Executor databaseExecutor() { return tasks.database(); }
 
-    /** Runs a task on the server's main thread. */
-    public @NotNull Executor mainThread() {
-        return getServer().getScheduler().getMainThreadExecutor(this);
-    }
+    /** Runs a task on the server's main thread: on a later tick, or as the plugin stops. */
+    public @NotNull Executor mainThread() { return tasks.mainThread(); }
 
     public @NotNull WorldGuardService worldGuard() { return worldGuardService; }
 
@@ -179,7 +180,7 @@ public final class VaultStoragePlugin extends JavaPlugin {
             return;
         }
         // A claim can only be left behind by a crash; nobody holds one now.
-        CompletableFuture.supplyAsync(this.repository::releaseAllClaims, this.databaseExecutor)
+        CompletableFuture.supplyAsync(this.repository::releaseAllClaims, databaseExecutor())
                 .thenAccept(released -> released.forEach(vault -> getLogger().warning("Vault " + vault
                         + " was still claimed from before the last shutdown and has been released."
                         + " If its block was placed just before a crash, its items may exist twice.")))
@@ -190,7 +191,7 @@ public final class VaultStoragePlugin extends JavaPlugin {
 
         // Not an error on its own: a vault emptied by its owner stays until it is placed. Many of
         // them after an upgrade would mean the conversion lost items.
-        CompletableFuture.supplyAsync(this.repository::countWithoutItems, this.databaseExecutor)
+        CompletableFuture.supplyAsync(this.repository::countWithoutItems, databaseExecutor())
                 .thenAccept(empty -> {
                     if (empty > 0) {
                         getLogger().warning(empty + " vault(s) hold no items.");
@@ -213,8 +214,7 @@ public final class VaultStoragePlugin extends JavaPlugin {
                 mainThread());
         this.captureService = new VaultCaptureService(this);
         this.claimReleases = new ClaimReleases(this.repository::release,
-                task -> CompletableFuture.delayedExecutor(RELEASE_RETRY_SECONDS, TimeUnit.SECONDS, this.databaseExecutor)
-                        .execute(task), getLogger());
+                task -> this.tasks.later(RELEASE_RETRY, task), getLogger());
         // A refused placement gives its claim back through the retrying release.
         PlacementStore placementStore = new PlacementStore() {
             @Override
@@ -233,7 +233,7 @@ public final class VaultStoragePlugin extends JavaPlugin {
             }
         };
         this.placementService = new VaultPlacementService(placementStore, new BukkitPlacementWorld(this::bolt),
-                this.databaseExecutor, mainThread(), getLogger());
+                databaseExecutor(), mainThread(), getLogger());
         this.inventoryService = new VaultInventoryService(this);
         this.scanService = new VaultScanServiceImpl(this);
 
@@ -328,10 +328,10 @@ public final class VaultStoragePlugin extends JavaPlugin {
 
     /**
      * Re-reads settings.yml and messages.yml, then the modules that can reload. Neither file
-     * takes effect unless both parse. database.yml is not re-read. Fails with the cause, which
-     * is also logged.
+     * takes effect unless both parse. database.yml is not re-read. Every outcome is logged, with
+     * its cause; the future does not fail.
      */
-    public @NotNull CompletableFuture<Void> reload() {
+    public @NotNull CompletableFuture<ReloadOutcome> reload() {
         Executor mainThread = mainThread();
         return CompletableFuture
                 .supplyAsync(() -> {
@@ -340,30 +340,58 @@ public final class VaultStoragePlugin extends JavaPlugin {
                     } catch (IOException ex) {
                         throw new UncheckedIOException(ex);
                     }
-                }, this.databaseExecutor)
+                }, databaseExecutor())
                 .thenAcceptAsync(reloadable -> {
                     this.settings.set(reloadable.settings());
                     this.messages.load(reloadable.messages());
                 }, mainThread)
-                .thenComposeAsync(swapped -> {
-                    List<CompletableFuture<Void>> reloads = new ArrayList<>();
-                    if (this.modules != null) {
-                        this.modules.getActiveModules().forEach((name, module) -> {
-                            if (module.manifest().reloadable()) {
-                                reloads.add(this.modules.reloadAsync(name));
-                            }
-                        });
-                    }
-                    return CompletableFuture.allOf(reloads.toArray(CompletableFuture[]::new));
-                }, mainThread)
-                .whenComplete((done, failure) -> {
+                .handle((swapped, failure) -> failure)
+                .thenComposeAsync(failure -> {
                     if (failure != null) {
                         getLogger().log(Level.SEVERE, "The reload failed. The old settings are still in use.", failure);
-                    } else {
-                        // Also for a sender that cannot be answered later, such as a remote console.
-                        getLogger().info("Reloaded settings.yml, messages.yml and the modules that reload.");
+                        return CompletableFuture.completedFuture(new ReloadOutcome.FilesRejected());
                     }
-                });
+                    return reloadModules();
+                }, mainThread);
+    }
+
+    /** Main thread. The host's two files are in use by now, whatever a module does. */
+    private @NotNull CompletableFuture<ReloadOutcome> reloadModules() {
+        // Each answers with its module's name if it failed, and null if it did not.
+        List<CompletableFuture<@Nullable String>> reloads = new ArrayList<>();
+        if (this.modules != null) {
+            this.modules.getActiveModules().forEach((name, module) -> {
+                if (module.manifest().reloadable()) {
+                    reloads.add(reloadModule(name));
+                }
+            });
+        }
+        return CompletableFuture.allOf(reloads.toArray(CompletableFuture[]::new)).thenApply(done -> {
+            List<String> failed = reloads.stream().map(CompletableFuture::join).filter(Objects::nonNull).toList();
+            if (!failed.isEmpty()) {
+                return new ReloadOutcome.ModulesFailed(failed);
+            }
+            // Also for a sender that cannot be answered later, such as a remote console.
+            getLogger().info("Reloaded settings.yml, messages.yml and the modules that reload.");
+            return new ReloadOutcome.Reloaded();
+        });
+    }
+
+    private @NotNull CompletableFuture<@Nullable String> reloadModule(@NotNull String name) {
+        CompletableFuture<Void> reload;
+        try {
+            reload = this.modules.reloadAsync(name);
+        } catch (RuntimeException ex) {
+            reload = CompletableFuture.failedFuture(ex);
+        }
+        return reload.handle((done, failure) -> {
+            if (failure == null) {
+                return null;
+            }
+            getLogger().log(Level.SEVERE, "settings.yml and messages.yml were reloaded, but the module " + name
+                    + " failed to reload and keeps its old settings.", failure);
+            return name;
+        });
     }
 
     /**
@@ -376,11 +404,14 @@ public final class VaultStoragePlugin extends JavaPlugin {
             this.database = new VaultDatabase(settings);
             new VaultStorageSchemaMigrator().migrate(this.database.dataSource(), getLogger());
             this.repository = new VaultRepository(this.database);
-            this.databaseExecutor = Executors.newFixedThreadPool(VaultDatabase.POOL_SIZE, task -> {
+            ThreadFactory daemons = task -> {
                 Thread thread = new Thread(task, "vaultstorage-db");
                 thread.setDaemon(true);
                 return thread;
-            });
+            };
+            this.tasks = new PluginTasks(task -> getServer().getScheduler().runTask(this, task),
+                    Executors.newFixedThreadPool(VaultDatabase.POOL_SIZE, daemons),
+                    Executors.newSingleThreadScheduledExecutor(daemons), getLogger());
             return true;
         } catch (SQLException | RuntimeException ex) {
             getLogger().log(Level.SEVERE, "Could not connect to or migrate the database at " + settings.url()
@@ -391,6 +422,11 @@ public final class VaultStoragePlugin extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        if (this.tasks != null) {
+            // A capture between store and remove is carried through: its remove runs here,
+            // while the module that started it is still loaded.
+            this.tasks.finish(STOP_PATIENCE);
+        }
         if (this.modules != null) {
             this.modules.stop();
         }
@@ -398,17 +434,8 @@ public final class VaultStoragePlugin extends JavaPlugin {
         if (this.inventoryService != null && this.repository != null) {
             this.inventoryService.saveOpenViews();
         }
-        if (this.databaseExecutor != null) {
-            // Queued writes are finished, not dropped: a capture may be between store and remove.
-            this.databaseExecutor.shutdown();
-            try {
-                if (!this.databaseExecutor.awaitTermination(10, TimeUnit.SECONDS)) {
-                    getLogger().severe("Database tasks were still running after 10 seconds and were abandoned.");
-                    this.databaseExecutor.shutdownNow();
-                }
-            } catch (InterruptedException interrupted) {
-                Thread.currentThread().interrupt();
-            }
+        if (this.tasks != null) {
+            this.tasks.stop(STOP_PATIENCE);
         }
         if (this.database != null) {
             this.database.close();

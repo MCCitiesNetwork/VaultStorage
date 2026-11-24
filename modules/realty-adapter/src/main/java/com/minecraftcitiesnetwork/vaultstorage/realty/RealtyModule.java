@@ -9,7 +9,6 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.sql.SQLException;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -17,7 +16,8 @@ import org.jetbrains.annotations.Nullable;
 /** Vaults a previous occupant's locked containers when a Realty region changes hands. */
 public final class RealtyModule extends SimplePluginModule<VaultStoragePlugin> {
 
-    private final AtomicReference<AutoVaultSettings> settings = new AtomicReference<>();
+    // Main thread only: set at start and at the end of a reload, read by the sweep service.
+    private @Nullable AutoVaultSettings settings;
     private final MessageContainer messages = new MessageContainer();
     private @Nullable AutoVaultService service;
 
@@ -28,7 +28,7 @@ public final class RealtyModule extends SimplePluginModule<VaultStoragePlugin> {
     public void initialize(@NotNull VaultStoragePlugin plugin, @NotNull Path dataFolder) {
         super.initialize(plugin, dataFolder);
         try {
-            this.settings.set(readSettings(plugin));
+            this.settings = readSettings(plugin);
             this.messages.load(RealtyMessages.load(dataFolder(), plugin.getLogger()));
         } catch (IOException ex) {
             throw new IllegalStateException("Could not read the realty module's config.yml and messages.yml.", ex);
@@ -74,7 +74,7 @@ public final class RealtyModule extends SimplePluginModule<VaultStoragePlugin> {
                     }
                 }, plugin.databaseExecutor())
                 .thenAcceptAsync(reloaded -> {
-                    this.settings.set(reloaded.settings());
+                    this.settings = reloaded.settings();
                     this.messages.load(reloaded.messages());
                 }, plugin.mainThread());
     }
@@ -94,6 +94,6 @@ public final class RealtyModule extends SimplePluginModule<VaultStoragePlugin> {
     }
 
     private @NotNull AutoVaultSettings settings() {
-        return Objects.requireNonNull(this.settings.get(), "settings are read before the service is built");
+        return Objects.requireNonNull(this.settings, "settings are read before the service is built");
     }
 }

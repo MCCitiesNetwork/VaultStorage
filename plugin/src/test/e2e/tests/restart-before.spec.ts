@@ -1,6 +1,6 @@
 import { expect, sleep, test } from '@plugwright/runner';
 import * as fs from 'node:fs';
-import { query, seedVaults, sql } from './database.js';
+import { holdVaultTables, query, seedVaults, sql } from './database.js';
 import { pluginFile, withFile } from './files.js';
 import { operators } from './players.js';
 import { around, buy, defineRegion, freehold } from './realty.js';
@@ -13,7 +13,7 @@ import { FLOOR, rightClick, standAt } from './world.js';
 // by `./gradlew :plugin:plugwrightRestartTest`, which stops the server after this file and
 // starts it again for restart-after.spec.ts. Not part of the ordinary run.
 
-test('restart: before the server stops, a vault is stored, a claim is left behind and a sweep is waiting',
+test('restart: before the server stops, a vault is stored, a claim is left behind, a sweep is waiting and a capture is under way',
     { requires: { consoleOutput: 'full' } }, async ({ createPlayer, server }) => {
         requireRealty();
         const [staff, owner, buyer, editor] = await Promise.all([
@@ -27,7 +27,7 @@ test('restart: before the server stops, a vault is stored, a claim is left behin
         await standAt(server, buyer, x, z - 1);
         await standAt(server, editor, x + 1, z - 1);
         // Earlier runs of this test leave their vaults and their region behind.
-        for (const bot of [owner, editor]) {
+        for (const bot of [owner, editor, staff]) {
             sql(`DELETE FROM Vault WHERE ownerUuid = '${bot.bot.player.uuid}'`);
         }
         const region = `restart_${Date.now()}`;
@@ -59,4 +59,12 @@ test('restart: before the server stops, a vault is stored, a claim is left behin
         expect(query(`SELECT COUNT(*) FROM Vault WHERE ownerUuid = '${owner.bot.player.uuid}'`)).toEqual(['0']);
 
         fs.writeFileSync(stateFile(), JSON.stringify({ region, claimed, x, z }));
+
+        // 4. Last, a capture whose database step is still open when the server stops: the
+        //    tables are held for longer than the runner takes to stop it. The stop must wait
+        //    for the store and then remove the chest, or the items would be in both places.
+        await lockedChest(server, staff, x + 3, z + 3);
+        holdVaultTables(9);
+        await sleep(500);
+        await rightClick(staff, x + 3, FLOOR, z + 3);
     });

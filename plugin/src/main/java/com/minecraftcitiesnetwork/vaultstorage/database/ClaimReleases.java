@@ -19,7 +19,8 @@ public final class ClaimReleases {
 
     /**
      * @param release releases one claim; blocks, and throws when the database cannot be reached
-     * @param later   runs a task on the database executor after a pause
+     * @param later   runs a task on the database executor after a pause; throws once the plugin
+     *                is stopping
      */
     public ClaimReleases(@NotNull Consumer<Claim> release, @NotNull Consumer<Runnable> later, @NotNull Logger logger) {
         this.release = release;
@@ -47,7 +48,7 @@ public final class ClaimReleases {
             try {
                 this.later.accept(() -> attempt(claim, false));
             } catch (RuntimeException shuttingDown) {
-                // The executor has stopped: the plugin is disabling. Startup releases every claim.
+                // The plugin is stopping. Startup releases every claim.
                 this.logger.log(Level.WARNING, "Vault " + vault + " is still claimed at shutdown;"
                         + " it is released at the next start.");
             }

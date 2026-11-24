@@ -18,19 +18,17 @@ import org.jetbrains.annotations.Nullable;
 /**
  * Captures one container block. Built per capture, because removing the block also moves its
  * Bolt protection: the block's own protection goes, and the other half of a double chest is
- * protected again for the same owner.
+ * protected again for the lock's owner, if there was a lock.
  */
 public final class BukkitContainerAccess implements ContainerAccess<Block> {
 
     private final @Nullable BoltService bolt;
-    private final @NotNull UUID protectionOwner;
     private final @NotNull List<Block> otherHalves;
     private final @NotNull Logger logger;
 
-    public BukkitContainerAccess(@Nullable BoltService bolt, @NotNull UUID protectionOwner,
-                                 @NotNull List<Block> otherHalves, @NotNull Logger logger) {
+    public BukkitContainerAccess(@Nullable BoltService bolt, @NotNull List<Block> otherHalves,
+                                 @NotNull Logger logger) {
         this.bolt = bolt;
-        this.protectionOwner = protectionOwner;
         this.otherHalves = List.copyOf(otherHalves);
         this.logger = logger;
     }
@@ -66,9 +64,13 @@ public final class BukkitContainerAccess implements ContainerAccess<Block> {
     public void remove(@NotNull Block block) {
         if (this.bolt != null) {
             try {
+                // Bolt keeps one lock for a double chest. A container nobody locked gets none here.
+                UUID lockOwner = this.bolt.getOwner(block);
                 this.bolt.removeProtection(block);
-                for (Block half : this.otherHalves) {
-                    this.bolt.createProtection(half, this.protectionOwner);
+                if (lockOwner != null) {
+                    for (Block half : this.otherHalves) {
+                        this.bolt.createProtection(half, lockOwner);
+                    }
                 }
             } catch (RuntimeException ex) {
                 // The items are safely stored; a protection left behind is the lesser problem.

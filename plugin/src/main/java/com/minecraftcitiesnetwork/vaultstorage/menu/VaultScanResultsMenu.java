@@ -11,6 +11,7 @@ import java.util.UUID;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.Tag;
+import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Hanging;
@@ -59,16 +60,19 @@ public final class VaultScanResultsMenu extends ChildMenuImp {
 
     private final @NotNull VaultUIContext uiContext;
     private final @NotNull String regionId;
+    /** The world that was scanned: the player may be in another by the time a button is clicked. */
+    private final @NotNull World world;
     private final @NotNull List<ScanResult> entries;
     private final int page;
     private final @NotNull Filter filter;
 
     public VaultScanResultsMenu(@NotNull Player player, @NotNull ParentMenu parent, @NotNull VaultUIContext ctx,
-                                @NotNull String regionId, @NotNull List<ScanResult> entries, int page,
-                                @NotNull Filter filter) {
+                                @NotNull String regionId, @NotNull World world, @NotNull List<ScanResult> entries,
+                                int page, @NotNull Filter filter) {
         super(player, parent);
         this.uiContext = ctx;
         this.regionId = regionId;
+        this.world = world;
         this.entries = entries;
         this.page = page;
         this.filter = filter;
@@ -76,18 +80,15 @@ public final class VaultScanResultsMenu extends ChildMenuImp {
 
     private @NotNull VaultScanResultsMenu with(@NotNull Player actor, @NotNull List<ScanResult> results,
                                                int otherPage, @NotNull Filter otherFilter) {
-        return new VaultScanResultsMenu(actor, parentMenu(), this.uiContext, this.regionId, results, otherPage,
-                otherFilter);
+        return new VaultScanResultsMenu(actor, parentMenu(), this.uiContext, this.regionId, this.world, results,
+                otherPage, otherFilter);
     }
 
     @Override
     protected @NotNull AutoDialog build() {
         AutoDialog.Builder builder = AutoDialog.builder()
                 .title(plugin.text().of(MessageKeys.SCAN_TITLE, Map.of("%player%", player.getName())));
-        List<ScanResult> shown = this.entries.stream().filter(this.filter::shows).toList();
-        builder.line(plugin.text().of(MessageKeys.SCAN_RESULTS_HEADER,
-                Map.of("%region%", this.regionId, "%count%", String.valueOf(shown.size()))));
-        Paging paging = this.filter == Filter.ENTITY ? entities(builder) : blocks(builder, shown);
+        Paging paging = this.filter == Filter.ENTITY ? entities(builder) : blocks(builder);
         if (paging != null && paging.hasPrevious()) {
             builder.button(plugin.text().of(MessageKeys.SCAN_PREV_BTN),
                     actor -> with(actor, this.entries, paging.page() - 1, this.filter).open());
@@ -102,8 +103,16 @@ public final class VaultScanResultsMenu extends ChildMenuImp {
         return builder.build();
     }
 
+    /** The region and how many results the page's kind has: blocks and entities are counted apart. */
+    private void header(AutoDialog.@NotNull Builder builder, int count) {
+        builder.line(plugin.text().of(MessageKeys.SCAN_RESULTS_HEADER,
+                Map.of("%region%", this.regionId, "%count%", String.valueOf(count))));
+    }
+
     /** Adds this page of blocks. Null when there are none. */
-    private @Nullable Paging blocks(AutoDialog.@NotNull Builder builder, @NotNull List<ScanResult> shown) {
+    private @Nullable Paging blocks(AutoDialog.@NotNull Builder builder) {
+        List<ScanResult> shown = this.entries.stream().filter(this.filter::shows).toList();
+        header(builder, shown.size());
         if (shown.isEmpty()) {
             builder.line(plugin.text().of(MessageKeys.SCAN_NONE_FOUND));
             return null;
@@ -130,42 +139,40 @@ public final class VaultScanResultsMenu extends ChildMenuImp {
     }
 
     /** Vaults a listed block, then shows the list without it. captureDirectAsync checks the permission. */
-    private void vault(@NotNull Player actor, @NotNull Block listed, int currentPage) {
+    private void vault(@NotNull Player actor, @NotNull Block target, int currentPage) {
         new LoadingMenu(actor, parentMenu(), Map.of("%player%", actor.getName())).open();
-        Block target = actor.getWorld().getBlockAt(listed.getX(), listed.getY(), listed.getZ());
         plugin.captureService().captureDirectAsync(actor, target, success -> {
             // The block stops being a result once it has no Bolt owner: it was vaulted, or its
             // lock was removed. The lists are corrected, not scanned for again.
             List<ScanResult> remaining = this.entries;
             if (plugin.bolt().getOwner(target) == null) {
                 plugin.scanService().forget(target);
-                remaining = this.entries.stream().filter(result -> !(result.block().getX() == target.getX()
-                        && result.block().getY() == target.getY()
-                        && result.block().getZ() == target.getZ())).toList();
+                remaining = this.entries.stream().filter(result -> !result.block().equals(target)).toList();
             }
-            with(actor, remaining, currentPage, Filter.BLOCK).open();
+            with(actor, remaining, currentPage, this.filter).open();
         });
     }
 
-    /** Onto the block, or into it when it can be stood in. */
+    /** Onto the block, in the block's world, or into it when it can be stood in. */
     private static void teleport(@NotNull Player actor, @NotNull Block block) {
         Location facing = ((Entity) actor).getLocation();
-        actor.teleport(new Location(actor.getWorld(), block.getX() + 0.5,
+        actor.teleport(new Location(block.getWorld(), block.getX() + 0.5,
                 block.isPassable() ? block.getY() : block.getY() + 1, block.getZ() + 0.5,
                 facing.getYaw(), facing.getPitch()));
     }
 
     /** Adds this page of the region's locked entities. Null when there are none. */
     private @Nullable Paging entities(AutoDialog.@NotNull Builder builder) {
-        VaultRegion region = plugin.worldGuard().getRegionById(this.regionId, player.getWorld());
+        VaultRegion region = plugin.worldGuard().getRegionById(this.regionId, this.world);
         if (region == null) {
+            header(builder, 0);
             builder.line(plugin.text().of(MessageKeys.SCAN_REGION_NOT_FOUND, Map.of("%region%", this.regionId)));
             return null;
         }
         // Bolt is asked by bounding box; the region's shape decides what is in it. A fixed
         // order, so a page shows the same entities each time it is built.
         List<Map.Entry<EntityProtection, Entity>> locked = plugin.bolt()
-                .getProtectedEntities(player.getWorld(), region.boundingBox()).entrySet().stream()
+                .getProtectedEntities(this.world, region.boundingBox()).entrySet().stream()
                 .filter(entry -> plugin.worldGuard().isInside(this.regionId, entry.getValue().getLocation().getBlock()))
                 .sorted(Comparator.<Map.Entry<EntityProtection, Entity>>comparingInt(
                                 entry -> entry.getValue().getLocation().getBlockX())
@@ -173,6 +180,7 @@ public final class VaultScanResultsMenu extends ChildMenuImp {
                         .thenComparingInt(entry -> entry.getValue().getLocation().getBlockZ())
                         .thenComparing(entry -> entry.getValue().getUniqueId()))
                 .toList();
+        header(builder, locked.size());
         if (locked.isEmpty()) {
             builder.line(plugin.text().of(MessageKeys.SCAN_NO_ENTITIES));
             return null;
@@ -204,7 +212,7 @@ public final class VaultScanResultsMenu extends ChildMenuImp {
         }
         Runnable refresh = () -> with(actor, this.entries, currentPage, Filter.ENTITY).open();
         if (entity instanceof Hanging hanging && hanging.isValid()) {
-            plugin.captureService().captureHanging(actor, hanging).thenRun(refresh);
+            plugin.captureService().captureHanging(actor, hanging).thenRunAsync(refresh, plugin.mainThread());
             return;
         }
         plugin.bolt().removeProtection(protection);

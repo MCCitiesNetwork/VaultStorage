@@ -7,7 +7,6 @@ import com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin;
 import com.minecraftcitiesnetwork.vaultstorage.config.MessageKeys;
 import com.minecraftcitiesnetwork.vaultstorage.session.VaultSessionManager.Mode;
 import com.minecraftcitiesnetwork.vaultstorage.session.VaultSessionManager;
-import java.util.List;
 import java.util.UUID;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Entity;
@@ -189,11 +188,9 @@ public final class CaptureSession implements Listener {
 
     /** Removes what is attached to the container and says so. False when nothing is. */
     private boolean removeAttachments(@NotNull Block captureBlock) {
-        List<Block> attached = plugin.attachments().attachedTo(captureBlock);
-        if (attached.isEmpty()) {
+        if (!service.removeAttachments(actor, captureBlock)) {
             return false;
         }
-        service.removeAttachments(actor, attached);
         actor.sendMessage(plugin.text().of(MessageKeys.CAPTURE_ATTACHMENT_REMOVED));
         return true;
     }

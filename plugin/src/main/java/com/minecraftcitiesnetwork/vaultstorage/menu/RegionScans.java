@@ -6,6 +6,7 @@ import com.minecraftcitiesnetwork.vaultstorage.permission.Permissions;
 import com.minecraftcitiesnetwork.vaultstorage.region.VaultRegion;
 import com.minecraftcitiesnetwork.vaultstorage.session.VaultSessionManager;
 import java.util.Map;
+import org.bukkit.World;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 
@@ -27,7 +28,8 @@ final class RegionScans {
     static void open(@NotNull ParentMenu parent, @NotNull Player player, @NotNull String regionId,
                      @NotNull VaultUIContext context) {
         VaultStoragePlugin plugin = parent.plugin();
-        VaultRegion region = plugin.worldGuard().getRegionById(regionId, player.getWorld());
+        World world = player.getWorld();
+        VaultRegion region = plugin.worldGuard().getRegionById(regionId, world);
         if (region == null || !mayScan(player, region)) {
             player.sendMessage(plugin.text().of(MessageKeys.SCAN_NOT_YOUR_REGION));
             return;
@@ -37,12 +39,15 @@ final class RegionScans {
         }
         new LoadingMenu(player, parent, Map.of("%player%", player.getName())).open();
         plugin.scanService().scan(player, regionId, context, results -> {
+            if (!player.isOnline()) {
+                return;
+            }
             if (results == null) {
                 // The scan could not run and has said why.
                 player.closeDialog();
                 return;
             }
-            new VaultScanResultsMenu(player, parent, context, regionId, results, 0,
+            new VaultScanResultsMenu(player, parent, context, regionId, world, results, 0,
                     VaultScanResultsMenu.Filter.BLOCK).open();
         });
     }

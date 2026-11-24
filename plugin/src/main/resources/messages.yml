@@ -207,6 +207,7 @@ command:
   reload:
     done: '<green>VaultStorage reloaded.</green>'
     failed: '<red>The reload failed; the old settings are still in use. See the server log.</red>'
+    module-failed: '<red>VaultStorage reloaded, but these modules did not and keep their old settings: <modules>. See the server log.</red>'
 
 # What a vault's owner is told.
 notification:

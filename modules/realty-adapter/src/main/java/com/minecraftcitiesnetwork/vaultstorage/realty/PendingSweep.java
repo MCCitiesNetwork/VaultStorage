@@ -2,6 +2,7 @@ package com.minecraftcitiesnetwork.vaultstorage.realty;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Locale;
 import java.util.UUID;
 import org.jetbrains.annotations.NotNull;
@@ -21,6 +22,12 @@ public record PendingSweep(@NotNull UUID worldUuid, @NotNull String regionId, @N
     public PendingSweep {
         // WorldGuard keeps region ids in lower case.
         regionId = regionId.toLowerCase(Locale.ROOT);
+        // The column keeps milliseconds, and a finished sweep is deleted by its due time.
+        dueTime = dueTime.truncatedTo(ChronoUnit.MILLIS);
+    }
+
+    public @NotNull RegionKey key() {
+        return new RegionKey(this.worldUuid, this.regionId);
     }
 
     /** Ticks from {@code now} until the sweep is due, rounded up; a short delay if it already is. */

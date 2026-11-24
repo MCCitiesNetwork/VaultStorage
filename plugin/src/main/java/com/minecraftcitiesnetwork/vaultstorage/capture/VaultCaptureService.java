@@ -109,10 +109,16 @@ public final class VaultCaptureService {
                                                                     @NotNull List<Block> otherHalves) {
         CapturePipeline<Block> pipeline = new CapturePipeline<>(
                 CaptureStore.inNewVault(plugin.repository(), plugin.claimReleases()),
-                new BukkitContainerAccess(plugin.bolt(), owner, otherHalves, plugin.getLogger()),
+                new BukkitContainerAccess(plugin.bolt(), otherHalves, plugin.getLogger()),
                 plugin.databaseExecutor(), plugin.mainThread(),
                 plugin.getLogger());
-        return pipeline.capture(block, owner);
+        return pipeline.capture(block, owner).thenApply(result -> {
+            if (result instanceof CaptureResult.Vaulted) {
+                // Whatever stands here next is not this container.
+                this.plugin.containerOwners().forget(block);
+            }
+            return result;
+        });
     }
 
     /** Tells the actor the capture stopped because the owner's id could not be checked, and logs where. */
@@ -176,16 +182,21 @@ public final class VaultCaptureService {
 
     /**
      * Unlocks and removes what is attached to a container, through the plugin that keeps each.
-     * Main thread.
+     * An owner a module named for the container is forgotten with them: it was theirs by what
+     * was attached. Main thread.
      *
      * @param actor who is removing them, or null for an automated capture
+     * @return whether anything was attached
      */
-    public void removeAttachments(@Nullable Player actor, @NotNull List<Block> attached) {
+    public boolean removeAttachments(@Nullable Player actor, @NotNull Block container) {
         ContainerAttachments attachments = plugin.attachments();
+        List<Block> attached = attachments.attachedTo(container);
         for (Block block : attached) {
             unprotect(block);
             attachments.remove(actor, block);
         }
+        plugin.containerOwners().forget(container);
+        return !attached.isEmpty();
     }
 
     /**
@@ -283,12 +294,13 @@ public final class VaultCaptureService {
                     }
                     return storeThenRemove(hang, owner).thenApply(result -> report(actor, result, supporting, owner));
                 }, mainThread)
-                .exceptionally(failure -> {
+                // On the main thread whichever thread the owner check failed on.
+                .exceptionallyAsync(failure -> {
                     this.plugin.getLogger().log(Level.SEVERE, "Hanging capture failed for " + actor.getName()
                             + "; the entity was left in place.", failure);
-                    mainThread.execute(() -> actor.sendMessage(this.plugin.text().of(MessageKeys.CAPTURE_SAVE_FAILED)));
+                    actor.sendMessage(this.plugin.text().of(MessageKeys.CAPTURE_SAVE_FAILED));
                     return false;
-                });
+                }, mainThread);
     }
 
     /**
@@ -309,8 +321,7 @@ public final class VaultCaptureService {
      */
     public @NotNull CompletableFuture<Boolean> captureOfflineAsync(@NotNull Block block,
                                     @NotNull UUID initiatorUuid,
-                                    @NotNull UUID boltOwner,
-                                    @NotNull Runnable onVaulted) {
+                                    @NotNull UUID boltOwner) {
 
         CaptureOutcome outcome = prepare(block, boltOwner, initiatorUuid, null);
         if (outcome.empty()) {
@@ -336,12 +347,8 @@ public final class VaultCaptureService {
             plugin.getLogger().info("[VaultCaptureService] Offline vault created: ID=" + vaulted.vault()
                     + " owner=" + finalOwner + " initiator=" + initiatorUuid);
             // What was attached to the container goes with it.
-            List<Block> attached = plugin.attachments().attachedTo(block);
-            if (!attached.isEmpty()) {
-                removeAttachments(null, attached);
-            }
+            removeAttachments(null, block);
             // The sweep tells the owner once, at its end; no PlayerVaultEvent for an automated capture.
-            onVaulted.run();
             return true;
         });
     }
@@ -353,8 +360,7 @@ public final class VaultCaptureService {
      * and the entity is removed (which also disposes its Bolt protection).
      * <p>Must be called on the main thread with the entity loaded; persistence runs async.</p>
      */
-    public @NotNull CompletableFuture<Boolean> captureHangingOfflineAsync(@NotNull Hanging hang, @NotNull UUID boltOwner,
-                                                                          @NotNull Runnable onVaulted) {
+    public @NotNull CompletableFuture<Boolean> captureHangingOfflineAsync(@NotNull Hanging hang, @NotNull UUID boltOwner) {
         if (!HangingVaultSupport.isSupported(hang)) {
             return CompletableFuture.completedFuture(false);
         }
@@ -362,14 +368,8 @@ public final class VaultCaptureService {
         // an entity in an unloaded chunk can be neither checked nor removed.
         Runnable release = this.chunks.hold(hang.getLocation().getChunk());
         return storeThenRemove(hang, boltOwner).whenComplete((result, failure) -> release.run())
-                .thenApply(result -> {
-                    // A capture that did not go through is logged by the pipeline; the entity
-                    // stays for the next sweep.
-                    if (!(result instanceof CaptureResult.Vaulted)) {
-                        return false;
-                    }
-                    onVaulted.run();
-                    return true;
-                });
+                // A capture that did not go through is logged by the pipeline; the entity stays
+                // for the next sweep.
+                .thenApply(result -> result instanceof CaptureResult.Vaulted);
     }
 }

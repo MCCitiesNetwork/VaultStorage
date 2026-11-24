@@ -42,7 +42,7 @@ Under `com.minecraftcitiesnetwork.vaultstorage`, grouped by feature:
 
 | Package | Holds |
 | --- | --- |
-| (root) | `VaultStoragePlugin` (owns and hands out every service), `Integrations` |
+| (root) | `VaultStoragePlugin` (owns and hands out every service), `Integrations`, `PluginTasks` (the two executors and how they end), `ReloadOutcome` |
 | `capture` | `VaultCaptureService` (prepare, store, offline), `CaptureSession` (a player's capture mode), `CaptureActionBar`, `CaptureOwners`, `ContainerBlocks`, `DoubleChestRule`, `CaptureRules` and `CaptureRegions` (who may vault what), the pipeline with its `CaptureStore` and `ContainerAccess`, the policy; the two hooks modules add to, `ContainerAttachments` and `ContainerOwnerSource`, and `ContainerOwnerLookup` (asks and remembers) |
 | `placement` | `VaultPlacementService` (the order of a placement), `PlacementStore` and `PlacementWorld` (what it writes to), `PlacementRules` (who may place where) |
 | `vault` | vault types, the vault inventory, item serialization, events |
@@ -113,6 +113,15 @@ findings and kept the framework (`ParentMenu`, `ChildMenuImp`, `AutoDialog`).
 - **NullAway fails the build** on main code: a value that may be null is annotated `@Nullable`,
   and one that is not annotated is never null. A field a framework sets later is the one place
   for `@SuppressWarnings("NullAway.Init")`, with a comment saying who sets it.
+- **Work that must survive a stop goes through `plugin.mainThread()` and `plugin.databaseExecutor()`**
+  (`PluginTasks`), never Bukkit's scheduler: that refuses and drops tasks once the plugin is
+  disabled. `onDisable` runs what was started to its end, before the modules stop and again
+  after, so a capture between store and remove, or a placement between place and delete, is
+  finished and not cut in half. Bukkit's scheduler is for timers (action bars, scan and sweep
+  pacing) that may simply stop.
+- **State only the main thread touches is a plain field or collection**, with a comment saying
+  so. `Integrations` slots, `Names` and the settings reference are read from other threads and
+  are the exceptions.
 - **Never commit `*.sql` from the repository root.** A production snapshot is kept there for
   testing and is ignored.
 
@@ -132,7 +141,10 @@ findings and kept the framework (`ParentMenu`, `ChildMenuImp`, `AutoDialog`).
 - **A module's bundled config has its own file name** (`realty.yml`): its class loader
   asks the host's first, so `config.yml` would find the wrong file.
 - **`/vault reload`** parses `settings.yml` and `messages.yml` off the main thread, swaps both
-  only if both parsed, then reloads modules whose manifest says `reloadable: true`.
+  only if both parsed, then reloads modules whose manifest says `reloadable: true`. It answers
+  with a `ReloadOutcome`: a module that fails is named, and is not reported as the files failing.
+- **The JDBC URL gets `connectTimeout` and `socketTimeout`** unless `database.yml`'s url sets
+  them: without a socket timeout a connection that dies mid-query holds a pool thread for good.
 
 ## Rules for commands and permissions
 
@@ -319,7 +331,7 @@ file for its area; a bug found by hand gets a test before its fix.
 | `timing` | the world changing while a capture or a placement is in its database step: a chest gaining, losing an item or being broken, an item frame's item swapped, a block put at the target, repeated clicks |
 | `worlds` | a chest vaulted in the nether and placed in the overworld; an overworld region not applying in the nether; a vault from a world the server no longer has |
 | `names` | Namebook and Floodgate each taking over at start-up; an offline player found by name; names in any case; a Java player not taken for a Bedrock one |
-| `restart-before`, `restart-after` | across a real stop and start of the server: a waiting sweep resumes and runs, a stale claim is released and logged, a stored vault keeps its items. Run by `./gradlew :plugin:plugwrightRestartTest`, not by the ordinary run |
+| `restart-before`, `restart-after` | across a real stop and start of the server: a waiting sweep resumes and runs, a stale claim is released and logged, a stored vault keeps its items, a capture whose database step was open when the server stopped ends with its items in one place. Run by `./gradlew :plugin:plugwrightRestartTest`, not by the ordinary run |
 | `movement` | a bot standing still for seconds; walking into and out of a region for "Here"; walking into reach of a chest in capture mode; a click that turns to the block first; walking away during a capture's database step; a shop sign put on a chest by a sneaking player |
 | `zz-scale` | lists over 5,000 vaults of one owner and 35,000 in the table opening within three seconds; tick time while they do |
 
@@ -329,6 +341,9 @@ Not covered live, and why:
   line in place of the loading dialog, and gamertag lookups are untested live. `FormPlanTest`
   covers how a menu is laid out as forms. To look at them by hand, run the test server with
   Geyser and join from a Bedrock client: `./gradlew :plugin:plugwrightRunServerLocal -PwithGeyser`.
+- **A sale by auction or by an accepted offer.** Both need Realty's payment scheduler to finish
+  the sale. `RealtyOccupantChangeListenerTest` checks the two events are listened for.
+- **An inventory open cancelled by another plugin.** No plugin on the test server cancels one.
 - **An edit open when the server stops.** The runner disconnects its bots before it stops the
   server, and a disconnect saves the edit by the ordinary path.
 
@@ -345,9 +360,17 @@ config and reloading), `database.ts`, `dialogs.ts`.
   firm's, an admin shop's or an unlisted shop's container has no owner. A source may read a
   database, so `ContainerOwnerLookup.ownerOf` is asked first and `VaultCapturePolicy` uses what
   it remembered.
+- **A sweep starts on every Realty event that gives a region a new occupant**: a sale has three
+  (`RegionBoughtEvent`, `AuctionWonPurchaseEvent`, `OfferPurchaseCompletedEvent`), then a title
+  transfer, a rental and a tenant set. `RealtyOccupantChangeListenerTest` lists them.
+- **A stored sweep is deleted as itself** (region, initiator and due time), so one that finishes
+  does not remove a newer one of the same region, and only when it ended without a failure.
+  The store's writes run one after the other (`storeWrite`).
 - **The sweep has three passes:** Bolt-locked blocks, locked hanging entities, and containers
   nobody locked that a module names an owner for (`AutoVaultService.vaultUnlocked`). A container
-  with a Bolt owner belongs to the first pass only. All three ask the same `SweepFilter`.
+  with a Bolt owner belongs to the first pass only. All three ask the same `SweepFilter`. The
+  first and third capture both halves of a double chest through `captureInOrder`; what is
+  attached to an unlocked container goes only when every half left standing is empty.
 - **Who may vault a container is `CaptureRules.decide`**, a pure function with a test for every
   outcome. `VaultCapturePolicy` only gathers its inputs from Bolt and WorldGuard.
 - **A region counts by its real shape.** Ask `WorldGuardService.getRegionsAt` or `isInside`;
@@ -358,6 +381,13 @@ config and reloading), `database.ts`, `dialogs.ts`.
   regions that overlap, touch, nest and lie above one another.
 - **Only the override removes what is attached to a container that cannot be vaulted**
   (`CaptureRules.mayRemoveAttachments`).
+- **Attachments are removed with `VaultCaptureService.removeAttachments(actor, container)`**,
+  which also forgets the owner a module named for it (`ContainerOwnerLookup.forget`): that
+  owner was theirs by what was attached, and is remembered for thirty seconds otherwise.
+- **A capture moves a lock, it never makes one.** The other half of a double chest is locked
+  again only for the owner of the lock the captured half had.
+- **`openInventory` can return null** when another plugin cancels the open, and then no close
+  event comes: an edit's claim is released there (`VaultInventoryService.openFailed`).
 - **A placement is `VaultPlacementService` over a `PlacementStore` and a `PlacementWorld`**, so
   its order is tested with fakes. Who may place where is `PlacementRules.decide`.
 - **A hanging entity goes through `CapturePipeline` too**, as `HangingAccess`. What differs is

@@ -23,6 +23,10 @@ public abstract class ParentMenuImp implements ParentMenu {
 
     @Override
     public void open() {
+        // A menu is often opened at the end of work off the main thread; the player may have left.
+        if (!this.player.isOnline()) {
+            return;
+        }
         AutoDialog built = build();
         // A module may draw the menu its own way for this player; otherwise it is the dialog.
         if (!this.plugin.integrations().showMenu(this.player, built.view())) {

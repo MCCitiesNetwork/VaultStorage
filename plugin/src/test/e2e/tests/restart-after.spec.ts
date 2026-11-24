@@ -4,7 +4,7 @@ import { query } from './database.js';
 import { Dialogs } from './dialogs.js';
 import { operators } from './players.js';
 import { logFile, NAMES, stateFile } from './restart.js';
-import { dialogTitled, openWindow, vaultItemCount } from './vaults.js';
+import { dialogTitled, openWindow, vaultCount, vaultItemCount } from './vaults.js';
 import { expectBlock, FLOOR, standAt } from './world.js';
 
 // The second half of the restart tests: the server has been stopped and started since
@@ -44,6 +44,23 @@ test('restart: a vault left claimed when the server stopped is free again, and t
 
         editor.chat(`/vault open ${claimed} edit`);
         await openWindow(editor);
+    });
+
+test('restart: a capture that was being saved when the server stopped ended in one place',
+    { requires: { consoleOutput: 'full' } }, async ({ createPlayer, server }) => {
+        const { x, z } = state();
+        const staff = await createPlayer({ username: NAMES.staff });
+        await operators(server, staff);
+        await standAt(server, staff, x, z);
+        const owner = staff.bot.player.uuid;
+
+        // Stored, and so removed from the world: not left standing beside its own vault.
+        expect(vaultCount(staff)).toBe(1);
+        expect(vaultItemCount(staff)).toBe(2);
+        await expectBlock(server, x + 3, FLOOR, z + 3, 'air', 'capture-finished-at-shutdown');
+        // The capture let go of its vault itself; startup found nothing of it to release.
+        const [vault] = query(`SELECT uuid FROM Vault WHERE ownerUuid = '${owner}'`);
+        expect(fs.readFileSync(logFile(), 'utf8')).not.toContain(`Vault ${vault} was still claimed`);
     });
 
 test('restart: a vault stored before the server stopped still holds its items in their slots',

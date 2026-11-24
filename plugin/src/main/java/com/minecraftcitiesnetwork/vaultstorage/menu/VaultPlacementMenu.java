@@ -120,39 +120,39 @@ public final class VaultPlacementMenu extends ChildMenuImp {
                 session.clearActionBarTask();
                 session.switchTo(Mode.NONE);
 
+                // The reply comes on the main thread.
                 placement.placeFromDatabaseRelativeAsync(vaultId, targetLoc, result -> {
-                    new BukkitRunnable() {
-                        @Override public void run() {
-                            actor.sendMessage(plugin.text().of(result.messageKey()));
-                            if (result.success()) {
-                                // Fire Vault placed event
-                                new PlayerPlaceVaultEvent(actor, targetLoc).callEvent();
+                    if (!actor.isOnline()) {
+                        return;
+                    }
+                    actor.sendMessage(plugin.text().of(result.messageKey()));
+                    if (result.success()) {
+                        // Fire Vault placed event
+                        new PlayerPlaceVaultEvent(actor, targetLoc).callEvent();
 
-                                // Back to the list if there is anything left on it.
-                                VaultFilter remaining = new VaultFilter(context.filterOwner(), null);
-                                CompletableFuture.supplyAsync(() -> plugin.repository().count(remaining), plugin.databaseExecutor())
-                                        .thenAcceptAsync(left -> {
-                                            if (left > 0) {
-                                                toList.accept(actor);
-                                            } else {
-                                                actor.sendMessage(plugin.text().of(MessageKeys.PLACEMENT_NONE_LEFT));
-                                                actor.closeDialog();
-                                            }
-                                        }, plugin.mainThread())
-                                        .exceptionally(failure -> {
-                                            plugin.getLogger().log(Level.WARNING, "Could not count the remaining vaults.", failure);
-                                            // The vault is placed; only the way back is unknown. The
-                                            // loading dialog must not be left up.
-                                            plugin.mainThread()
-                                                    .execute(actor::closeDialog);
-                                            return null;
-                                        });
-                            } else {
-                                // Nothing was placed and the vault is still there: back to it, to try again.
-                                toVault.accept(actor);
-                            }
-                        }
-                    }.runTask(plugin);
+                        // Back to the list if there is anything left on it.
+                        VaultFilter remaining = new VaultFilter(context.filterOwner(), null);
+                        CompletableFuture.supplyAsync(() -> plugin.repository().count(remaining), plugin.databaseExecutor())
+                                .thenAcceptAsync(left -> {
+                                    if (left > 0) {
+                                        toList.accept(actor);
+                                    } else {
+                                        actor.sendMessage(plugin.text().of(MessageKeys.PLACEMENT_NONE_LEFT));
+                                        actor.closeDialog();
+                                    }
+                                }, plugin.mainThread())
+                                .exceptionally(failure -> {
+                                    plugin.getLogger().log(Level.WARNING, "Could not count the remaining vaults.", failure);
+                                    // The vault is placed; only the way back is unknown. The
+                                    // loading dialog must not be left up.
+                                    plugin.mainThread()
+                                            .execute(actor::closeDialog);
+                                    return null;
+                                });
+                    } else {
+                        // Nothing was placed and the vault is still there: back to it, to try again.
+                        toVault.accept(actor);
+                    }
                 });
             }
         });

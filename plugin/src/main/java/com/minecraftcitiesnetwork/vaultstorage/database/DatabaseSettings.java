@@ -20,9 +20,24 @@ public record DatabaseSettings(
     /**
      * The JDBC URL. Timestamps are stored in UTC, and the three time zone options are what make
      * the driver convert them correctly on a JVM running in another zone.
+     *
+     * <p>The two timeouts apply unless the url sets its own. The driver's default is to wait
+     * for an answer for ever, so a connection that died in the middle of a query would hold a
+     * pool thread until the server stops.
      */
     public @NotNull String jdbcUrl() {
-        return "jdbc:" + this.url + (this.url.contains("?") ? "&" : "?")
-                + "connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true&preserveInstants=true";
+        StringBuilder jdbc = new StringBuilder("jdbc:").append(this.url)
+                .append(this.url.contains("?") ? "&" : "?")
+                .append("connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true&preserveInstants=true");
+        // In milliseconds. A minute for an answer: a migration of a large table is one statement.
+        appendUnlessSet(jdbc, "connectTimeout", 10_000);
+        appendUnlessSet(jdbc, "socketTimeout", 60_000);
+        return jdbc.toString();
+    }
+
+    private void appendUnlessSet(@NotNull StringBuilder jdbc, @NotNull String option, int value) {
+        if (!this.url.contains(option + "=")) {
+            jdbc.append('&').append(option).append('=').append(value);
+        }
     }
 }

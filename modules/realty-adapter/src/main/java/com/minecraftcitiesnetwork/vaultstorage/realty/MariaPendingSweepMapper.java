@@ -38,8 +38,10 @@ public interface MariaPendingSweepMapper extends PendingSweepMapper {
     @Override
     @Delete("""
             DELETE FROM PendingSweep
-            WHERE worldUuid = #{worldUuid}
-            AND regionId = #{regionId}
+            WHERE worldUuid = #{sweep.worldUuid}
+            AND regionId = #{sweep.regionId}
+            AND initiatorUuid = #{sweep.initiatorUuid}
+            AND dueTime = #{sweep.dueTime}
             """)
-    int delete(@Param("worldUuid") @NotNull UUID worldUuid, @Param("regionId") @NotNull String regionId);
+    int delete(@Param("sweep") @NotNull PendingSweep sweep);
 }

@@ -48,7 +48,7 @@ class PendingSweepStoreTest {
     void startEmpty() throws SQLException {
         this.store = newStore();
         for (PendingSweep sweep : this.store.all()) {
-            this.store.delete(sweep.worldUuid(), sweep.regionId());
+            this.store.delete(sweep);
         }
     }
 
@@ -72,8 +72,32 @@ class PendingSweepStoreTest {
     void aFinishedSweepIsForgotten() {
         this.store.save(new PendingSweep(WORLD, "plot1", OCCUPANT, DUE));
         this.store.save(new PendingSweep(WORLD, "plot2", OCCUPANT, DUE));
-        this.store.delete(WORLD, "plot1");
+        this.store.delete(new PendingSweep(WORLD, "plot1", OCCUPANT, DUE));
         Assertions.assertEquals(List.of("plot2"), this.store.all().stream().map(PendingSweep::regionId).toList());
+    }
+
+    @Test
+    void aSweepThatFinishesDoesNotForgetANewerOneOfTheSameRegion() {
+        PendingSweep running = new PendingSweep(WORLD, "plot1", OCCUPANT, DUE);
+        this.store.save(running);
+        // The region changes hands again while the first sweep runs.
+        PendingSweep newer = new PendingSweep(WORLD, "plot1",
+                UUID.fromString("cccccccc-0000-0000-0000-000000000002"), DUE.plusSeconds(60));
+        this.store.save(newer);
+
+        this.store.delete(running);
+
+        Assertions.assertEquals(List.of(newer), this.store.all());
+    }
+
+    @Test
+    void aSweepMadeFromTheClockIsForgottenThoughTheColumnKeepsMilliseconds() {
+        PendingSweep sweep = new PendingSweep(WORLD, "plot1", OCCUPANT, DUE.plusNanos(456_789));
+        this.store.save(sweep);
+
+        this.store.delete(sweep);
+
+        Assertions.assertEquals(List.of(), this.store.all());
     }
 
     @Test

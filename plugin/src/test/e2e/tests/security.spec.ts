@@ -84,25 +84,24 @@ test('a forged answer that is no action at all opens the vault to view, not to e
         await expect(server).toHaveReceivedMessage('nonsense-action-took-nothing');
     });
 
-test('a player who loses the place permission after opening the menu cannot place',
+test('a player who loses the place permission after opening the menu cannot place, and is no longer offered it',
     { requires: { consoleOutput: 'full' } }, async ({ player, createPlayer, server }) => {
         const owner = await createPlayer();
         await vaultFor(server, player, owner);
         await ordinary(server, owner, [MENU]);
         const dialogs = new Dialogs(owner);
         const actions = await ownVaultActions(owner, dialogs);
+        expect(actions.buttons.some((button) => button.label.includes('Place Block'))).toBe(true);
 
         await server.execute(`lp user ${owner.username} permission set vaultstorage.action.place false`);
         await sleep(700);
+        // The menu on screen is older than the permission: its button is checked at the click.
         actions.click('Place Block');
-        const placement = await dialogTitled(dialogs, 'Vault Placement').catch(() => undefined);
-        placement?.click('Start Placement');
-        await sleep(500);
-        const { rightClick } = await import('./world.js');
-        const spot = owner.bot.entity.position;
-        await rightClick(owner, Math.floor(spot.x) + 1, -61, Math.floor(spot.z) + 3);
 
-        await expect(owner).toHaveReceivedMessage('You are not allowed to place vaults.');
+        await expect(owner).toHaveReceivedMessage('You don\'t have permission.');
         const ownerUuid = owner.bot.player.uuid;
         expect(query(`SELECT COUNT(*) FROM Vault WHERE ownerUuid = '${ownerUuid}'`)).toEqual(['1']);
+        // Opened again, the menu lists only what the player may do.
+        const reopened = await ownVaultActions(owner, dialogs);
+        expect(reopened.buttons.some((button) => button.label.includes('Place Block'))).toBe(false);
     });

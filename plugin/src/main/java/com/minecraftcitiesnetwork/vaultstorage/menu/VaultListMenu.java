@@ -222,8 +222,10 @@ public final class VaultListMenu extends ChildMenuImp {
                 .exceptionally(failure -> {
                     plugin.getLogger().log(Level.SEVERE, "Could not load the vault list for " + player.getName() + ".", failure);
                     mainThread.execute(() -> {
-                        player.sendMessage(plugin.text().of(MessageKeys.LIST_LOAD_FAILED));
-                        parentMenu().open();
+                        if (player.isOnline()) {
+                            player.sendMessage(plugin.text().of(MessageKeys.LIST_LOAD_FAILED));
+                            parentMenu().open();
+                        }
                     });
                     return null;
                 });

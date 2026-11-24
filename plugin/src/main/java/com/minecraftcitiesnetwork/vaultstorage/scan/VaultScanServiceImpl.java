@@ -3,7 +3,6 @@ package com.minecraftcitiesnetwork.vaultstorage.scan;
 import java.util.logging.Level;
 import org.jetbrains.annotations.Nullable;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CopyOnWriteArrayList;
 import org.bukkit.block.Block;
 import org.jetbrains.annotations.NotNull;
 import com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin;
@@ -17,7 +16,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 
 public final class VaultScanServiceImpl implements VaultScanService {
@@ -28,7 +26,9 @@ public final class VaultScanServiceImpl implements VaultScanService {
         this.plugin = plugin;
     }
 
-    private final Map<CacheKey, CacheEntry> cache = new ConcurrentHashMap<>();
+    // Main thread only: a scan starts at a dialog click, and its results, its answer and
+    // forget() all arrive there.
+    private final Map<CacheKey, CacheEntry> cache = new HashMap<>();
     private final Map<CacheKey, List<Consumer<List<ScanResult>>>> pendingScans = new HashMap<>();
 
     @Override
@@ -50,15 +50,12 @@ public final class VaultScanServiceImpl implements VaultScanService {
         }
 
         // Check if a scan is already in progress for this key
-        synchronized (pendingScans) {
-            if (pendingScans.containsKey(key)) {
-                pendingScans.get(key).add(callback);
-                return;
-            }
-            List<Consumer<List<ScanResult>>> callbacks = new ArrayList<>();
-            callbacks.add(callback);
-            pendingScans.put(key, callbacks);
+        List<Consumer<List<ScanResult>>> waiting = pendingScans.get(key);
+        if (waiting != null) {
+            waiting.add(callback);
+            return;
         }
+        pendingScans.put(key, new ArrayList<>(List.of(callback)));
 
         // Cache miss or expired, perform scan
         try {
@@ -68,8 +65,8 @@ public final class VaultScanServiceImpl implements VaultScanService {
                     // grow with every region and player that ever scanned.
                     Instant stale = Instant.now().minusSeconds(plugin.settings().scan().cacheTtlSeconds());
                     cache.values().removeIf(entry -> entry.timestamp.isBefore(stale));
-                    // A copy that can shrink: forget() removes blocks from it, from any thread.
-                    cache.put(key, new CacheEntry(new CopyOnWriteArrayList<>(results), Instant.now()));
+                    // A copy that can shrink: forget() removes blocks from it.
+                    cache.put(key, new CacheEntry(new ArrayList<>(results), Instant.now()));
                 }
                 resolveOwnerNames(results).whenCompleteAsync((done, failure) -> answer(key, results),
                         plugin.mainThread());
@@ -84,10 +81,7 @@ public final class VaultScanServiceImpl implements VaultScanService {
 
     /** Answers everyone waiting on this scan, and stops recording it as in progress. */
     private void answer(@NotNull CacheKey key, @Nullable List<ScanResult> results) {
-        List<Consumer<List<ScanResult>>> waiting;
-        synchronized (pendingScans) {
-            waiting = pendingScans.remove(key);
-        }
+        List<Consumer<List<ScanResult>>> waiting = pendingScans.remove(key);
         if (waiting != null) {
             for (Consumer<List<ScanResult>> callback : waiting) {
                 callback.accept(results);
@@ -106,13 +100,8 @@ public final class VaultScanServiceImpl implements VaultScanService {
     @Override
     public void forget(@NotNull Block block) {
         for (CacheEntry entry : cache.values()) {
-            entry.results.removeIf(result -> sameBlock(result.block(), block));
+            entry.results.removeIf(result -> result.block().equals(block));
         }
-    }
-
-    private static boolean sameBlock(@NotNull Block first, @NotNull Block second) {
-        return first.getWorld().getUID().equals(second.getWorld().getUID())
-                && first.getX() == second.getX() && first.getY() == second.getY() && first.getZ() == second.getZ();
     }
 
     private record CacheKey(@NotNull String regionId, @NotNull UUID playerUuid, @Nullable UUID filterOwner) {

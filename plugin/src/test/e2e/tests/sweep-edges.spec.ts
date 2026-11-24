@@ -1,8 +1,10 @@
-import { expect, sleep, test } from '@plugwright/runner';
+import { expect, sleep, test, type PlayerWrapper, type ServerWrapper } from '@plugwright/runner';
 import { pluginFile, withFile } from './files.js';
+import { operators } from './players.js';
 import { buy, plotForSale, SWEEP_HAS_RUN, vaultsOf } from './realty.js';
-import { clickEntity, entityIdAt, lock, lockedChest, vaultItemCount } from './vaults.js';
-import { expectBlock, FLOOR, standAt } from './world.js';
+import { requireChestShop, shop } from './shops.js';
+import { captureMode, clickEntity, entityIdAt, lock, lockedChest, vaultItemCount } from './vaults.js';
+import { expectBlock, expectBlockState, FLOOR, rightClick, standAt } from './world.js';
 
 // The sweep when things are not tidy: players offline, chunks unloaded, several owners, the
 // module turned off or reworded.
@@ -113,13 +115,7 @@ test('a sweep unlocks an empty locked chest and leaves it standing',
         await expectBlock(server, x + 2, FLOOR, z, 'chest', 'empty-chest-not-removed');
         await vaultsOf(owner, 0);
         // Unlocked: the buyer, now the region's owner, can put something in it and it is theirs.
-        await server.execute(`minecraft:item replace block ${x + 2} ${FLOOR} ${z} container.0 with minecraft:diamond 1`);
-        await server.execute(`op ${buyer.username}`);
-        buyer.chat('/vault capture');
-        await expect(buyer).toHaveReceivedMessage('Capture mode is on');
-        const { rightClick } = await import('./world.js');
-        await rightClick(buyer, x + 2, FLOOR, z);
-        await expect(buyer).toHaveReceivedMessage('You may not vault that');
+        await expectNobodysChest(server, buyer, x + 2, z);
     });
 
 test('a sweep vaults both halves of a previous occupant\'s double chest',
@@ -139,6 +135,63 @@ test('a sweep vaults both halves of a previous occupant\'s double chest',
         await expectBlock(server, x + 2, FLOOR, z, 'air', 'swept-left-half');
         await expectBlock(server, x + 3, FLOOR, z, 'air', 'swept-right-half');
         expect(vaultItemCount(owner)).toBe(2);
+    });
+
+/** The buyer, who owns the region now, could vault a chest someone else had locked; an unlocked one is nobody's. */
+async function expectNobodysChest(server: ServerWrapper, buyer: PlayerWrapper, x: number, z: number): Promise<void> {
+    await server.execute(`minecraft:item replace block ${x} ${FLOOR} ${z} container.0 with minecraft:diamond 1`);
+    await operators(server, buyer);
+    await captureMode(buyer);
+    await rightClick(buyer, x, FLOOR, z);
+    await expect(buyer).toHaveReceivedMessage('You may not vault that');
+}
+
+/** Joins the shop chest at x to a second chest east of it. The sign stays on the first. */
+async function widenShop(server: ServerWrapper, x: number, z: number): Promise<void> {
+    await server.execute(`setblock ${x + 1} ${FLOOR} ${z} minecraft:chest[facing=north,type=right]`);
+    await server.execute(`setblock ${x} ${FLOOR} ${z} minecraft:chest[facing=north,type=left] replace`);
+}
+
+test('a sweep vaults the stocked half of an unlocked double-chest shop whose sign is on the empty half',
+    { requires: { consoleOutput: 'full' } }, async ({ player, createPlayer, server }) => {
+        requireChestShop();
+        const [owner, buyer] = await Promise.all([createPlayer(), createPlayer()]);
+        const { x, z, region } = await plotForSale(server, player, owner, buyer);
+        await shop(server, owner, x + 2, z, false, false);
+        await widenShop(server, x + 2, z);
+        await server.execute(`minecraft:item replace block ${x + 3} ${FLOOR} ${z} container.0 with minecraft:emerald 3`);
+        await expectBlockState(server, x + 2, FLOOR, z, 'chest[type=left]', 'shop-is-a-double-chest');
+
+        await buy(server, buyer, region);
+
+        await expect(buyer).toHaveReceivedMessage('cleared into their vault storage');
+        await sleep(SWEEP_HAS_RUN);
+        await expectBlock(server, x + 3, FLOOR, z, 'air', 'stocked-half-vaulted');
+        await expectBlock(server, x + 2, FLOOR + 1, z, 'air', 'double-shop-sign-gone');
+        await expectBlock(server, x + 2, FLOOR, z, 'chest', 'empty-half-stays');
+        await vaultsOf(owner, 1);
+        expect(vaultItemCount(owner)).toBe(1);
+        await expectNobodysChest(server, buyer, x + 2, z);
+    });
+
+test('a sweep that vaults one half of an unlocked double-chest shop does not lock the other half',
+    { requires: { consoleOutput: 'full' } }, async ({ player, createPlayer, server }) => {
+        requireChestShop();
+        const [owner, buyer] = await Promise.all([createPlayer(), createPlayer()]);
+        const { x, z, region } = await plotForSale(server, player, owner, buyer);
+        await shop(server, owner, x + 2, z, false, false);
+        await widenShop(server, x + 2, z);
+        await server.execute(`minecraft:item replace block ${x + 2} ${FLOOR} ${z} container.0 with minecraft:diamond 3`);
+
+        await buy(server, buyer, region);
+
+        await expect(buyer).toHaveReceivedMessage('cleared into their vault storage');
+        await sleep(SWEEP_HAS_RUN);
+        await expectBlock(server, x + 2, FLOOR, z, 'air', 'signed-half-vaulted');
+        await expectBlock(server, x + 3, FLOOR, z, 'chest', 'other-half-stays');
+        await vaultsOf(owner, 1);
+        // Not locked to the player who was displaced, inside the buyer's plot.
+        await expectNobodysChest(server, buyer, x + 3, z);
     });
 
 test('with the module turned off in its config, a sale vaults nothing; turned on again, the next one does',

@@ -46,6 +46,17 @@ class BundledConfigTest {
     }
 
     @Test
+    void aQueryThatGetsNoAnswerIsGivenUpOnUnlessTheUrlSaysOtherwise() {
+        String byDefault = new DatabaseSettings("mariadb://db:3306/v", "u", "p").jdbcUrl();
+        Assertions.assertTrue(byDefault.contains("&connectTimeout=10000&socketTimeout=60000"), byDefault);
+
+        String chosen = new DatabaseSettings("mariadb://db:3306/v?socketTimeout=5000", "u", "p").jdbcUrl();
+        Assertions.assertTrue(chosen.contains("?socketTimeout=5000&"), chosen);
+        Assertions.assertFalse(chosen.contains("socketTimeout=60000"), chosen);
+        Assertions.assertTrue(chosen.contains("&connectTimeout=10000"), chosen);
+    }
+
+    @Test
     void settingsLeftOutOrNonsensicalFallBackToTheirDefaults() {
         PluginSettings.Scan scan = new PluginSettings.Scan(0, -1, -1);
         Assertions.assertEquals(50, scan.batchSize());

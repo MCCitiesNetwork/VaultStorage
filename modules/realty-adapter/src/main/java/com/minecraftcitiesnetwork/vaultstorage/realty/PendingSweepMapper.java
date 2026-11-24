@@ -1,7 +1,6 @@
 package com.minecraftcitiesnetwork.vaultstorage.realty;
 
 import java.util.List;
-import java.util.UUID;
 import org.jetbrains.annotations.NotNull;
 
 /** Vendor-neutral contract for the {@code PendingSweep} table. */
@@ -12,5 +11,6 @@ public interface PendingSweepMapper {
 
     @NotNull List<PendingSweep> selectAll();
 
-    int delete(@NotNull UUID worldUuid, @NotNull String regionId);
+    /** Deletes this very sweep. One stored for the same region since then is another sweep and stays. */
+    int delete(@NotNull PendingSweep sweep);
 }

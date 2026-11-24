@@ -4,6 +4,7 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executor;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import org.jetbrains.annotations.NotNull;
@@ -21,7 +22,8 @@ import org.jetbrains.annotations.NotNull;
  * </ol>
  *
  * <p>A failure at any step leaves the items somewhere. The price is that a crash between steps
- * 2 and 3 leaves them in both; that was chosen over losing them to a database error.
+ * 2 and 3 leaves them in both; that was chosen over losing them to a database error. A server
+ * that stops in the ordinary way is no crash: both executors carry what was started to its end.
  */
 public final class CapturePipeline<T> {
 
@@ -54,7 +56,7 @@ public final class CapturePipeline<T> {
         }
         return CompletableFuture
                 .supplyAsync(() -> this.store.store(snapshot, owner), this.database)
-                .thenComposeAsync(stored -> finish(target, snapshot, stored), this.main)
+                .thenCompose(stored -> onMain(target, snapshot, stored))
                 .exceptionally(failure -> {
                     Throwable cause = failure instanceof CompletionException && failure.getCause() != null
                             ? failure.getCause() : failure;
@@ -64,6 +66,20 @@ public final class CapturePipeline<T> {
                 })
                 // Whatever thread the last step ran on, the caller hears on the main thread.
                 .thenApplyAsync(result -> result, this.main);
+    }
+
+    /** Hands the second half to the main thread, or says exactly what is left if it no longer takes work. */
+    private @NotNull CompletableFuture<CaptureResult> onMain(@NotNull T target, @NotNull ContainerSnapshot snapshot,
+                                                             CaptureStore.@NotNull Stored stored) {
+        try {
+            return CompletableFuture.supplyAsync(() -> finish(target, snapshot, stored), this.main)
+                    .thenCompose(finished -> finished);
+        } catch (RejectedExecutionException stopped) {
+            this.logger.log(Level.SEVERE, "The server stopped before what is at " + describe(snapshot)
+                    + " could be removed. Its items are also in vault " + stored.vault()
+                    + ": remove one of the two by hand.");
+            return CompletableFuture.completedFuture(new CaptureResult.Failed(stopped));
+        }
     }
 
     private @NotNull CompletableFuture<CaptureResult> finish(@NotNull T target, @NotNull ContainerSnapshot snapshot,

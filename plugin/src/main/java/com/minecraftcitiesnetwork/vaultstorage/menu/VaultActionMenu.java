@@ -76,7 +76,7 @@ public final class VaultActionMenu extends ChildMenuImp {
             actor.sendMessage(plugin.text().of(MessageKeys.ACTION_LOADING));
             plugin.inventoryService().openVirtualInventory(actor, vaultId, action, parentMenu(), this::open);
         });
-        builder.button(plugin.text().of(MessageKeys.ACTION_PLACE_BTN), actor ->
+        permissionButton(builder, Permissions.ACTION_PLACE, plugin.text().of(MessageKeys.ACTION_PLACE_BTN), actor ->
                 new VaultPlacementMenu(actor, parentMenu(), vaultId, uiContext, again -> open(), this.back).open());
         permissionButton(builder, Permissions.ADMIN, plugin.text().of(MessageKeys.ACTION_DELETE_BTN), actor -> {
             MessageContainer messages = plugin.messages();
@@ -121,6 +121,9 @@ public final class VaultActionMenu extends ChildMenuImp {
                     return Deletion.FAILED;
                 })
                 .thenAcceptAsync(deletion -> {
+                    if (!actor.isOnline()) {
+                        return;
+                    }
                     actor.sendMessage(plugin.text().of(switch (deletion) {
                         case DELETED -> MessageKeys.ACTION_DELETE_OK;
                         case IN_USE -> MessageKeys.INVENTORY_IN_USE;

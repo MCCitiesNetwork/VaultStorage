@@ -110,6 +110,20 @@ class ContainerOwnerLookupTest {
     }
 
     @Test
+    void aForgottenContainerIsAskedAboutAgain() {
+        Source source = new Source();
+        this.integrations.addOwnerSource(source);
+        this.lookup.ownerOf(this.chest);
+        source.answer(ALICE);
+
+        this.lookup.forget(this.chest);
+
+        Assertions.assertNull(this.lookup.known(this.chest));
+        Assertions.assertFalse(this.lookup.ownerOf(this.chest).isDone());
+        Assertions.assertEquals(2, source.asked.size());
+    }
+
+    @Test
     void anotherContainerIsAskedAboutSeparately() {
         Source source = new Source();
         this.integrations.addOwnerSource(source);

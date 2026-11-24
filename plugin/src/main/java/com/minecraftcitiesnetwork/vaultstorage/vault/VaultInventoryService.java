@@ -97,17 +97,24 @@ public final class VaultInventoryService implements Listener {
                         releaseIfClaimed(plugin, claimed);
                         return;
                     }
-                    show(player, loaded.vault().get(), claimed.get(), entry.getValue(), action, reopenCallback);
+                    if (!show(player, loaded.vault().get(), claimed.get(), entry.getValue(), action, reopenCallback)) {
+                        // Another plugin cancelled the open, so no close will come to release it.
+                        openFailed(player, parentMenu, claimed);
+                    }
                 }, mainThread)
                 .exceptionally(failure -> {
                     plugin.getLogger().log(Level.SEVERE, "Could not open vault " + vaultId + ".", failure);
-                    releaseIfClaimed(plugin, claimed);
-                    mainThread.execute(() -> {
-                        closeLoading(player, parentMenu);
-                        player.sendMessage(plugin.text().of(MessageKeys.INVENTORY_OPEN_FAILED));
-                    });
+                    mainThread.execute(() -> openFailed(player, parentMenu, claimed));
                     return null;
                 });
+    }
+
+    /** Main thread. Gives back what the open held, ends its loading dialog and tells the player. */
+    private void openFailed(@NotNull Player player, @Nullable ParentMenu parentMenu,
+                            @NotNull AtomicReference<Claim> claimed) {
+        releaseIfClaimed(plugin, claimed);
+        closeLoading(player, parentMenu);
+        player.sendMessage(plugin.text().of(MessageKeys.INVENTORY_OPEN_FAILED));
     }
 
     /** Takes down the loading dialog this open put up, so a refusal is not hidden behind it. */
@@ -151,7 +158,8 @@ public final class VaultInventoryService implements Listener {
                 });
     }
 
-    private void show(@NotNull Player player, @NotNull StoredVault stored, @Nullable Claim claim, @NotNull String ownerName,
+    /** Whether the inventory opened: another plugin may cancel the open. */
+    private boolean show(@NotNull Player player, @NotNull StoredVault stored, @Nullable Claim claim, @NotNull String ownerName,
                              @NotNull VaultAction action, @Nullable Runnable reopenCallback) {
         int highestSlot = stored.items().stream().mapToInt(VaultItemEntity::slot).max().orElse(-1);
         int size = Math.min(MAX_SIZE, Math.max(ROW, ((highestSlot + 1 + ROW - 1) / ROW) * ROW));
@@ -166,7 +174,7 @@ public final class VaultInventoryService implements Listener {
                 inventory.setItem(row.slot(), ItemSerialization.fromBytes(row.item()));
             }
         }
-        player.openInventory(inventory);
+        return player.openInventory(inventory) != null;
     }
 
     @EventHandler

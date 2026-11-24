@@ -1,6 +1,8 @@
 package com.minecraftcitiesnetwork.vaultstorage.realty;
 
 import io.github.md5sha256.realty.api.Party;
+import io.github.md5sha256.realty.api.event.AuctionWonPurchaseEvent;
+import io.github.md5sha256.realty.api.event.OfferPurchaseCompletedEvent;
 import io.github.md5sha256.realty.api.event.RealtyRegionEvent;
 import io.github.md5sha256.realty.api.event.RegionBoughtEvent;
 import io.github.md5sha256.realty.api.event.RegionRentedEvent;
@@ -36,6 +38,18 @@ public final class RealtyOccupantChangeListener implements Listener {
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onRegionBought(@NotNull RegionBoughtEvent event) {
+        submit(event, event.getNewTitleHolder());
+    }
+
+    /** A sale that ended by auction. Realty fires this in place of {@link RegionBoughtEvent}. */
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onAuctionWon(@NotNull AuctionWonPurchaseEvent event) {
+        submit(event, event.getNewTitleHolder());
+    }
+
+    /** A sale that ended by an accepted offer, likewise. */
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onOfferCompleted(@NotNull OfferPurchaseCompletedEvent event) {
         submit(event, event.getNewTitleHolder());
     }
 

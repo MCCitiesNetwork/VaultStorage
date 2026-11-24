@@ -4,7 +4,6 @@ import com.minecraftcitiesnetwork.vaultstorage.database.SqlSessionWrapper;
 import com.minecraftcitiesnetwork.vaultstorage.database.VaultDatabase;
 import java.sql.SQLException;
 import java.util.List;
-import java.util.UUID;
 import java.util.logging.Logger;
 import org.jetbrains.annotations.NotNull;
 
@@ -38,9 +37,10 @@ public final class PendingSweepStore {
         }
     }
 
-    public void delete(@NotNull UUID worldUuid, @NotNull String regionId) {
+    /** Removes this sweep, and not a later one stored for the same region. */
+    public void delete(@NotNull PendingSweep sweep) {
         try (SqlSessionWrapper wrapper = this.database.openSession(true)) {
-            wrapper.mapper(MariaPendingSweepMapper.class).delete(worldUuid, regionId);
+            wrapper.mapper(MariaPendingSweepMapper.class).delete(sweep);
         }
     }
 }

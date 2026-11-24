@@ -51,8 +51,9 @@ public final class ContainerOwnerLookup {
 
     /**
      * The player the container belongs to. Already complete when there is nothing to ask or a
-     * recent answer is remembered. Otherwise it completes on the main thread. Never completes
-     * exceptionally.
+     * recent answer is remembered. Otherwise it completes on the main thread. Fails only when
+     * the plugin has stopped and that thread no longer takes work: an answer handed back on
+     * another thread would run the capture there.
      */
     public @NotNull CompletableFuture<Optional<UUID>> ownerOf(@NotNull Block container) {
         Key key = Key.of(container);
@@ -71,9 +72,15 @@ public final class ContainerOwnerLookup {
         return asked.thenApplyAsync(owner -> {
             remember(key, owner.orElse(null));
             return owner;
-        }, this.mainThread)
-                // Covers a server that is shutting down.
-                .exceptionally(failure -> Optional.empty());
+        }, this.mainThread);
+    }
+
+    /**
+     * Drops what is remembered about the container: it has gone, or what made it someone's has
+     * been taken off it. Main thread.
+     */
+    public void forget(@NotNull Block container) {
+        this.answers.remove(Key.of(container));
     }
 
     private void remember(@NotNull Key key, @Nullable UUID owner) {

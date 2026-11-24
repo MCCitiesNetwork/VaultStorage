@@ -1,6 +1,7 @@
 package com.minecraftcitiesnetwork.vaultstorage.command;
 
 import com.minecraftcitiesnetwork.pluginInfrastructure.configurate.MessageContainer;
+import com.minecraftcitiesnetwork.vaultstorage.ReloadOutcome;
 import com.minecraftcitiesnetwork.vaultstorage.VaultStoragePlugin;
 import com.minecraftcitiesnetwork.vaultstorage.config.MessageKeys;
 import com.minecraftcitiesnetwork.vaultstorage.database.FindResult;
@@ -231,7 +232,12 @@ public final class VaultCommand {
                         case OpenOutcome.Failed failed ->
                                 player.sendMessage(messages.messageFor(MessageKeys.INVENTORY_OPEN_FAILED));
                     }
-                }, plugin.mainThread());
+                }, plugin.mainThread())
+                .exceptionally(failure -> {
+                    plugin.getLogger().log(Level.SEVERE, "Could not open vault " + vault + " for "
+                            + player.getName() + ".", failure);
+                    return null;
+                });
         return Command.SINGLE_SUCCESS;
     }
 
@@ -267,15 +273,13 @@ public final class VaultCommand {
     private static @NotNull Component transferReply(@NotNull VaultStoragePlugin plugin, @NotNull CommandSender sender,
                                                     @NotNull TransferOutcome outcome) {
         MessageContainer messages = plugin.messages();
+        // Logged too: an answer sent after work off the main thread reaches no remote console.
+        plugin.getLogger().info(sender.getName() + " transfer: " + outcome);
         return switch (outcome) {
-            case TransferOutcome.Transferred done -> {
-                plugin.getLogger().info(sender.getName() + " transferred vault " + done.vault() + " from "
-                        + done.from() + " to " + done.to());
-                yield messages.messageFor(MessageKeys.COMMAND_TRANSFER_DONE,
-                        MessageContainer.value("vault", done.vault().toString()),
-                        MessageContainer.value("from", done.from().toString()),
-                        MessageContainer.value("to", done.to().toString()));
-            }
+            case TransferOutcome.Transferred done -> messages.messageFor(MessageKeys.COMMAND_TRANSFER_DONE,
+                    MessageContainer.value("vault", done.vault().toString()),
+                    MessageContainer.value("from", done.from().toString()),
+                    MessageContainer.value("to", done.to().toString()));
             case TransferOutcome.NoSuchVault missing -> messages.messageFor(MessageKeys.COMMAND_TRANSFER_NOT_FOUND,
                     MessageContainer.value("vault", missing.vault().toString()));
             case TransferOutcome.InUse held -> messages.messageFor(MessageKeys.COMMAND_TRANSFER_IN_USE,
@@ -289,11 +293,13 @@ public final class VaultCommand {
     private static int reload(@NotNull VaultStoragePlugin plugin, @NotNull CommandContext<CommandSourceStack> context) {
         CommandSender sender = context.getSource().getSender();
         // The cause of a failure is in the log; the sender is told only which way it went.
-        plugin.reload().handleAsync((done, failure) -> {
-            sender.sendMessage(plugin.messages().messageFor(failure == null
-                    ? MessageKeys.COMMAND_RELOAD_DONE : MessageKeys.COMMAND_RELOAD_FAILED));
-            return null;
-        }, plugin.mainThread());
+        plugin.reload().thenAcceptAsync(outcome -> sender.sendMessage(switch (outcome) {
+            case ReloadOutcome.Reloaded done -> plugin.messages().messageFor(MessageKeys.COMMAND_RELOAD_DONE);
+            case ReloadOutcome.FilesRejected rejected -> plugin.messages().messageFor(MessageKeys.COMMAND_RELOAD_FAILED);
+            case ReloadOutcome.ModulesFailed modules -> plugin.messages().messageFor(
+                    MessageKeys.COMMAND_RELOAD_MODULE_FAILED,
+                    MessageContainer.value("modules", String.join(", ", modules.modules())));
+        }), plugin.mainThread());
         return Command.SINGLE_SUCCESS;
     }
 

@@ -154,6 +154,7 @@ public final class MessageKeys {
     public static final String COMMAND_MENU_PLAYER_NOT_FOUND = "command.menu.player-not-found";
     public static final String COMMAND_RELOAD_DONE = "command.reload.done";
     public static final String COMMAND_RELOAD_FAILED = "command.reload.failed";
+    public static final String COMMAND_RELOAD_MODULE_FAILED = "command.reload.module-failed";
 
     public static final String NOTIFICATION_TITLE = "notification.title";
     public static final String NOTIFICATION_VAULT_CREATED = "notification.vault-created";
