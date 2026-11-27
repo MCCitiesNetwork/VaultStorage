@@ -1,0 +1,6 @@
+# What the realty module says to players. MiniMessage.
+#
+# The bundled default of this file is rewritten to defaults/messages.yml on every start.
+
+# Told to a region's new occupant, once, when a sweep vaulted something.
+occupant-notified: '<yellow>Locked containers and items left here by the previous occupant have been cleared into their vault storage.</yellow>'

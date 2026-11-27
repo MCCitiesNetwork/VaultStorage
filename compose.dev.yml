@@ -1,0 +1,36 @@
+# Development MariaDB for the live-server tests and for `./gradlew :plugin:runServer`.
+#
+# Start it with `docker compose -f compose.dev.yml up -d --wait`.
+# `./gradlew :plugin:plugwrightTest` starts it for you.
+#
+# This is a DEVELOPMENT database. The credentials are deliberately trivial and port 3309 is
+# published on this machine only. Do not reuse this file for anything reachable from outside it.
+name: vaultstorage-dev
+
+services:
+  mariadb:
+    # The version production runs, and the one the Testcontainers tests use.
+    image: mariadb:10.11
+    container_name: vaultstorage-dev-mariadb
+    restart: unless-stopped
+    environment:
+      MARIADB_DATABASE: vault_storage
+      MARIADB_USER: vaultstorage
+      MARIADB_PASSWORD: vaultstorage
+      MARIADB_ROOT_PASSWORD: root
+    ports:
+      # Host port 3309, so this can run beside other projects' dev databases.
+      - "127.0.0.1:3309:3306"
+    volumes:
+      # `docker compose -f compose.dev.yml down -v` drops it for a clean schema.
+      - vaultstorage-dev-db:/var/lib/mysql
+    healthcheck:
+      # `--connect` alone reports healthy before InnoDB has finished recovery.
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+volumes:
+  vaultstorage-dev-db:

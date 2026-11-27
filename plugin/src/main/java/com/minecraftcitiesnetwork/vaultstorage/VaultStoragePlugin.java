@@ -1,0 +1,451 @@
+package com.minecraftcitiesnetwork.vaultstorage;
+
+import java.util.UUID;
+import com.minecraftcitiesnetwork.vaultstorage.placement.PlacementStore;
+import com.minecraftcitiesnetwork.vaultstorage.database.DeleteResult;
+import com.minecraftcitiesnetwork.vaultstorage.database.Claim;
+import com.minecraftcitiesnetwork.vaultstorage.database.ClaimResult;
+import com.minecraftcitiesnetwork.vaultstorage.database.ClaimReleases;
+import java.util.Objects;
+import org.jetbrains.annotations.Nullable;
+import com.minecraftcitiesnetwork.vaultstorage.capture.ContainerOwnerLookup;
+import org.jetbrains.annotations.NotNull;
+import com.minecraftcitiesnetwork.vaultstorage.capture.VaultCapturePolicy;
+import com.minecraftcitiesnetwork.vaultstorage.config.Text;
+import com.minecraftcitiesnetwork.vaultstorage.bolt.BoltService;
+import com.minecraftcitiesnetwork.vaultstorage.capture.ContainerAttachments;
+import com.minecraftcitiesnetwork.vaultstorage.scan.VaultScanService;
+import com.minecraftcitiesnetwork.vaultstorage.region.WorldGuardService;
+import com.minecraftcitiesnetwork.vaultstorage.command.VaultCommand;
+import io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents;
+import com.minecraftcitiesnetwork.vaultstorage.bolt.BoltServiceImp;
+import com.minecraftcitiesnetwork.vaultstorage.capture.VaultCaptureService;
+import com.minecraftcitiesnetwork.vaultstorage.vault.VaultInventoryService;
+import com.minecraftcitiesnetwork.vaultstorage.placement.BukkitPlacementWorld;
+import com.minecraftcitiesnetwork.vaultstorage.placement.VaultPlacementService;
+import com.minecraftcitiesnetwork.vaultstorage.scan.VaultScanServiceImpl;
+import com.minecraftcitiesnetwork.vaultstorage.region.WorldGuardServiceImp;
+import com.minecraftcitiesnetwork.vaultstorage.session.VaultSessionManager;
+import com.minecraftcitiesnetwork.vaultstorage.names.Names;
+import com.minecraftcitiesnetwork.vaultstorage.names.PaperProfileNameSource;
+import com.minecraftcitiesnetwork.pluginInfrastructure.modules.ModuleLifecycleManager;
+import com.minecraftcitiesnetwork.pluginInfrastructure.modules.ModuleLoader;
+import com.minecraftcitiesnetwork.vaultstorage.database.DatabaseSettings;
+import com.minecraftcitiesnetwork.vaultstorage.database.VaultDatabase;
+import com.minecraftcitiesnetwork.vaultstorage.database.VaultRepository;
+import com.minecraftcitiesnetwork.vaultstorage.database.VaultStorageSchemaMigrator;
+import com.minecraftcitiesnetwork.vaultstorage.session.SessionQuitListener;
+import com.minecraftcitiesnetwork.vaultstorage.placement.WorldGuardPlacementGrant;
+import com.minecraftcitiesnetwork.vaultstorage.vault.OwnerNotifications;
+import com.minecraftcitiesnetwork.vaultstorage.config.ConfigFiles;
+import com.minecraftcitiesnetwork.vaultstorage.config.LegacyConfigImport;
+import com.minecraftcitiesnetwork.vaultstorage.config.PluginSettings;
+import com.minecraftcitiesnetwork.pluginInfrastructure.configurate.MessageContainer;
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.util.ArrayList;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
+import org.spongepowered.configurate.ConfigurationNode;
+import java.sql.SQLException;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.Executors;
+import java.time.Duration;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.logging.Level;
+import org.bukkit.plugin.java.JavaPlugin;
+
+/**
+ * Main plugin entry point responsible for bootstrapping configuration, database, and services.
+ */
+// The services are built in onEnable: a plugin has no constructor to build them in.
+@SuppressWarnings("NullAway.Init")
+public final class VaultStoragePlugin extends JavaPlugin {
+
+    private static final Duration RELEASE_RETRY = Duration.ofSeconds(3);
+    /** How long a stop waits for captures and saves under way. */
+    private static final Duration STOP_PATIENCE = Duration.ofSeconds(10);
+
+    private final VaultSessionManager sessionManager = new VaultSessionManager(
+            listener -> getServer().getPluginManager().registerEvents(listener, this));
+
+    // Domain services
+    private VaultCaptureService captureService;
+    private VaultPlacementService placementService;
+    private VaultInventoryService inventoryService;
+    private VaultScanService scanService;
+
+
+    // Integration services
+    private final Integrations integrations = new Integrations(getLogger());
+    private final AtomicReference<PluginSettings> settings = new AtomicReference<>();
+    private final MessageContainer messages = new MessageContainer();
+    private final Text text = new Text(this.messages);
+    private final VaultCapturePolicy capturePolicy = new VaultCapturePolicy(this::bolt, this::worldGuard,
+            this::containerOwners, getLogger());
+    private ContainerOwnerLookup containerOwners;
+    private ModuleLifecycleManager<VaultStoragePlugin> modules;
+    private Names names;
+    private OwnerNotifications ownerNotifications;
+    private VaultDatabase database;
+    private VaultRepository repository;
+    private ClaimReleases claimReleases;
+    private PluginTasks tasks;
+    private WorldGuardService worldGuardService;
+    private BoltService boltService;
+
+    // Database wiring
+
+
+    public @NotNull VaultSessionManager sessionManager() { return sessionManager; }
+
+
+    /** Every read and write of vaults. Blocking: call it on {@link #databaseExecutor()}. */
+    public @NotNull VaultRepository repository() { return repository; }
+
+    /** Gives a claimed vault back, retrying while the database is down. Blocking, as the repository is. */
+    public @NotNull ClaimReleases claimReleases() { return claimReleases; }
+
+    /** The connection pool and session factory, for a module that owns tables of its own. */
+    public @NotNull VaultDatabase database() { return database; }
+
+    /** The pool database work runs on. What is handed to it before the plugin stops is finished. */
+    public @NotNull Executor databaseExecutor() { return tasks.database(); }
+
+    /** Runs a task on the server's main thread: on a later tick, or as the plugin stops. */
+    public @NotNull Executor mainThread() { return tasks.mainThread(); }
+
+    public @NotNull WorldGuardService worldGuard() { return worldGuardService; }
+
+    public @NotNull BoltService bolt() { return boltService; }
+
+    /** Reusable capture domain service. */
+    public @NotNull VaultCaptureService captureService() { return captureService; }
+
+    /** Reusable placement domain service. */
+    public @NotNull VaultPlacementService placementService() { return placementService; }
+
+    /** Reusable inventory domain service. */
+    public @NotNull VaultInventoryService inventoryService() { return inventoryService; }
+
+    /** Reusable scan domain service. */
+    public @NotNull VaultScanService scanService() { return scanService; }
+
+    /** What feature modules supply; read at use time. */
+    public @NotNull Integrations integrations() { return integrations; }
+
+    /** Messages with their placeholders given as a map. */
+    public @NotNull Text text() { return text; }
+
+    /** Whose a container nobody locked is, as far as any module can say. */
+    public @NotNull ContainerOwnerLookup containerOwners() { return containerOwners; }
+
+    /** Who may vault what. */
+    public @NotNull VaultCapturePolicy capturePolicy() { return capturePolicy; }
+
+    /** messages.yml. One instance, reloaded in place. */
+    public @NotNull MessageContainer messages() { return messages; }
+
+    /** settings.yml as it is now. Ask each time: a reload swaps it. */
+    public @NotNull PluginSettings settings() {
+        return Objects.requireNonNull(settings.get(), "settings are loaded before anything reads them");
+    }
+
+    /** Player name and UUID lookups. */
+    public @NotNull Names names() { return names; }
+
+    /** Tells a vault's owner about it, through whichever notification module is loaded. */
+    public @NotNull OwnerNotifications ownerNotifications() { return ownerNotifications; }
+
+    @Override
+    public void onEnable() {
+        // Settings first: the plugin cannot run without them, and the server is still starting.
+        DatabaseSettings databaseSettings;
+        try {
+            databaseSettings = loadConfiguration();
+        } catch (IOException ex) {
+            getLogger().log(Level.SEVERE, "Could not load the configuration. VaultStorage is disabled.", ex);
+            getServer().getPluginManager().disablePlugin(this);
+            return;
+        }
+
+        // Database first: nothing may register against a database that cannot store a vault.
+        if (!startDatabase(databaseSettings)) {
+            getServer().getPluginManager().disablePlugin(this);
+            return;
+        }
+        // A claim can only be left behind by a crash; nobody holds one now.
+        CompletableFuture.supplyAsync(this.repository::releaseAllClaims, databaseExecutor())
+                .thenAccept(released -> released.forEach(vault -> getLogger().warning("Vault " + vault
+                        + " was still claimed from before the last shutdown and has been released."
+                        + " If its block was placed just before a crash, its items may exist twice.")))
+                .exceptionally(failure -> {
+                    getLogger().log(Level.SEVERE, "Could not release vault claims left by the last shutdown.", failure);
+                    return null;
+                });
+
+        // Not an error on its own: a vault emptied by its owner stays until it is placed. Many of
+        // them after an upgrade would mean the conversion lost items.
+        CompletableFuture.supplyAsync(this.repository::countWithoutItems, databaseExecutor())
+                .thenAccept(empty -> {
+                    if (empty > 0) {
+                        getLogger().warning(empty + " vault(s) hold no items.");
+                    }
+                })
+                .exceptionally(failure -> {
+                    getLogger().log(Level.WARNING, "Could not count the vaults that hold no items.", failure);
+                    return null;
+                });
+
+        // Integration services
+        this.worldGuardService = new WorldGuardServiceImp();
+        this.integrations.addPlacementGrant(new WorldGuardPlacementGrant(this.worldGuardService));
+        this.boltService = new BoltServiceImp(getServer());
+
+
+
+        // Domain services
+        this.containerOwners = new ContainerOwnerLookup(this.integrations::ownerSources,
+                mainThread());
+        this.captureService = new VaultCaptureService(this);
+        this.claimReleases = new ClaimReleases(this.repository::release,
+                task -> this.tasks.later(RELEASE_RETRY, task), getLogger());
+        // A refused placement gives its claim back through the retrying release.
+        PlacementStore placementStore = new PlacementStore() {
+            @Override
+            public @NotNull ClaimResult claim(@NotNull UUID vault) {
+                return VaultStoragePlugin.this.repository.claim(vault);
+            }
+
+            @Override
+            public void release(@NotNull Claim claim) {
+                VaultStoragePlugin.this.claimReleases.release(claim);
+            }
+
+            @Override
+            public @NotNull DeleteResult delete(@NotNull Claim claim) {
+                return VaultStoragePlugin.this.repository.delete(claim);
+            }
+        };
+        this.placementService = new VaultPlacementService(placementStore, new BukkitPlacementWorld(this::bolt),
+                databaseExecutor(), mainThread(), getLogger());
+        this.inventoryService = new VaultInventoryService(this);
+        this.scanService = new VaultScanServiceImpl(this);
+
+        // External lookup services
+        this.names = new Names(new PaperProfileNameSource(), this.integrations);
+        this.ownerNotifications = new OwnerNotifications(this.names, this.integrations::ownerNotifier,
+                this.messages, getLogger());
+
+        getServer().getPluginManager().registerEvents(new SessionQuitListener(this.sessionManager), this);
+        getServer().getPluginManager().registerEvents(this.inventoryService, this);
+
+        getLifecycleManager().registerEventHandler(LifecycleEvents.COMMANDS, event ->
+                event.registrar().register(VaultCommand.create(this), VaultCommand.DESCRIPTION));
+
+
+        startModules();
+    }
+
+    /** Loads feature modules from the data folder. Called last, once the host's services exist. */
+    private void startModules() {
+        try {
+            Path moduleDir = getDataFolder().toPath().resolve("modules");
+            Files.createDirectories(moduleDir);
+            this.modules = new ModuleLifecycleManager<>(this, new ModuleLoader(moduleDir));
+            this.modules.start();
+        } catch (IOException | LinkageError ex) {
+            // One bad module jar must not stop the host enabling.
+            getLogger().log(Level.SEVERE, "Could not load feature modules.", ex);
+        }
+    }
+
+    /**
+     * Reads database.yml and settings.yml, creating each from the bundled default the first
+     * time. Values from the 1.x config.yml are carried over into a file as it is created.
+     */
+    private @NotNull DatabaseSettings loadConfiguration() throws IOException {
+        ConfigFiles files = new ConfigFiles(getDataFolder().toPath(), getLogger());
+        ConfigurationNode old = files.legacy();
+        boolean carryOver = !old.node("mysql", "host").virtual();
+        if (carryOver && !files.exists("database.yml")) {
+            getLogger().info("Carrying the settings in config.yml over to database.yml and settings.yml."
+                    + " config.yml is no longer read and can be deleted.");
+        }
+
+        Map<String, String> database = new HashMap<>();
+        Map<String, String> scan = new HashMap<>();
+        if (carryOver) {
+            database.put("url", LegacyConfigImport.databaseUrl(
+                    old.node("mysql", "host").getString("localhost"), old.node("mysql", "port").getInt(3306),
+                    old.node("mysql", "database").getString("vault_storage"),
+                    old.node("mysql", "useSSL").getBoolean(false)));
+            database.put("username", old.node("mysql", "user").getString("root"));
+            database.put("password", old.node("mysql", "password").getString(""));
+            for (String key : List.of("batch-size", "cache-ttl-seconds", "cooldown-seconds")) {
+                if (!old.node("scan", key).virtual()) {
+                    scan.put("scan." + key, String.valueOf(old.node("scan", key).getLong()));
+                }
+            }
+        }
+
+        DatabaseSettings databaseSettings = files.load("database.yml", ConfigFiles.bundled(getClass(), "database.yml"),
+                text -> LegacyConfigImport.fill(text, database)).get(DatabaseSettings.class);
+        if (databaseSettings == null) {
+            throw new IOException("database.yml is empty");
+        }
+        Reloadable reloadable = readReloadable(files, scan);
+        this.settings.set(reloadable.settings());
+        this.messages.load(reloadable.messages());
+        for (String unread : List.of("menus", "mail")) {
+            if (Files.isDirectory(getDataFolder().toPath().resolve(unread))) {
+                getLogger().info("The " + unread + " folder is no longer read: all wording is in messages.yml now."
+                        + " Move your changes there, then delete the folder.");
+            }
+        }
+        return databaseSettings;
+    }
+
+    /** What a reload replaces. Both are parsed before either is swapped in. */
+    private record Reloadable(@NotNull PluginSettings settings, @NotNull ConfigurationNode messages) {
+    }
+
+    /** Reads files only; safe off the main thread. */
+    private @NotNull Reloadable readReloadable(@NotNull ConfigFiles files, @NotNull Map<String, String> carriedOver) throws IOException {
+        PluginSettings pluginSettings = files.load("settings.yml", ConfigFiles.bundled(getClass(), "settings.yml"),
+                text -> LegacyConfigImport.fill(text, carriedOver)).get(PluginSettings.class);
+        if (pluginSettings == null) {
+            throw new IOException("settings.yml is empty");
+        }
+        return new Reloadable(pluginSettings,
+                files.loadFilled("messages.yml", ConfigFiles.bundled(getClass(), "messages.yml")));
+    }
+
+    /**
+     * Re-reads settings.yml and messages.yml, then the modules that can reload. Neither file
+     * takes effect unless both parse. database.yml is not re-read. Every outcome is logged, with
+     * its cause; the future does not fail.
+     */
+    public @NotNull CompletableFuture<ReloadOutcome> reload() {
+        Executor mainThread = mainThread();
+        return CompletableFuture
+                .supplyAsync(() -> {
+                    try {
+                        return readReloadable(new ConfigFiles(getDataFolder().toPath(), getLogger()), Map.of());
+                    } catch (IOException ex) {
+                        throw new UncheckedIOException(ex);
+                    }
+                }, databaseExecutor())
+                .thenAcceptAsync(reloadable -> {
+                    this.settings.set(reloadable.settings());
+                    this.messages.load(reloadable.messages());
+                }, mainThread)
+                .handle((swapped, failure) -> failure)
+                .thenComposeAsync(failure -> {
+                    if (failure != null) {
+                        getLogger().log(Level.SEVERE, "The reload failed. The old settings are still in use.", failure);
+                        return CompletableFuture.completedFuture(new ReloadOutcome.FilesRejected());
+                    }
+                    return reloadModules();
+                }, mainThread);
+    }
+
+    /** Main thread. The host's two files are in use by now, whatever a module does. */
+    private @NotNull CompletableFuture<ReloadOutcome> reloadModules() {
+        // Each answers with its module's name if it failed, and null if it did not.
+        List<CompletableFuture<@Nullable String>> reloads = new ArrayList<>();
+        if (this.modules != null) {
+            this.modules.getActiveModules().forEach((name, module) -> {
+                if (module.manifest().reloadable()) {
+                    reloads.add(reloadModule(name));
+                }
+            });
+        }
+        return CompletableFuture.allOf(reloads.toArray(CompletableFuture[]::new)).thenApply(done -> {
+            List<String> failed = reloads.stream().map(CompletableFuture::join).filter(Objects::nonNull).toList();
+            if (!failed.isEmpty()) {
+                return new ReloadOutcome.ModulesFailed(failed);
+            }
+            // Also for a sender that cannot be answered later, such as a remote console.
+            getLogger().info("Reloaded settings.yml, messages.yml and the modules that reload.");
+            return new ReloadOutcome.Reloaded();
+        });
+    }
+
+    private @NotNull CompletableFuture<@Nullable String> reloadModule(@NotNull String name) {
+        CompletableFuture<Void> reload;
+        try {
+            reload = this.modules.reloadAsync(name);
+        } catch (RuntimeException ex) {
+            reload = CompletableFuture.failedFuture(ex);
+        }
+        return reload.handle((done, failure) -> {
+            if (failure == null) {
+                return null;
+            }
+            getLogger().log(Level.SEVERE, "settings.yml and messages.yml were reloaded, but the module " + name
+                    + " failed to reload and keeps its old settings.", failure);
+            return name;
+        });
+    }
+
+    /**
+     * Connects, migrates the schema and builds the repository. A failure is logged and reported
+     * to the caller, which disables the plugin: a half-started plugin would remove blocks it
+     * cannot store.
+     */
+    private boolean startDatabase(@NotNull DatabaseSettings settings) {
+        try {
+            this.database = new VaultDatabase(settings);
+            new VaultStorageSchemaMigrator().migrate(this.database.dataSource(), getLogger());
+            this.repository = new VaultRepository(this.database);
+            ThreadFactory daemons = task -> {
+                Thread thread = new Thread(task, "vaultstorage-db");
+                thread.setDaemon(true);
+                return thread;
+            };
+            this.tasks = new PluginTasks(task -> getServer().getScheduler().runTask(this, task),
+                    Executors.newFixedThreadPool(VaultDatabase.POOL_SIZE, daemons),
+                    Executors.newSingleThreadScheduledExecutor(daemons), getLogger());
+            return true;
+        } catch (SQLException | RuntimeException ex) {
+            getLogger().log(Level.SEVERE, "Could not connect to or migrate the database at " + settings.url()
+                    + ". Check database.yml. VaultStorage is disabled.", ex);
+            return false;
+        }
+    }
+
+    @Override
+    public void onDisable() {
+        if (this.tasks != null) {
+            // A capture between store and remove is carried through: its remove runs here,
+            // while the module that started it is still loaded.
+            this.tasks.finish(STOP_PATIENCE);
+        }
+        if (this.modules != null) {
+            this.modules.stop();
+        }
+        // Before the pool goes: an edit in progress is written back now or not at all.
+        if (this.inventoryService != null && this.repository != null) {
+            this.inventoryService.saveOpenViews();
+        }
+        if (this.tasks != null) {
+            this.tasks.stop(STOP_PATIENCE);
+        }
+        if (this.database != null) {
+            this.database.close();
+        }
+    }
+
+
+    /** What modules know to be attached to containers; read at use time. */
+    public @NotNull ContainerAttachments attachments() {
+        return this.integrations.attachments();
+    }
+
+}

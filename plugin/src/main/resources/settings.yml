@@ -1,0 +1,13 @@
+# VaultStorage settings. "/vault reload" re-reads this file.
+
+scan:
+  # How many locked blocks a region scan checks in one tick.
+  batch-size: 50
+  # How long a region's scan results are reused before the region is scanned again.
+  cache-ttl-seconds: 60
+  # How long a player must wait between scans. Admins do not wait.
+  cooldown-seconds: 20
+
+vault-list:
+  # How many vaults the list shows on one page.
+  page-size: 20

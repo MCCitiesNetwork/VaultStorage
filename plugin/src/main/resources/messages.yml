@@ -1,0 +1,218 @@
+# Every sentence VaultStorage shows a player. MiniMessage: https://docs.advntr.dev/minimessage/format.html
+#
+# <green> happened  <red> did not  <yellow> a state  <gold> the subject
+# <white> a live value  <gray> a hint or a label  <dark_gray> structure only
+#
+# A word in angle brackets that is not a colour, such as <owner>, is filled in by the plugin.
+# The comment above a line lists the ones it may use. A key missing from this file falls back to
+# the default; defaults/messages.yml is rewritten with the defaults on every start.
+
+# The dialog shown while something loads.
+loading:
+  title: '<yellow><bold>Loading</bold></yellow>'
+  message: '<gray>Please wait...</gray>'
+
+# The menu for one vault.
+action:
+  title: '<gold><bold>Vault Action</bold></gold>'
+  # <vault>: the vault's line from the list
+  description: '<vault>'
+  action-label: '<gray>Select action</gray>'
+  open-btn: '<green><bold>Open Inventory</bold></green>'
+  place-btn: '<yellow><bold>Place Block</bold></yellow>'
+  back-btn: '<red><bold>Back</bold></red>'
+  no-actions: '<red>There is nothing you may do with this vault. Ask staff if you think that is wrong.</red>'
+  # <action>
+  action-option-format: '<white><action></white>'
+  loading: '<gray>Loading vault...</gray>'
+  delete-btn: '<red><bold>Delete Vault</bold></red>'
+  delete-ok: '<green>Vault deleted.</green>'
+  delete-fail: '<red>The vault was not deleted. Try again; if it keeps failing, the server log says why.</red>'
+  delete-loading: '<gray>Deleting vault...</gray>'
+  delete-confirm-title: '<red><bold>Delete this vault?</bold></red>'
+  # <vault>: the vault's line from the list
+  delete-confirm-body: '<vault><newline><newline><red>The vault and every item in it will be deleted. This cannot be undone.</red>'
+  delete-confirm-btn: '<red><bold>Delete</bold></red>'
+  delete-cancel-btn: '<gray>Cancel</gray>'
+
+# The vault list.
+list:
+  title: '<gold><bold>Browse Vaults</bold></gold>'
+  search-label: '<gray>Search by owner name or UUID</gray>'
+  search-btn: '<aqua>Search</aqua>'
+  back-btn: '<red><bold>Back</bold></red>'
+  none-found: '<gray>No vaults found. A container shows up here once it has been vaulted.</gray>'
+  # <owner> <index> <material> <world> <x> <y> <z> <items> <date>
+  item-format: '<white><owner></white><gray>''s Vault #</gray><white><index></white> <dark_gray>|</dark_gray> <white><material></white> <gray>at <world> <x>, <y>, <z></gray> <dark_gray>|</dark_gray> <items> <dark_gray>|</dark_gray> <gray><date></gray>'
+  # What <items> above becomes.
+  items-none: '<gray>empty</gray>'
+  items-one: '<white>1</white> <gray>item</gray>'
+  # <count>
+  items-many: '<white><count></white> <gray>items</gray>'
+  prev-btn: '<yellow>< Prev</yellow>'
+  next-btn: '<yellow>Next ></yellow>'
+  # <page> <pages> <count>
+  page-label: '<gray>Page <page> / <pages> (<count> vaults)</gray>'
+  load-failed: '<red>The vault list could not be loaded. Your vaults are safe; try again in a moment.</red>'
+
+# Region scans and their results.
+scan:
+  title: '<gold><bold>Vault Scan</bold></gold>'
+  none-found: '<gray>No protected blocks found in this region.</gray>'
+  # <region> <count>
+  results-header: '<gold><bold>Region <region></bold></gold> <gray>(<count> results)</gray>'
+  # <index> <x> <y> <z> <owner> <kind>
+  entry-vaultable: '<gray>- <index> </gray><white>(<x>, <y>, <z>)</white> <gray>owner:</gray> <white><owner></white> <gray>|</gray> <white><kind></white> <gray>| vaultable:</gray> <green>yes</green>'
+  # <index> <x> <y> <z> <owner> <kind>
+  entry-not-vaultable: '<gray>- <index> </gray><white>(<x>, <y>, <z>)</white> <gray>owner:</gray> <white><owner></white> <gray>|</gray> <white><kind></white> <gray>| vaultable:</gray> <red>no</red>'
+  # What <owner> and <kind> above may become.
+  owner-unknown: 'unknown'
+  kind-container: 'container'
+  kind-block: 'block'
+  # <index>
+  entry-vault-button: '<yellow>(vault) - <index></yellow>'
+  entry-teleport-button: '<aqua>(teleport)</aqua>'
+  search-label: '<gray>Search regions</gray>'
+  search-btn: '<aqua>Search</aqua>'
+  here-btn: '<yellow>Here</yellow>'
+  # <region>
+  region-not-found: '<red>Region not found: <region></red>'
+  not-allowed: '<red>You may not vault that any more. It may have been vaulted or unlocked since the scan.</red>'
+  # <time>
+  scan-cooldown: '<red>You can scan again in <time> seconds.</red>'
+  prev-btn: '<yellow>< Prev</yellow>'
+  next-btn: '<yellow>Next ></yellow>'
+  # <page> <total>
+  page-label: '<gray>Page <page> / <total></gray>'
+  filter-btn-block: '<gray>[Filter: Block]</gray>'
+  filter-btn-non-container: '<gray>[Filter: Non-Container]</gray>'
+  filter-btn-container: '<gray>[Filter: Container]</gray>'
+  filter-btn-entity: '<gray>[Filter: Entity]</gray>'
+  no-region-here: '<red>You are not standing in a region. Stand inside the one you want to scan, or search for it by name.</red>'
+  not-your-region: '<red>You can only scan a region you own or are a member of.</red>'
+  no-entities: '<gray>No protected entities found in this region.</gray>'
+
+# The list of regions to scan.
+regions:
+  title: '<gold><bold>Regions</bold></gold>'
+  # <count> <page> <pages>
+  header: '<gray><count> regions</gray> <dark_gray>|</dark_gray> <gray>page <page>/<pages></gray>'
+  # <region>
+  region-btn: '<white><region></white>'
+  none-found: '<gray>No regions match.</gray>'
+  prev-page-btn: '<gray><< Prev</gray>'
+  next-page-btn: '<gray>Next >></gray>'
+  back-btn: '<red><bold>Back</bold></red>'
+
+# The main menu.
+capture-menu:
+  title: '<gold><bold>Vault Storage</bold></gold>'
+  # Shown to a player who may vault containers.
+  instruction: '<gray>Choose Start Capture, then right-click a locked container: it and everything in it goes into its owner''s vault storage. An empty container, or a locked block that holds nothing, is only unlocked.</gray>'
+  # Shown to everyone else.
+  instruction-owner: '<gray>Containers of yours that were vaulted are kept here with everything in them. Choose Browse Vaults to look inside one or to put it back in the world.</gray>'
+  cancel-hint: '<gray>Left-click anywhere to stop capturing.</gray>'
+  start-btn: '<green><bold>Start Capture</bold></green>'
+  browse-btn: '<green>Browse Vaults</green>'
+  close-btn: '<red><bold>Close</bold></red>'
+  open-scan-btn: '<yellow>Scan Region</yellow>'
+
+# Placing a vault back into the world.
+placement:
+  title: '<gold><bold>Vault Placement</bold></gold>'
+  instruction: '<gray>Choose Start Placement, then right-click the block you want the vault to stand on or against. It has to be on land you own or belong to. Left-click cancels.</gray>'
+  start-btn: '<yellow><bold>Start Placement</bold></yellow>'
+  back-btn: '<red><bold>Back</bold></red>'
+  placement-cancelled: 'Placement cancelled. The vault is still in your storage.'
+  action-bar-idle: '<yellow>Placing a vault</yellow> - Right-click where it should go. <gray>Left-click to cancel.</gray>'
+  action-bar-placeable: '<green>You can place it here.</green> <gray>Right-click.</gray>'
+  action-bar-not-placeable: '<red>Not here.</red> <gray>Place it on land you own or belong to.</gray>'
+  not-allowed: '<red>You can''t place a vault here. Place it on land you own or are a member of.</red>'
+  no-permission: '<red>You are not allowed to place vaults. Ask staff.</red>'
+  none-left: '<green>That was your last vault. Everything of yours is back in the world.</green>'
+  failed: '<red>The vault could not be placed. Nothing was lost: it is still in your storage. Try again in a moment.</red>'
+  world-unavailable: '<red>That world is not loaded. Place the vault in another world.</red>'
+  target-not-empty: '<red>There is already a block there. Right-click somewhere with an empty space.</red>'
+  block-placed: '<green>Block placed.</green>'
+  vault-placed: '<green>Vault placed. It is locked to its owner again.</green>'
+
+# Capture mode: chat lines and the action bar.
+capture:
+  capture-cancelled: 'Capture mode is off.'
+  not-allowed: '<red>You may not vault that. Look at it: the line above your hotbar says why.</red>'
+  sign-not-allowed: '<red>You may not unlock that sign.</red>'
+  container-not-allowed: '<red>You may not vault the container behind that sign. Look at the container: the line above your hotbar says why.</red>'
+  sign-unlocked: 'The sign was unlocked.'
+  attachment-removed: 'The sign on it was removed.'
+  empty-capture-skipped: 'It holds nothing, so it was only unlocked.'
+  captured-ok: '<green>Vaulted.</green> <gray>Its owner gets it back with /vault.</gray>'
+  action-bar-idle: '<yellow>Capture mode</yellow> - Right-click a locked container, item frame or painting. <gray>Left-click to stop.</gray>'
+  # <owner> <admin>
+  action-bar-vaultable: '<gray>Owner:</gray> <white><owner></white> <gray>| Vaultable:</gray> <green>yes</green><admin>'
+  # <owner> <reason-segment> <admin>
+  action-bar-not-vaultable: '<gray>Owner:</gray> <white><owner></white> <gray>| Vaultable:</gray> <red>no</red><gray><reason-segment></gray><admin>'
+  # <reason>
+  action-bar-reason-segment-template: ' | Reason: <reason>'
+  # <regions>
+  reason-owner-self-in-region: 'you own this block but are a member of ''<regions>'''
+  # <owner> <regions>
+  reason-container-owner-in-overlap: '<owner> owns this block and is a member of ''<regions>'''
+  reason-not-involved-not-owner: 'you don''t own this block and aren''t a member of its region'
+  reason-unprotected-no-override: 'this block has no owner'
+  reason-not-in-region: 'block is not inside any protected region'
+  reason-hangable-requires-admin: 'vaulting this entity requires an administrator'
+  reason-fallback: 'vault not permitted'
+  action-bar-unprotected-owner: 'unprotected'
+  admin-mode-enabled: '<gold>Admin mode enabled.</gold>'
+  action-bar-admin-mode-tag: '<gray> |</gray> <gold> ADMIN</gold>'
+  no-permission: '<red>You are not allowed to vault containers. Ask staff.</red>'
+  double-chest-order: '<yellow>This half of the double chest is empty. Vault the half with items in it first.</yellow>'
+  changed-meanwhile: '<yellow>That container changed while it was being saved. Nothing was taken; try again.</yellow>'
+  save-failed: '<red>The vault could not be saved. Nothing was removed; try again in a moment.</red>'
+  owner-unknown: '<red>This container''s owner could not be worked out, so it was left alone. Tell staff.</red>'
+
+# A vault opened as an inventory.
+inventory:
+  # <owner> <action>
+  title: '<white>Owner: </white><gold><owner></gold><gray> - <action></gray>'
+  in-use: '<red>Someone else has that vault open. Try again when they have closed it.</red>'
+  not-found: '<red>That vault no longer exists. It has been placed or deleted.</red>'
+  open-failed: '<red>The vault could not be opened. Try again in a moment.</red>'
+  save-failed: '<red>Your changes to the vault could not be saved. Tell staff what you moved.</red>'
+
+# Replies from /vault.
+command:
+  players-only: 'Only a player in the game can use this.'
+  no-permission: 'You don''t have permission.'
+  capture:
+    started: 'Capture mode is on. Right-click a locked container to vault it; left-click to stop.'
+  transfer:
+    resolving: 'Looking up that player...'
+    # <player>
+    unknown-player: 'No player called <player> has been on this server. Check the spelling.'
+    # <vault>
+    not-found: 'No vault has the id <vault>. Copy the id from the vault''s list entry.'
+    # <vault>
+    in-use: 'Vault <vault> is in use: someone has it open, or is placing or deleting it. Try again in a moment.'
+    # <vault> <from> <to>
+    done: 'Vault <vault> transferred from <from> to <to>.'
+    failed: 'The transfer failed. See the server log.'
+  open:
+    unknown-action: 'Unknown action. Use view, copy or edit.'
+    no-permission: 'You don''t have permission for that action.'
+    no-access: 'That vault is not yours.'
+  menu:
+    resolving: 'Looking up that player...'
+    player-not-found: 'No player by that name has been on this server. Check the spelling.'
+  reload:
+    done: '<green>VaultStorage reloaded.</green>'
+    failed: '<red>The reload failed; the old settings are still in use. See the server log.</red>'
+    module-failed: '<red>VaultStorage reloaded, but these modules did not and keep their old settings: <modules>. See the server log.</red>'
+
+# What a vault's owner is told.
+notification:
+  title: '<gold>Vault storage</gold>'
+  # <sender> <recipient> <region>
+  vault-created: '<gold><sender></gold> moved a locked container of yours <gray>(region:</gray> <yellow><region></yellow><gray>)</gray> into your vault storage, with everything in it. Type <white>/vault</white> to look inside or put it back.'
+  # <count> <region> <sender>
+  sweep-vaulted: '<gold><count></gold> of your locked containers in <yellow><region></yellow> were moved to your vault storage when <gold><sender></gold> took over the region. Nothing was lost: type <white>/vault</white> to put them back somewhere else.'

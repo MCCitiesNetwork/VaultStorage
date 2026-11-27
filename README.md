@@ -20,170 +20,143 @@ What you can do:
 - Scan regions: find protected containers in a WorldGuard region and vault them one by one with teleport helpers.
 
 Command (in‑game):
-- /vault — opens the main menu (all actions flow through the menu).
+- /vault — opens the main menu. Staff have more commands; see Commands and permissions below.
 
 ## For Server Managers (Installation, Database, Permissions, Menus, Operations)
 
 ### Requirements
-- Paper 1.21.8 (or compatible)
-- Java 21
-- WorldEdit and WorldGuard installed
-- Bolt installed (for ownership/protection integration)
+- Paper 26.3
+- Java 25
+- WorldEdit, WorldGuard and Bolt installed
 
 ### Installation and first run
-1) Place the plugin JAR in your server’s plugins folder (along with WorldEdit, WorldGuard, and Bolt).
+1) Place `VaultStorage-<version>.jar` in your server's `plugins` folder.
 2) Start the server once to generate configuration files and data folders.
 3) Stop the server to configure the database.
+4) For each optional integration you want, place its module jar in `plugins/VaultStorage/modules/` (see Integrations below). The startup log lists the modules that started.
 
-### Database Setup (MySQL)
-Edit the plugin config at: plugins/VaultStorage/config.yml
+### Database Setup (MariaDB)
+VaultStorage needs **MariaDB 10.11 or later**. MySQL is not supported.
 
-mysql keys you can set:
-- host: your MySQL host (e.g., 127.0.0.1)
-- port: 3306 (or your custom port)
-- database: vault_storage (or your chosen schema name)
-- user: a database user with create/select/insert/update/delete privileges
-- password: the user’s password
-- useSSL: true/false depending on your DB setup
+Edit `plugins/VaultStorage/database.yml`:
+- `url`: where the database is, without `jdbc:` in front, for example `mariadb://localhost:3306/vault_storage`. The database must exist. Add options after a question mark, such as `?sslMode=verify-full`.
+- `username`, `password`: an account that may create and alter tables in it.
 
-Behavior on startup:
-- The plugin ensures the database exists (creates it if missing).
-- It connects and creates the necessary tables automatically.
+This file is read once, at startup. A reload does not re-read it.
 
-Best practices:
-- Use a dedicated DB user with minimum required privileges.
-- Keep regular backups of the database.
-- Monitor connectivity and latency; the plugin runs DB work off the main thread to keep gameplay smooth.
+The plugin creates and upgrades its tables itself when it starts. If it cannot connect, or an upgrade fails, it logs the reason and disables itself; it does not run without a working database.
 
-### Permissions
-Assign via your permissions plugin (examples: LuckPerms, PermissionsEx):
-- vaultstorage.user — basic usage (open menu, list, use common actions)
-- vaultstorage.admin — admin override for all plugin actions
-- vaultstorage.action.view — allow viewing a Vault’s contents in a virtual inventory
-- vaultstorage.action.copy — allow copying items from a Vault to the player inventory
-- vaultstorage.action.edit — allow editing Vault contents inside the virtual inventory
-- vaultstorage.action.place — allow placing the stored block back into the world
-- vaultstorage.admin.override — bypass region/container checks when capturing/placing
-- vaultstorage.action.capture — allow entering capture mode and vaulting containers
+#### Upgrading from 1.x
+The first start of 2.0 converts the existing tables to a new layout. Every vault and item is kept.
+- **Take a database backup first.** The conversion cannot be undone by the plugin; going back to 1.x means restoring that backup.
+- It takes about a minute for a database of 80,000 vaults and a million items. The server finishes starting once it is done.
+- A vault that has no owner recorded stops the conversion with an error naming the problem. Give it an owner in the `vault_owners` table and start again.
 
-### Menu and Text Configuration (YAML)
-All menu and session texts are generated on first use under:
-plugins/VaultStorage/menus/
+- `config.yml` is no longer read. The first start writes `database.yml`, `settings.yml` and the auto-vault module's `config.yml` from the values in it. Once those exist you can delete it.
+- **Wording you changed in `menus/` and `mail/` is not carried over.** All text is in `messages.yml` now. Move your changes there, then delete the two folders.
 
-Most fields accept plain text or MiniMessage formatting (e.g., <gold>…</gold>). Changes take effect the next time a menu is opened.
+### Commands and permissions
+Grant these with your permissions plugin (for example LuckPerms).
 
-Key configuration groups:
+| Command | Permission | Default |
+| --- | --- | --- |
+| `/vault`, `/vault menu` | `vaultstorage.command.vault` | op |
+| `/vault menu <player>` | `vaultstorage.command.vault.others` | op |
+| `/vault capture` | `vaultstorage.action.capture` | op |
+| `/vault open <vault id> [view\|copy\|edit]` | `vaultstorage.command.open` and the action's permission | op |
+| the same, for someone else's vault | `vaultstorage.command.open.others` | op |
+| `/vault admin` | `vaultstorage.command.admin` | op |
+| `/vault transfer <vault id> <player>` | `vaultstorage.command.transfer` | op |
+| `/vault reload` | `vaultstorage.command.reload` | op |
 
-VaultCaptureSession.yml (capture session texts and action bar)
-- captureCancelled — chat message on cancel
-- notAllowed — when capture isn’t allowed by policy
-- emptyCaptureSkipped — when a non-container or empty container is “unlocked” (no vault)
-- capturedOk — after capturing successfully
-- noBoltOwner — shown when no Bolt owner exists but override is active; the actor will become the vault owner
-- actionBarIdle — action bar while in capture mode but not looking at a valid target
-- actionBarContainer — action bar while looking at a block
-  - Placeholders: %owner%, %vaultable%, %reasonSegment%, %admin%
-- actionBarReasonSegmentTemplate — template that wraps the human‑readable reason
-- actionBarReasonAllowedBlank — empty or custom text when allowed
-- reasonOwnerSelfInRegion — text for OWNER_SELF_IN_REGION
-- reasonContainerOwnerInOverlap — text for CONTAINER_OWNER_IN_OVERLAP
-- reasonNotInvolvedNotOwner — text for NOT_INVOLVED_NOT_OWNER
-- reasonUnprotectedNoOverride — text for UNPROTECTED_NO_OVERRIDE
-- reasonNotInRegion — text for NOT_IN_REGION
-- reasonFallback — default text when no specific mapping is used
-- actionBarUnprotectedOwner — shown for unprotected containers
-- actionBarVaultableYes / actionBarVaultableNo — yes/no labels
-- adminModeEnabled — one‑time chat notification when the actor has admin override and starts capture mode
-- actionBarAdminModeTag — optional tag appended to the action bar when override is active (injected via %admin%)
+A player is only shown the subcommands they may use.
 
-Additional placeholders available to reason texts:
-- %owner% — resolved owner name (or short UUID) for display
-- %regions% — comma‑separated region ids at the target block
-- %reasonCode% — the policy reason code (e.g., OWNER_SELF_IN_REGION)
+| Permission | Allows | Default |
+| --- | --- | --- |
+| `vaultstorage.action.view` | looking inside a vault | everyone |
+| `vaultstorage.action.copy` | taking copies of a vault's items | op |
+| `vaultstorage.action.edit` | changing a vault's items | op |
+| `vaultstorage.action.place` | placing a vault back into the world | everyone |
+| `vaultstorage.action.capture` | vaulting a locked container | op |
+| `vaultstorage.bypass.region` | capturing and placing regardless of region and ownership rules | nobody |
+| `vaultstorage.scan.teleport` | the teleport button in scan results | op |
+| `vaultstorage.admin` | every permission above, and the staff view in menus: everyone's vaults, delete, every region, no scan cooldown | op |
 
-Other menu YAMLs (when present in your build) follow a similar pattern and will include per‑menu placeholders and help texts.
+Without `vaultstorage.admin`, a player sees and can scan only the regions they own or are a member of.
+
+#### Permissions that changed in 2.0
+| 1.x | 2.0 |
+| --- | --- |
+| `vaultstorage.user` | `vaultstorage.command.vault`, and `vaultstorage.command.open` for `/vault open` |
+| `vaultstorage.admin.override` | `vaultstorage.bypass.region` |
+| `vaultstorage.admin` | unchanged; grant a single `vaultstorage.command.*` permission instead if a rank should have only one staff command |
+
+The subcommand aliases `ui`, `cap` and `inv` are gone.
+
+### Configuration files
+All are under `plugins/VaultStorage/`.
+
+| File | Holds | Reloads |
+| --- | --- | --- |
+| `database.yml` | the database address and account | no |
+| `settings.yml` | scan batch size, scan cache time, scan cooldown, vaults per page | yes |
+| `messages.yml` | every sentence a player sees, as MiniMessage | yes |
+| `modules/realty-adapter/config.yml` | auto-vault: on or off, the delay, item frames, telling the occupant | yes |
+| `modules/realty-adapter/messages.yml` | what the auto-vault says to a region's new occupant | yes |
+
+- `/vault reload` (needs `vaultstorage.command.reload`) re-reads the files marked yes. If `settings.yml` or `messages.yml` does not parse, nothing changes and the log says why.
+- The plugin never rewrites these files, so your comments stay. The defaults of the current version are written to `defaults/` on every start; compare with them after an upgrade.
+- A key you leave out of `messages.yml` uses the default wording. A key missing from `settings.yml` is named in the startup log.
+- In `messages.yml`, a word in angle brackets that is not a colour, such as `<owner>`, is filled in by the plugin. The comment above each line lists the ones it may use.
 
 ### Integrations
-- WorldGuard: regions are resolved live from WG’s RegionManager; overlapping regions are supported.
+- WorldGuard: regions are resolved live from WG's RegionManager; overlapping regions are supported.
 - Bolt: used to read owner of protected blocks and to remove/create protections when vaulting or placing blocks, as appropriate.
 
+Every other integration is a module: a separate jar in `plugins/VaultStorage/modules/`. A module whose plugin is not installed does nothing. An integration whose module jar is missing is off.
+
+| Module jar | Needs | Gives |
+| --- | --- | --- |
+| `namebook-adapter` | Namebook | Player names from Namebook, Java and Bedrock |
+| `floodgate-adapter` | Floodgate | For Bedrock players: the menus as Bedrock forms, a chat line instead of the loading screen, and Bedrock names when Namebook is absent |
+| `chestshop-adapter` | ChestShop; Treasury for shop owners | Shop sign handling during capture. With Treasury, a player's shop chest that nobody locked is vaulted to that player, by hand or by the sweep |
+| `realty-adapter` | Realty | Automatic vaulting when a region changes occupant |
+| `griefprevention-adapter` | GriefPrevention | Placing a vault on a claim where the player may build |
+| `player-notifications-adapter` | PlayerNotifications | Telling a vault's owner that a container of theirs was vaulted |
+
+Module jars must come from the same build as the plugin jar.
+
+Essentials is no longer used. Before 2.0 the plugin mailed vault owners through it; without the `player-notifications-adapter` module, owners are not told and the server log records each case. PlayerNotifications can itself deliver by Essentials mail.
+
 ### Operations and troubleshooting
-Health signals in console:
-- “Connected to MySQL” on successful DB connect
-- Automatic schema creation messages at first run
-- Standard enable/disable lifecycle lines from Paper
+What a healthy start logs:
+- the schema migrations that were applied, on a first start or an upgrade;
+- one line for each module that started, and what each integration found;
+- `N vault(s) hold no items`, as a warning. A few are normal: a vault its owner emptied stays until it is placed. Many after an upgrade are not.
 
 Common symptoms and checks:
-- “No MySQL connection available” — verify mysql.host/port/database/user/password and network reachability; confirm privileges and SSL settings.
-- “You don’t have permission.” — grant vaultstorage.user or the specific vaultstorage.action.* permission; admins may use vaultstorage.admin.
-- “Services not ready.” — ensure WorldEdit, WorldGuard, and Bolt are present and enabled.
-- “Vault not found.” — the provided ID may be invalid or already removed; re-list and try again.
+- **"Could not connect to or migrate the database"**, and the plugin disables itself: check `url`, `username` and `password` in `database.yml`, that the database exists, and that the account may create and alter tables.
+- **"You don't have permission."**: grant `vaultstorage.command.vault` or the specific `vaultstorage.action.*` permission; staff may be given `vaultstorage.admin`.
+- **"Vault not found."**: the id is wrong, or the vault has been placed or deleted. Open the list again.
+- **"The vault could not be saved. Nothing was removed."**: the database could not be reached. The container is untouched; the server log has the cause.
 
 Backups:
-- Schedule periodic MySQL backups (full + binlogs if available).
-- For quick rollbacks, snapshot the DB before major updates.
+- Back up the MariaDB database on a schedule.
+- Take a backup before upgrading: the 1.x to 2.0 conversion cannot be undone by the plugin.
 
-## For Developers (API and Examples)
-VaultStorage registers services with the Bukkit Services API and performs database work off the main thread where applicable. Acquire services and program against the interfaces below.
+## For Developers
 
-### Getting services
-```java
-var services = getServer().getServicesManager();
-var vaultSvcReg = services.getRegistration(net.democracycraft.vault.api.service.VaultService.class);
-var wgSvcReg = services.getRegistration(net.democracycraft.vault.api.service.WorldGuardService.class);
-var boltSvcReg = services.getRegistration(net.democracycraft.vault.api.service.BoltService.class);
+VaultStorage has no public API: no other plugin compiles against it, and it registers nothing with the Bukkit Services API.
+
+### Building
+```bash
+./gradlew build
 ```
-Always null‑check providers before use.
+- The plugin jar is `plugin/build/libs/VaultStorage-<version>.jar`.
+- Each module jar is `modules/<name>/build/libs/<name>-<version>.jar`.
+- `./gradlew :plugin:runServer` starts a Paper 26.3 test server with the module jars installed.
 
-### VaultService (persistence)
-High‑level operations:
-- VaultEntity createVault(UUID worldUuid, int x, int y, int z, UUID ownerUuid, String material, String blockData)
-- Vault createVault(UUID worldUuid, int x, int y, int z, UUID ownerUuid, String material, String blockData, List<ItemStack> contents)
-- Optional<VaultEntity> get(UUID vaultUuid)
-- VaultEntity findByLocation(UUID worldUuid, int x, int y, int z)
-- void delete(UUID vaultUuid)
-- void setOwner(UUID vaultUuid, UUID ownerUuid)
-- UUID getOwner(UUID vaultUuid)
-- List<VaultEntity> listByOwner(UUID ownerUuid)
-- List<VaultEntity> listInWorld(UUID worldUuid)
-- void putItem(UUID vaultUuid, int slot, int amount, byte[] itemBytes)
-- void removeItem(UUID vaultUuid, int slot)
-- List<VaultItemEntity> listItems(UUID vaultUuid)
-
-Example: create a vault and get its items 
-```java
-Vault vault = vaultService.createVault(world.getUID(), x, y, z, ownerUuid, materialName, blockData, capturedItems);
-List<ItemStack> items = vault.contents();
-```
-
-### WorldGuardService (regions)
-Use to query regions for permissions or to guide UI:
-- List<VaultRegion> getRegionsAt(Block block)
-- List<VaultRegion> getRegionsIn(World world)
-
-### BoltService (protections)
-Owner and protection utilities:
-- UUID getOwner(Block block)
-- boolean isOwner(UUID playerUUID, Block block)
-- List<Block> getProtectedBlocks(UUID playerUUID, BoundingBox box, World world)
-- List<Block> getProtectedBlocksIn(BoundingBox box, World world)
-- void removeProtection(Block block)
-- void createProtection(Block block, UUID ownerUuid)
-
-### Data model overview
-At a glance:
-- Vault: identified by a UUID; bound to (worldUuid, x, y, z); has ownerUuid and metadata about the original block (material, blockData); createdAt timestamp is stored.
-- Vault items: each record stores slot index, amount, and a serialized item payload.
-- World dictionary: worlds are synchronized on enable to ensure referential integrity.
-
-Concurrency and threading:
-- Heavy or I/O operations run asynchronously.
-- UI interactions (menus, inventories) marshal back to the main thread when needed.
-
-### Extending and integrating
-- Add your own UI flows by implementing dialogs and calling VaultService.
-- Build region‑aware rules using WorldGuardService (e.g., owners/memberships with VaultRegion.isOwner/isMember).
-- Compose with Bolt protections when transforming blocks.
+See `CLAUDE.md` for the project layout and conventions.
 
 ### Credits
 
