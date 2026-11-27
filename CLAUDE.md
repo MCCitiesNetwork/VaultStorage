@@ -173,6 +173,9 @@ findings and kept the framework (`ParentMenu`, `ChildMenuImp`, `AutoDialog`).
   buttons, and the inputs asked for when a button that reads them is pressed, because Bedrock
   has no form with both. A menu with no buttons, such as `LoadingMenu`, reaches a Bedrock
   player as chat.
+- **A list's button is short, and says the rest in a tooltip** (`tooltipButton`). The tooltip
+  only repeats what the menu the button leads to says, a line each: a Bedrock form has no
+  tooltips. A vault's label is `list.item-format`; its lines are `list.detail-*`.
 - **A menu builds on each `open()`, never in its constructor**, so a reload shows at once and
   `again -> open()` is the way back to a menu.
 - **A button only some players get is added with `permissionButton`**: hidden without the

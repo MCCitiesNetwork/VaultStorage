@@ -19,6 +19,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.logging.Level;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.JoinConfiguration;
 import org.bukkit.Bukkit;
 import org.bukkit.World;
 import org.bukkit.entity.Player;
@@ -34,8 +35,8 @@ import org.jetbrains.annotations.Nullable;
  */
 public final class VaultListMenu extends ChildMenuImp {
 
-    /** Wide enough for a whole label; the client shrinks it to the window. */
-    private static final int LABEL_WIDTH = 400;
+    /** Room for an owner's name, the vault's number and what it was. */
+    private static final int LABEL_WIDTH = 220;
     private static final String KEY_QUERY = "QUERY";
     private static final int QUERY_LENGTH = 255;
 
@@ -115,9 +116,11 @@ public final class VaultListMenu extends ChildMenuImp {
                     "%count%", String.valueOf(paging.total()))));
             for (Entry entry : page.entries()) {
                 Component label = label(entry);
+                List<Component> details = details(entry.vault());
                 // Back from the vault returns to this page of this search.
-                builder.wideButton(label, LABEL_WIDTH, actor -> new VaultActionMenu(actor, parentMenu(),
-                        this.uiContext, entry.vault().uuid(), label,
+                builder.tooltipButton(label, Component.join(JoinConfiguration.newlines(), details), LABEL_WIDTH,
+                        actor -> new VaultActionMenu(actor, parentMenu(),
+                        this.uiContext, entry.vault().uuid(), label, details,
                         returning -> at(returning, this.query, paging.page()).open()).open());
             }
         }
@@ -133,23 +136,29 @@ public final class VaultListMenu extends ChildMenuImp {
         return builder.build();
     }
 
-    /** Who owns the vault, what it was, where it stood, how much it holds and when it was captured. */
+    /** What a vault's button says: whose it is, which of theirs, and what it was. */
     private @NotNull Component label(@NotNull Entry entry) {
-        VaultSummary vault = entry.vault();
+        return plugin.messages().messageFor(MessageKeys.LIST_ITEM_FORMAT,
+                MessageContainer.value("owner", entry.ownerName()),
+                MessageContainer.value("index", String.valueOf(entry.index())),
+                MessageContainer.value("material", VaultLabel.materialName(entry.vault().material())));
+    }
+
+    /** One line each: where the vault stood, how much it holds, when it was captured. */
+    private @NotNull List<Component> details(@NotNull VaultSummary vault) {
         MessageContainer messages = plugin.messages();
         World world = Bukkit.getWorld(vault.worldUuid());
         Component items = messages.messageFor(VaultLabel.itemsKey(vault.itemCount()),
                 MessageContainer.value("count", String.valueOf(vault.itemCount())));
-        return messages.messageFor(MessageKeys.LIST_ITEM_FORMAT,
-                MessageContainer.value("owner", entry.ownerName()),
-                MessageContainer.value("index", String.valueOf(entry.index())),
-                MessageContainer.value("material", VaultLabel.materialName(vault.material())),
-                MessageContainer.value("world", world != null ? world.getName() : Names.shortId(vault.worldUuid())),
-                MessageContainer.value("x", String.valueOf(vault.x())),
-                MessageContainer.value("y", String.valueOf(vault.y())),
-                MessageContainer.value("z", String.valueOf(vault.z())),
-                MessageContainer.markup("items", items),
-                MessageContainer.value("date", VaultLabel.date(vault.createdTime())));
+        return List.of(
+                messages.messageFor(MessageKeys.LIST_DETAIL_LOCATION,
+                        MessageContainer.value("world", world != null ? world.getName() : Names.shortId(vault.worldUuid())),
+                        MessageContainer.value("x", String.valueOf(vault.x())),
+                        MessageContainer.value("y", String.valueOf(vault.y())),
+                        MessageContainer.value("z", String.valueOf(vault.z()))),
+                messages.messageFor(MessageKeys.LIST_DETAIL_ITEMS, MessageContainer.markup("items", items)),
+                messages.messageFor(MessageKeys.LIST_DETAIL_DATE,
+                        MessageContainer.value("date", VaultLabel.date(vault.createdTime()))));
     }
 
     /** What the list covers: one owner's vaults, one vault, or everything. */

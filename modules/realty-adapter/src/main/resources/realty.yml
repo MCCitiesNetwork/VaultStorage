@@ -8,7 +8,7 @@
 enabled: true
 
 # Grace period between the occupant change and the sweep.
-delay-seconds: 60
+delay-seconds: 10
 
 # Also vault Bolt-locked item frames and paintings.
 include-hangings: true

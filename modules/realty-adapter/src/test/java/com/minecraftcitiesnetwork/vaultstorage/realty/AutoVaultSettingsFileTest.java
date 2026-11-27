@@ -18,8 +18,8 @@ class AutoVaultSettingsFileTest {
         AutoVaultSettings settings = AutoVaultSettingsFile.load(folder.resolve("module"), folder, LOGGER);
 
         Assertions.assertTrue(settings.enabled());
-        Assertions.assertEquals(60, settings.delaySeconds());
-        Assertions.assertEquals(1200, settings.delayTicks());
+        Assertions.assertEquals(10, settings.delaySeconds());
+        Assertions.assertEquals(200, settings.delayTicks());
         Assertions.assertTrue(settings.includeHangings());
         Assertions.assertTrue(settings.notifyOccupant());
         Assertions.assertTrue(Files.exists(folder.resolve("module/defaults/config.yml")));

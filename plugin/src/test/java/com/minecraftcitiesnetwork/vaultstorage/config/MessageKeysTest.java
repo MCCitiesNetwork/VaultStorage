@@ -85,19 +85,24 @@ class MessageKeysTest {
     }
 
     @Test
-    void aVaultsLabelSaysWhatItIsWhereItStoodAndWhatItHolds() {
+    void aVaultsLabelIsShortAndItsDetailsAreALineEach() {
         MessageContainer messages = TestMessages.shipped();
         String rendered = PlainTextComponentSerializer.plainText().serialize(messages.messageFor(
                 MessageKeys.LIST_ITEM_FORMAT,
                 MessageContainer.value("owner", "Alice"), MessageContainer.value("index", "3"),
-                MessageContainer.value("material", "Trapped Chest"), MessageContainer.value("world", "world"),
-                MessageContainer.value("x", "10"), MessageContainer.value("y", "64"), MessageContainer.value("z", "-5"),
-                MessageContainer.markup("items", messages.messageFor(MessageKeys.LIST_ITEMS_MANY,
-                        MessageContainer.value("count", "12"))),
-                MessageContainer.value("date", "2026-11-12")));
+                MessageContainer.value("material", "Trapped Chest")));
+        String location = PlainTextComponentSerializer.plainText().serialize(messages.messageFor(
+                MessageKeys.LIST_DETAIL_LOCATION, MessageContainer.value("world", "world"),
+                MessageContainer.value("x", "10"), MessageContainer.value("y", "64"), MessageContainer.value("z", "-5")));
+        String items = PlainTextComponentSerializer.plainText().serialize(messages.messageFor(
+                MessageKeys.LIST_DETAIL_ITEMS, MessageContainer.markup("items", messages.messageFor(
+                        MessageKeys.LIST_ITEMS_MANY, MessageContainer.value("count", "12")))));
+        String date = PlainTextComponentSerializer.plainText().serialize(messages.messageFor(
+                MessageKeys.LIST_DETAIL_DATE, MessageContainer.value("date", "2026-11-12")));
 
-        Assertions.assertEquals(
-                "Alice's Vault #3 | Trapped Chest at world 10, 64, -5 | 12 items | 2026-11-12", rendered);
+        Assertions.assertEquals("Alice's Vault #3 | Trapped Chest", rendered);
+        Assertions.assertEquals(List.of("Location: world 10, 64, -5", "Contents: 12 items", "Vaulted: 2026-11-12"),
+                List.of(location, items, date));
     }
 
     private static List<String> declaredKeys() throws IllegalAccessException {

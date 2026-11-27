@@ -8,7 +8,7 @@ import { FLOOR } from './world.js';
 
 // The menus: what a list line says, where Back leads, searching, and paging at its edges.
 
-test('a list line names the block, the world, where it stood and how much it holds',
+test('a vault\'s button is short, and its tooltip and its own menu say the rest a line each',
     async ({ player, createPlayer, server }) => {
         const owner = await createPlayer();
         const { x, z } = await vaultFor(server, player, owner);
@@ -16,12 +16,18 @@ test('a list line names the block, the world, where it stood and how much it hol
 
         owner.chat('/vault');
         (await dialogTitled(dialogs, 'Vault Storage')).click('Browse Vaults');
-        const label = (await dialogTitled(dialogs, 'Browse Vaults')).button('Vault #').label;
+        const list = await dialogTitled(dialogs, 'Browse Vaults');
+        const button = list.button('Vault #');
 
-        expect(label).toContain(`${owner.username}'s Vault #1`);
-        expect(label).toContain('Chest');
-        expect(label).toContain(`at world ${x + 2}, ${FLOOR}, ${z}`);
-        expect(label).toContain('2 items');
+        expect(button.label).toBe(`${owner.username}'s Vault #1 | Chest`);
+        const details = [`Location: world ${x + 2}, ${FLOOR}, ${z}`, 'Contents: 2 items'];
+        expect(button.tooltip.split('\n').slice(0, 2)).toEqual(details);
+        expect(button.tooltip.split('\n')[2]).toMatch(/^Vaulted: \d{4}-\d{2}-\d{2}$/);
+
+        list.click(button.label);
+        const lines = (await dialogTitled(dialogs, 'Vault Action')).body.split('\n');
+        expect(lines[0]).toBe(button.label);
+        expect(lines.slice(1)).toEqual(button.tooltip.split('\n'));
     });
 
 test('a vault holding one stack says "1 item", and an empty one says "empty"',
@@ -31,7 +37,7 @@ test('a vault holding one stack says "1 item", and an empty one says "empty"',
         const dialogs = new Dialogs(player);
         player.chat('/vault');
         (await dialogTitled(dialogs, 'Vault Storage')).click('Browse Vaults');
-        expect((await dialogTitled(dialogs, 'Browse Vaults')).button('Vault #').label).toContain('empty');
+        expect((await dialogTitled(dialogs, 'Browse Vaults')).button('Vault #').tooltip).toContain('Contents: empty');
     });
 
 test('an ordinary player\'s list has no search and shows only their own vaults',
@@ -142,7 +148,7 @@ test('a vault\'s menu keeps saying which vault it is, in the delete confirmation
         const dialogs = new Dialogs(player);
 
         const actions = await adminVaultActions(player, dialogs, owner.username);
-        expect(actions.body).toContain(`at world ${x + 2}, ${FLOOR}, ${z}`);
+        expect(actions.body).toContain(`Location: world ${x + 2}, ${FLOOR}, ${z}`);
         actions.click('Delete Vault');
         const confirm = await dialogTitled(dialogs, 'Delete this vault?');
         expect(confirm.body).toContain(`${owner.username}'s Vault #1`);

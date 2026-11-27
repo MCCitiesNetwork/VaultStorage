@@ -72,7 +72,7 @@ test('a vault emptied by its owner stays in the list as an empty vault',
         owner.chat('/vault');
         (await dialogTitled(dialogs, 'Vault Storage')).click('Browse Vaults');
         const list = await dialogTitled(dialogs, 'Browse Vaults');
-        expect(list.button('Vault #').label).toContain('empty');
+        expect(list.button('Vault #').tooltip).toContain('Contents: empty');
     });
 
 test('an editor who disconnects with the vault open has their change saved and the vault freed',

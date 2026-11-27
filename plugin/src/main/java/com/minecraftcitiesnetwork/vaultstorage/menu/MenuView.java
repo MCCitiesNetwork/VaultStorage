@@ -7,6 +7,7 @@ import java.util.function.BiConsumer;
 import net.kyori.adventure.text.Component;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 /**
  * What a menu shows and does, without saying how it is drawn. Every menu is built as a Paper
@@ -60,12 +61,14 @@ public record MenuView(@NotNull Component title, @NotNull List<Component> body, 
     }
 
     /**
+     * @param tooltip     shown while the pointer is over the button, where the client has one;
+     *                    null for none. Never the only place something is said.
      * @param readsInputs whether the action uses what the player filled in. A renderer that
      *                    cannot show inputs beside buttons asks for them when this is pressed.
      * @param width       how wide to draw the button where the client lets a menu say, or 0
      * @param click       run on the main thread with every input's value by key
      */
-    public record Button(@NotNull Component label, boolean readsInputs, int width,
+    public record Button(@NotNull Component label, @Nullable Component tooltip, boolean readsInputs, int width,
                          @NotNull BiConsumer<Player, Map<String, String>> click) {
     }
 

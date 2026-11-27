@@ -30,18 +30,22 @@ public final class VaultActionMenu extends ChildMenuImp {
     private final @NotNull UUID vaultId;
     private final @NotNull VaultUIContext uiContext;
     private final @NotNull Component description;
+    private final @NotNull List<Component> details;
     private final @NotNull Consumer<Player> back;
 
     /**
-     * @param description the vault's line from the list, shown so the player knows which vault this is
+     * @param description the vault's label from the list, shown so the player knows which vault this is
+     * @param details     what else the list knows about the vault, a line each
      * @param back        where Back, a finished delete and a finished placement lead
      */
     public VaultActionMenu(@NotNull Player player, @NotNull ParentMenu parent, @NotNull VaultUIContext ctx,
-                           @NotNull UUID vaultId, @NotNull Component description, @NotNull Consumer<Player> back) {
+                           @NotNull UUID vaultId, @NotNull Component description, @NotNull List<Component> details,
+                           @NotNull Consumer<Player> back) {
         super(player, parent);
         this.vaultId = vaultId;
         this.uiContext = ctx;
         this.description = description;
+        this.details = List.copyOf(details);
         this.back = back;
     }
 
@@ -51,6 +55,7 @@ public final class VaultActionMenu extends ChildMenuImp {
                 .title(plugin.text().of(MessageKeys.ACTION_TITLE))
                 .line(plugin.messages().messageFor(
                         MessageKeys.ACTION_DESCRIPTION, MessageContainer.markup("vault", this.description)));
+        this.details.forEach(builder::line);
 
         // Only the actions the player may use; the first is preselected.
         List<MenuView.Option> options = new ArrayList<>();

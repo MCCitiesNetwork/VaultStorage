@@ -30,6 +30,9 @@ public final class MessageKeys {
     public static final String LIST_BACK_BTN = "list.back-btn";
     public static final String LIST_NONE_FOUND = "list.none-found";
     public static final String LIST_ITEM_FORMAT = "list.item-format";
+    public static final String LIST_DETAIL_LOCATION = "list.detail-location";
+    public static final String LIST_DETAIL_ITEMS = "list.detail-items";
+    public static final String LIST_DETAIL_DATE = "list.detail-date";
     public static final String LIST_ITEMS_NONE = "list.items-none";
     public static final String LIST_ITEMS_ONE = "list.items-one";
     public static final String LIST_ITEMS_MANY = "list.items-many";

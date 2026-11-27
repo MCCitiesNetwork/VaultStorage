@@ -41,8 +41,8 @@ test('a chest vaulted in the nether is listed with that world, and can be placed
         const dialogs = new Dialogs(owner);
         owner.chat('/vault');
         (await dialogTitled(dialogs, 'Vault Storage')).click('Browse Vaults');
-        const label = (await dialogTitled(dialogs, 'Browse Vaults')).button('Vault #').label;
-        expect(label).toContain(`at world_nether ${x + 2}, ${NETHER_FLOOR}, ${z}`);
+        const tooltip = (await dialogTitled(dialogs, 'Browse Vaults')).button('Vault #').tooltip;
+        expect(tooltip).toContain(`Location: world_nether ${x + 2}, ${NETHER_FLOOR}, ${z}`);
 
         await standAt(server, owner, x, z + 1);
         await sleep(1500);
@@ -87,7 +87,7 @@ test('a vault from a world the server no longer has is listed by that world\'s i
 
         player.chat('/vault');
         (await dialogTitled(dialogs, 'Vault Storage')).click('Browse Vaults');
-        expect((await dialogTitled(dialogs, 'Browse Vaults')).button('Vault #').label).toContain('at 99999999 ');
+        expect((await dialogTitled(dialogs, 'Browse Vaults')).button('Vault #').tooltip).toContain('Location: 99999999 ');
 
         await placeFirstVault(player, dialogs, x + 2, z + 2);
         await expect(player).toHaveReceivedMessage('Vault placed.');

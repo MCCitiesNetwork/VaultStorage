@@ -57,6 +57,8 @@ function tagFor(value: number | string | boolean): Tag {
 
 export interface DialogButton {
     label: string;
+    // What the button says while the pointer is over it, a line per detail; '' when it has none.
+    tooltip: string;
     // The raw NBT of the button's action, kept so a click can echo it back.
     action: Tag | undefined;
 }
@@ -78,7 +80,11 @@ export class Dialog {
         // Takes a button compound's fields.
         const add = (button: any) => {
             if (button) {
-                this.buttons.push({ label: text(nbt.simplify(button.label)), action: button.action });
+                this.buttons.push({
+                    label: text(nbt.simplify(button.label)),
+                    tooltip: button.tooltip ? text(nbt.simplify(button.tooltip)) : '',
+                    action: button.action,
+                });
             }
         };
         // multi_action has a list of buttons; confirmation has yes/no; notice has one action.

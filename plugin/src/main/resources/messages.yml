@@ -15,8 +15,8 @@ loading:
 # The menu for one vault.
 action:
   title: '<gold><bold>Vault Action</bold></gold>'
-  # <vault>: the vault's line from the list
-  description: '<vault>'
+  # <vault>: the vault's label from the list. Its detail lines follow, one each.
+  description: '<bold><vault></bold>'
   action-label: '<gray>Select action</gray>'
   open-btn: '<green><bold>Open Inventory</bold></green>'
   place-btn: '<yellow><bold>Place Block</bold></yellow>'
@@ -42,8 +42,15 @@ list:
   search-btn: '<aqua>Search</aqua>'
   back-btn: '<red><bold>Back</bold></red>'
   none-found: '<gray>No vaults found. A container shows up here once it has been vaulted.</gray>'
-  # <owner> <index> <material> <world> <x> <y> <z> <items> <date>
-  item-format: '<white><owner></white><gray>''s Vault #</gray><white><index></white> <dark_gray>|</dark_gray> <white><material></white> <gray>at <world> <x>, <y>, <z></gray> <dark_gray>|</dark_gray> <items> <dark_gray>|</dark_gray> <gray><date></gray>'
+  # A vault's button. <owner> <index> <material>
+  item-format: '<white><owner></white><gray>''s Vault #</gray><white><index></white> <dark_gray>|</dark_gray> <white><material></white>'
+  # The rest about a vault, a line each: the button's tooltip, and the text of the vault's own menu.
+  # <world> <x> <y> <z>
+  detail-location: '<gray>Location:</gray> <white><world> <x>, <y>, <z></white>'
+  # <items>
+  detail-items: '<gray>Contents:</gray> <items>'
+  # <date>
+  detail-date: '<gray>Vaulted:</gray> <white><date></white>'
   # What <items> above becomes.
   items-none: '<gray>empty</gray>'
   items-one: '<white>1</white> <gray>item</gray>'

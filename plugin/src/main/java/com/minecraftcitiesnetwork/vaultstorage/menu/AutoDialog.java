@@ -21,6 +21,7 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickCallback;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 /**
  * A menu as built: its description, a {@link MenuView}, and the Paper dialog made from it. A
@@ -91,7 +92,17 @@ public final class AutoDialog {
 
         /** @param width the button's width in a dialog */
         public @NotNull Builder wideButton(@NotNull Component label, int width, @NotNull Consumer<Player> action) {
-            this.buttons.add(new MenuView.Button(label, false, width, (player, answers) -> action.accept(player)));
+            return tooltipButton(label, null, width, action);
+        }
+
+        /**
+         * A button that says more while the pointer is over it. The tooltip repeats what the
+         * menu it leads to says: a client without tooltips shows the label alone.
+         */
+        public @NotNull Builder tooltipButton(@NotNull Component label, @Nullable Component tooltip, int width,
+                                              @NotNull Consumer<Player> action) {
+            this.buttons.add(new MenuView.Button(label, tooltip, false, width,
+                    (player, answers) -> action.accept(player)));
             return this;
         }
 
@@ -101,7 +112,7 @@ public final class AutoDialog {
          */
         public @NotNull Builder submitButton(@NotNull Component label,
                                              @NotNull BiConsumer<Player, Map<String, String>> action) {
-            this.buttons.add(new MenuView.Button(label, true, 0, action));
+            this.buttons.add(new MenuView.Button(label, null, true, 0, action));
             return this;
         }
 
@@ -158,6 +169,9 @@ public final class AutoDialog {
             };
             ActionButton.Builder built = ActionButton.builder(button.label())
                     .action(DialogInstancesProvider.instance().register(callback, CLICKS));
+            if (button.tooltip() != null) {
+                built.tooltip(button.tooltip());
+            }
             if (button.width() > 0) {
                 built.width(button.width());
             }

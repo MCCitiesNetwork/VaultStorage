@@ -15,7 +15,7 @@ test('an admin deletes a vault from its action menu', async ({ player, createPla
     const actions = await adminVaultActions(player, dialogs, owner.username);
     // The action menu says which vault it is: what it was and where it stood.
     expect(actions.body).toContain(`${owner.username}'s Vault #1`);
-    expect(actions.body).toContain('Chest at');
+    expect(actions.body).toContain('| Chest\nLocation: ');
 
     // Delete asks first, and Cancel keeps the vault.
     actions.click('Delete Vault');
